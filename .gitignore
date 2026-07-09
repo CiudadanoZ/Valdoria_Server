@@ -1,0 +1,9 @@
+# Dependencias
+node_modules/
+
+# Datos de jugadores (cuentas, personajes) y sus copias de seguridad
+data/
+
+# Registros y temporales
+*.log
+*.tmp

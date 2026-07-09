@@ -1,0 +1,81 @@
+// Razas y especializaciones de los héroes de Valdoria.
+// Las bonificaciones se aplican en el cliente (main.js) y el aspecto en entities.js.
+
+export const RACES = {
+  humano: {
+    id: 'humano',
+    name: 'Humano',
+    icon: '🧑',
+    desc: 'Versátiles y tenaces, los fundadores de Valdoria.',
+    bonusText: '+10 de vida máxima',
+    hp: 10, dmg: 0, armor: 0, regenMul: 1,
+    skin: 0xd9b38c,
+    bodyScale: [1, 1, 1],
+  },
+  elfo: {
+    id: 'elfo',
+    name: 'Elfo',
+    icon: '🧝',
+    desc: 'Antiguos guardianes del bosque oeste, ágiles y pacientes.',
+    bonusText: '+1 de daño · regeneración +50%',
+    hp: 0, dmg: 1, armor: 0, regenMul: 1.5,
+    skin: 0xe8d8c0,
+    bodyScale: [0.92, 1.08, 0.92],
+    ears: true,
+  },
+  enano: {
+    id: 'enano',
+    name: 'Enano',
+    icon: '🪓',
+    desc: 'Mineros del norte, duros como la piedra que tallan.',
+    bonusText: '+2 de armadura',
+    hp: 0, dmg: 0, armor: 2, regenMul: 1,
+    skin: 0xd9a98c,
+    bodyScale: [1.18, 0.8, 1.18],
+    beard: true,
+  },
+  orco: {
+    id: 'orco',
+    name: 'Orco',
+    icon: '👹',
+    desc: 'Clanes errantes de la estepa, nacidos para la batalla.',
+    bonusText: '+3 de daño · −10 de vida máxima',
+    hp: -10, dmg: 3, armor: 0, regenMul: 1,
+    skin: 0x6a8a4a,
+    bodyScale: [1.12, 1.05, 1.12],
+    tusks: true,
+  },
+};
+
+export const CLASSES = {
+  guerrero: {
+    id: 'guerrero',
+    name: 'Guerrero',
+    icon: '⚔️',
+    desc: 'El muro de Valdoria: aguanta, protege y golpea con acero.',
+    bonusText: '+2 de armadura · +10 de vida máxima',
+    hp: 10, dmg: 0, armor: 2, regenMul: 1, healMul: 1,
+    attackInterval: 0.9,
+    body: 0x8a1a12,
+  },
+  explorador: {
+    id: 'explorador',
+    name: 'Explorador',
+    icon: '🏹',
+    desc: 'Rastreador de la espesura: rápido, letal y difícil de atrapar.',
+    bonusText: '+1 de daño · ataque veloz',
+    hp: 0, dmg: 1, armor: 0, regenMul: 1, healMul: 1,
+    attackInterval: 0.75,
+    body: 0x2a6a3a,
+  },
+  sacerdote: {
+    id: 'sacerdote',
+    name: 'Sacerdote',
+    icon: '✨',
+    desc: 'Discípulo de la Luz: la vida vuelve a él como la marea.',
+    bonusText: 'Regeneración doble · curas +40%',
+    hp: 0, dmg: 0, armor: 0, regenMul: 2, healMul: 1.4,
+    attackInterval: 0.95,
+    body: 0x6a4a8a,
+  },
+};

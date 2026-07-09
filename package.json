@@ -1,0 +1,16 @@
+{
+  "name": "ciudadela-mmorpg",
+  "version": "0.1.0",
+  "description": "MMORPG 3D con vista cenital estilo Diablo - Ciudadela de Valdoria",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "postinstall": "node scripts/copy-vendor.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "three": "^0.170.0",
+    "ws": "^8.18.0"
+  }
+}

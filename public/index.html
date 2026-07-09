@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ciudadela de Valdoria — MMORPG</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <!-- Lobby -->
+  <div id="login-screen">
+    <!-- Paso 1: cuenta -->
+    <div id="screen-auth" class="login-box lobby-screen">
+      <h1>Ciudadela de Valdoria</h1>
+      <p class="subtitle">Un MMORPG de fantasía oscura</p>
+      <input id="account-input" type="text" maxlength="20" placeholder="Nombre de cuenta" autocomplete="off" />
+      <input id="password-input" type="password" maxlength="40" placeholder="Contraseña" autocomplete="off" />
+      <button id="auth-btn">Entrar</button>
+      <p id="auth-error" class="lobby-error hidden"></p>
+      <p class="hint">Si la cuenta no existe, se creará con esa contraseña.<br/>Tus personajes viven en el servidor: juega desde cualquier equipo.</p>
+    </div>
+
+    <!-- Paso 2: mundo y personaje -->
+    <div id="screen-select" class="login-box lobby-screen wide hidden">
+      <h1>Salón de los Héroes</h1>
+      <p class="subtitle" id="account-greeting"></p>
+      <div class="select-layout">
+        <div class="realm-column">
+          <h3>Mundo</h3>
+          <div id="realm-list"></div>
+          <h3>Opciones</h3>
+          <button class="lobby-secondary" disabled>⚙ Ajustes — próximamente</button>
+          <button class="lobby-secondary" disabled>🏆 Clasificaciones — próximamente</button>
+          <button id="logout-btn" class="lobby-secondary">↩ Cambiar de cuenta</button>
+        </div>
+        <div class="char-column">
+          <h3>Personajes <span id="char-count"></span></h3>
+          <div id="char-list"></div>
+          <button id="new-char-btn">✦ Crear personaje</button>
+          <button id="enter-btn" disabled>Entrar al mundo</button>
+          <p id="select-error" class="lobby-error hidden"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 3: creación de personaje -->
+    <div id="screen-create" class="login-box lobby-screen wide hidden">
+      <h1>Forja tu héroe</h1>
+      <input id="char-name-input" type="text" maxlength="16" placeholder="Nombre del héroe" autocomplete="off" />
+      <h3 class="create-section">Raza</h3>
+      <div id="race-list" class="card-row"></div>
+      <h3 class="create-section">Especialización</h3>
+      <div id="class-list" class="card-row"></div>
+      <p id="create-error" class="lobby-error hidden"></p>
+      <div class="create-buttons">
+        <button id="create-btn">Crear héroe</button>
+        <button id="create-back-btn" class="lobby-secondary">Volver</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <!-- Orbe de vida (estilo Diablo) -->
+    <div id="hp-orb">
+      <div id="hp-fill"></div>
+      <span id="hp-text">100</span>
+    </div>
+
+    <!-- Bendiciones activas de la Sacerdotisa Mira -->
+    <div id="blessings-hud"></div>
+
+    <!-- Barra de habilidades (teclas 1-4) -->
+    <div id="skill-bar" class="hidden"></div>
+
+    <!-- Nivel y experiencia -->
+    <div id="xp-hud">
+      <span id="xp-level">Nv 1</span>
+      <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text">0 / 100 EXP</span></div>
+      <button id="talents-open">T · Talentos</button>
+    </div>
+
+    <!-- Minimapa (M para ampliar) -->
+    <div id="minimap-wrap">
+      <canvas id="minimap" width="170" height="170"></canvas>
+      <span id="minimap-hint">M</span>
+    </div>
+
+    <!-- Oro -->
+    <div id="gold-display">🪙 <span id="gold-amount">0</span></div>
+
+    <!-- Rastreador de misiones -->
+    <div id="quest-tracker">
+      <h3>Misiones</h3>
+      <div id="quest-list"></div>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat-box">
+      <div id="chat-log"></div>
+      <input id="chat-input" type="text" maxlength="200" placeholder="Pulsa Enter para chatear..." autocomplete="off" />
+    </div>
+
+    <!-- Aviso de interacción -->
+    <div id="interact-hint" class="hidden"></div>
+
+    <!-- Notificaciones (objetos obtenidos, misiones, etc.) -->
+    <div id="toast-container"></div>
+
+    <div id="controls-hint">Clic: mover / hablar / atacar · 1-4: habilidades · I: inventario · T: talentos · M: mapa · Enter: chat</div>
+
+    <!-- Grupo de caza -->
+    <div id="party-hud" class="hidden">
+      <h4>Grupo de caza</h4>
+      <div id="party-members"></div>
+      <button id="party-leave">Abandonar grupo</button>
+    </div>
+  </div>
+
+  <!-- Inventario -->
+  <div id="inventory-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Inventario</h2>
+      <button class="close-btn" data-close="inventory-panel">✕</button>
+    </div>
+    <h3 class="inv-section">Equipo</h3>
+    <div id="equipment-grid"></div>
+    <div id="equip-stats"></div>
+    <h3 class="inv-section">Bolsa</h3>
+    <div id="inventory-grid"></div>
+    <div class="panel-footer">🪙 <span id="inv-gold">0</span> de oro</div>
+  </div>
+
+  <!-- Destello rojo al recibir daño -->
+  <div id="damage-vignette"></div>
+
+  <!-- Tienda de Lyra -->
+  <div id="shop-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Mercancías de Lyra</h2>
+      <button class="close-btn" data-close="shop-panel">✕</button>
+    </div>
+    <div id="shop-tabs">
+      <button id="tab-buy" class="shop-tab active">Comprar</button>
+      <button id="tab-sell" class="shop-tab">Vender</button>
+    </div>
+    <div id="shop-list"></div>
+    <div class="panel-footer">🪙 <span id="shop-gold">0</span> de oro</div>
+  </div>
+
+  <!-- Mapa grande (tecla M) -->
+  <div id="map-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Mapa de Valdoria</h2>
+      <button class="close-btn" data-close="map-panel">✕</button>
+    </div>
+    <canvas id="bigmap" width="700" height="700"></canvas>
+    <div id="map-legend">
+      <span><i style="background:#ffffff"></i> Tú</span>
+      <span><i style="background:#7fd4ff"></i> Jugadores</span>
+      <span><i style="background:#ffd97a"></i> NPC</span>
+      <span><i style="background:#ffe14a"></i> Misión activa</span>
+      <span><i style="background:#c0392b"></i> Criaturas</span>
+      <span><i style="background:#55ff99"></i> Portales</span>
+    </div>
+  </div>
+
+  <!-- Talentos (tecla T) -->
+  <div id="talents-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Árbol de talentos</h2>
+      <button class="close-btn" data-close="talents-panel">✕</button>
+    </div>
+    <p id="talents-info" class="talents-info"></p>
+    <div id="talents-list"></div>
+  </div>
+
+  <!-- Cocina en la hoguera -->
+  <div id="cooking-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Hoguera</h2>
+      <button class="close-btn" data-close="cooking-panel">✕</button>
+    </div>
+    <p id="cooking-hint" class="talents-info"></p>
+    <div id="cooking-list"></div>
+  </div>
+
+  <!-- Forja de Bramm -->
+  <div id="crafting-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Forja de Bramm</h2>
+      <button class="close-btn" data-close="crafting-panel">✕</button>
+    </div>
+    <div id="crafting-list"></div>
+    <div class="panel-footer">🪙 <span id="crafting-gold">0</span> de oro</div>
+  </div>
+
+  <!-- Diálogo de NPC -->
+  <div id="dialog-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2 id="dialog-name">NPC</h2>
+      <button class="close-btn" data-close="dialog-panel">✕</button>
+    </div>
+    <p id="dialog-text"></p>
+    <div id="dialog-actions"></div>
+  </div>
+
+  <div id="tooltip" class="hidden"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
