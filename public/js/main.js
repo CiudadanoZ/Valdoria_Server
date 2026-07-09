@@ -8,19 +8,23 @@ import { LocalPlayer, RemotePlayers } from './entities.js';
 import { RACES, CLASSES } from './races.js';
 import { spawnNPCs, updateQuestMarkers } from './npcs.js';
 import { Mobs, spawnFloatText } from './enemies.js';
-import { connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly } from './network.js';
+import {
+  connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly,
+  sendGather, sendFishStart, sendFishStop, sendMira,
+} from './network.js';
 import { initSkills, refreshSkills, castSkill, updateSkills, skillArmorBonus, skillSpeedMul } from './skills.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
-  initProgression, addXp, toggleTalents, serializeProgression, loadProgression,
+  initProgression, applyProgression, toggleTalents,
   talentDmg, talentArmor, talentHp, talentSpeedMul, talentHealMul, talentCdr, isSkillUnlocked,
 } from './progression.js';
-import { openCooking } from './cooking.js';
-import { initInventory, loadInventory, serializeInventory, addItem, addGold, getWeaponDamage, getArmor, inventory } from './inventory.js';
-import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, setShopOpener, setForgeOpener, setMiraServices, renderTracker } from './quests.js';
-import { initShop, openShop } from './shop.js';
-import { initCrafting, openCrafting } from './crafting.js';
-import { BLESSINGS, initBlessings, buyBlessing, blessingDamage, blessingArmor, blessingMaxHp, serializeBlessings, loadBlessings } from './blessings.js';
+import { openCooking, refreshCooking } from './cooking.js';
+import { ITEMS } from './items.js';
+import { initInventory, applyInventory, getWeaponDamage, getArmor } from './inventory.js';
+import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker } from './quests.js';
+import { initShop, openShop, refreshShop } from './shop.js';
+import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
+import { BLESSINGS, initBlessings, activateBlessing, blessingDamage, blessingArmor, blessingMaxHp, serializeBlessings, loadBlessings } from './blessings.js';
 import { initParty, offerInvite, onInvite, onPartyUpdate, onPartyLeft, onPlayerLeave as partyPlayerLeave } from './party.js';
 import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby } from './lobby.js';
 import * as ui from './ui.js';
@@ -59,15 +63,12 @@ function flushSave() {
   clearTimeout(saveTimer);
   saveTimer = null;
   if (!inWorld) return;
-  const p = player.mesh.position;
+  // Solo se reporta lo que el cliente tiene permitido: vida, banderas de
+  // misión y bendiciones. El oro, la bolsa y la progresión viven en el servidor.
   sendSaveState({
-    inventory: serializeInventory(),
     quests: serializeQuests(),
     blessings: serializeBlessings(),
-    progression: serializeProgression(),
     hp: Math.round(hp),
-    x: +p.x.toFixed(1),
-    z: +p.z.toFixed(1),
   });
 }
 
@@ -95,13 +96,68 @@ connect({
     if (combatTarget && combatTarget.id === msg.id) combatTarget = null;
   },
   mob_spawn(msg) { mobs?.onSpawn(msg); },
+  // El servidor ya aplicó oro/objetos/EXP a tu personaje (llega con state_sync);
+  // aquí solo se celebra y se avanza el estado de las misiones.
   loot(msg) {
-    addGold(msg.gold);
-    for (const itemId of msg.items) addItem(itemId, 1);
-    addXp(msg.xp || 0);
+    if (msg.gold) ui.toast(`+${msg.gold} de oro`);
+    for (const itemId of msg.items) {
+      const item = ITEMS[itemId];
+      if (item) ui.toast(`Obtenido: ${item.icon} ${item.name}`);
+    }
     onEnemyKilled(msg.mobType);
     onLootChanged();
     saveGame();
+  },
+  // Estado autoritativo del personaje: bolsa, oro y progresión
+  state_sync(msg) {
+    applyInventory(msg.inventory);
+    applyProgression(msg.progression);
+    refreshShop();
+    refreshCrafting();
+    refreshCooking();
+    renderTracker();
+  },
+  item_used(msg) {
+    const item = ITEMS[msg.itemId];
+    const healed = Math.round(msg.heal * healMulTotal());
+    hp = Math.min(maxHp(), hp + healed);
+    ui.setHP(hp, maxHp());
+    ui.toast(`${item?.icon || ''} +${healed} de vida`);
+    saveGame();
+  },
+  rpc_ok(msg) {
+    const item = ITEMS[msg.itemId];
+    if (msg.kind === 'buy' && item) ui.toast(`Comprado: ${item.icon} ${item.name}`);
+    else if (msg.kind === 'sell') ui.toast(`Vendido (+${msg.gold} de oro)`);
+    else if (msg.kind === 'craft' && item) ui.toast(`🔨 Bramm forja: ${item.icon} ${item.name}`, 'quest');
+    else if (msg.kind === 'cook' && item) ui.toast(`🔥 Cocinado: ${item.icon} ${item.name}`);
+  },
+  rpc_fail(msg) { ui.toast(msg.reason); },
+  claim_ok(msg) { onClaimResult(msg.questId, true); },
+  claim_fail(msg) { onClaimResult(msg.questId, false, msg.reason); },
+  gather_ok(msg) { onHerbGathered(msg.herb); },
+  fish_start_ok() { ui.toast('🎣 Lanzas el sedal...'); },
+  fish_catch(msg) {
+    const item = ITEMS[msg.itemId];
+    if (item) ui.toast(`🎣 ¡Picó! ${item.icon} ${item.name}`);
+    spawnFloatText(scene, '🎣', '#9adcf0', player.mesh.position);
+  },
+  fish_stop() { /* el servidor cortó la pesca (movimiento o bolsa llena) */ },
+  mira_ok(msg) {
+    if (msg.service === 'heal') {
+      hp = maxHp();
+      ui.setHP(hp, maxHp());
+      ui.toast('✙ Mira cierra tus heridas: vida al máximo', 'quest');
+      saveGame();
+    } else if (msg.service === 'bless') {
+      activateBlessing(msg.id);
+    }
+  },
+  pos_correct(msg) {
+    // El servidor rechazó un movimiento imposible: volver a la posición válida
+    player.stop();
+    combatTarget = null;
+    player.mesh.position.set(msg.x, 0, msg.z);
   },
   player_hurt(msg) { onPlayerDamaged(msg.dmg, msg.mobName); },
   healed(msg) {
@@ -151,7 +207,7 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
   mobs = new Mobs(scene);
   mobs.init(mobList);
 
-  initInventory({ useItem, changed: saveGame });
+  initInventory();
   initQuests({ changed: saveGame });
   initShop();
   initCrafting();
@@ -161,25 +217,14 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
   setForgeOpener(openCrafting);
   setMiraServices({
     blessings: BLESSINGS,
-    buyBlessing,
     getHp: () => hp,
     getMaxHp: maxHp,
-    payGold(amount) {
-      if (inventory.gold < amount) { ui.toast('No llevas suficiente oro'); return false; }
-      addGold(-amount);
-      return true;
-    },
-    healFull() {
-      hp = maxHp();
-      ui.setHP(hp, maxHp());
-      ui.toast('✙ Mira cierra tus heridas: vida al máximo', 'quest');
-      saveGame();
-    },
+    requestHeal: () => sendMira('heal'),
+    requestBless: (id) => sendMira('bless', id),
   });
 
-  // Progresión: nivel, experiencia y talentos
+  // Progresión: nivel, experiencia y talentos (autoritativos del servidor)
   initProgression(character.class, {
-    changed: saveGame,
     progressChanged() {
       refreshSkills();
       ui.setHP(hp, maxHp());
@@ -236,10 +281,10 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
 
   // Hidratar el estado del personaje desde el servidor
   const st = character.state || {};
-  loadInventory(st.inventory);
+  applyInventory(st.inventory);
   loadQuests(st.quests);
   loadBlessings(st.blessings);
-  loadProgression(st.progression);
+  applyProgression(st.progression);
   refreshSkills(); // por si hay habilidades desbloqueadas por talentos
   if (typeof st.hp === 'number') hp = Math.min(st.hp, maxHp());
   ui.setHP(hp, maxHp());
@@ -281,7 +326,6 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
     openShop,
     openCrafting,
     flushSave,
-    addXp,
   };
   function project(worldPos, yOffset) {
     const v = worldPos.clone();
@@ -291,20 +335,6 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
   }
 
   requestAnimationFrame(loop);
-}
-
-// ---------- Consumibles ----------
-function useItem(item) {
-  if (item.heal) {
-    if (hp >= maxHp()) { ui.toast('Ya tienes la vida al máximo'); return false; }
-    const healed = Math.round(item.heal * healMulTotal());
-    hp = Math.min(maxHp(), hp + healed);
-    ui.setHP(hp, maxHp());
-    ui.toast(`${item.icon} +${healed} de vida`);
-    saveGame();
-    return true;
-  }
-  return false;
 }
 
 // ---------- Daño al jugador, muerte y reaparición ----------
@@ -407,38 +437,19 @@ function onPointerDown(e) {
   }
 }
 
-// ---------- Pesca ----------
-let fishing = null; // { spot, timer }
-
+// ---------- Pesca (el temporizador y las capturas viven en el servidor) ----------
 function approachFishing(spot) {
   combatTarget = null;
   player.moveTo(spot.userData.shore.clone(), () => {
-    // Mirar al agua y lanzar el sedal
+    // Mirar al agua y pedir al servidor que lance el sedal
     const d = spot.position.clone().sub(player.mesh.position);
     player.mesh.rotation.y = Math.atan2(d.x, d.z);
-    fishing = { spot, timer: 2.5 + Math.random() * 3 };
-    ui.toast('🎣 Lanzas el sedal...');
+    sendFishStart(worldRefs.fishingSpots.indexOf(spot));
   }, 1.2);
 }
 
 function stopFishing() {
-  fishing = null;
-}
-
-function updateFishing(dt) {
-  if (!fishing) return;
-  // Moverse o entrar en combate corta la pesca
-  if (player.moving || combatTarget) { stopFishing(); return; }
-  fishing.timer -= dt;
-  if (fishing.timer > 0) return;
-
-  // ¡Picó! Repartir la captura y volver a lanzar
-  const roll = Math.random();
-  const caught = roll < 0.6 ? 'pez_comun' : roll < 0.9 ? 'pez_grande' : roll < 0.98 ? 'pez_dorado' : 'bota_vieja';
-  addItem(caught, 1);
-  addXp(5);
-  spawnFloatText(scene, '🎣', '#9adcf0', player.mesh.position);
-  fishing.timer = 2.5 + Math.random() * 3;
+  sendFishStop();
 }
 
 function approachCampfire(fire) {
@@ -465,10 +476,22 @@ function approachHerb(herb) {
   combatTarget = null;
   player.moveTo(herb.position.clone(), () => {
     if (!herb.visible) return;
-    herb.visible = false;
-    onHerbCollected();
-    setTimeout(() => { herb.visible = true; }, 30000);
+    // El servidor valida la cercanía y otorga la hierba (responde gather_ok)
+    sendGather(worldRefs.herbs.indexOf(herb));
   }, 1.4);
+}
+
+// El servidor confirmó la recolección: ocultar la hierba un rato y avanzar la misión
+function onHerbGathered(i) {
+  const herb = worldRefs.herbs[i];
+  if (herb) {
+    herb.visible = false;
+    setTimeout(() => { herb.visible = true; }, 30000);
+  }
+  const item = ITEMS.hierba_lumina;
+  ui.toast(`Obtenido: ${item.icon} ${item.name}`);
+  onHerbCollected();
+  saveGame();
 }
 
 function approachPortal(portal) {
@@ -608,7 +631,6 @@ function loop() {
   remotes.update(dt);
   mobs.update(dt);
   updateSkills(dt, time);
-  updateFishing(dt);
   updateMinimap();
   animateWorld(worldRefs, time);
   updateQuestMarkers(npcs, time);

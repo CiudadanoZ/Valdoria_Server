@@ -80,6 +80,21 @@ export function sendHealAlly(targetId, amount) {
   send({ type: 'heal_ally', targetId, amount });
 }
 
+// ---- Operaciones autoritativas (el servidor valida y sincroniza) ----
+export function sendUseItem(itemId) { send({ type: 'use_item', itemId }); }
+export function sendEquip(bagIndex) { send({ type: 'equip', bagIndex }); }
+export function sendUnequip(slot) { send({ type: 'unequip', slot }); }
+export function sendShopBuy(itemId) { send({ type: 'shop_buy', itemId }); }
+export function sendShopSell(itemId) { send({ type: 'shop_sell', itemId }); }
+export function sendCraft(recipe) { send({ type: 'craft', recipe }); }
+export function sendCook(recipe) { send({ type: 'cook', recipe }); }
+export function sendGather(herb) { send({ type: 'gather', herb }); }
+export function sendFishStart(spot) { send({ type: 'fish_start', spot }); }
+export function sendFishStop() { send({ type: 'fish_stop' }); }
+export function sendMira(service, id) { send({ type: 'mira', service, id }); }
+export function sendTalentSpend(nodeId) { send({ type: 'talent_spend', nodeId }); }
+export function sendQuestClaim(questId) { send({ type: 'quest_claim', questId }); }
+
 // Persiste el estado del personaje en el servidor
 export function sendSaveState(state) {
   send({ type: 'save_state', state });

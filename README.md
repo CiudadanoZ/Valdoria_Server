@@ -204,14 +204,23 @@ public/js/shop.js      Tienda de Lyra. · crafting.js  Forja de Bramm.
 public/js/network.js   Cliente WebSocket. · ui.js  Diálogos, chat, HUD.
 ```
 
-**Nota**: las criaturas, el botín, los grupos y la persistencia son del
-servidor; la lógica de misiones/inventario corre en el cliente y se sincroniza
-(suficiente para jugar en confianza; blindarla del todo requeriría moverla
-también al servidor).
+**Servidor autoritativo**: el oro, la bolsa, el equipo, la experiencia, los
+niveles, los talentos y las recompensas de misiones viven en el servidor y solo
+se mutan por operaciones validadas (comprar, forjar, cocinar, pescar, recoger,
+equipar, usar, cobrar misión...), cada una con comprobaciones de requisitos y
+**cercanía** (no se comercia con Lyra desde la otra punta del mapa). El
+movimiento se valida por velocidad (con lista blanca para portales y la
+reaparición en la fuente) y el daño declarado se acota según el arma equipada
+real. El cliente solo reporta su vida, las banderas de diálogo de misiones y
+las bendiciones activas. `data/accounts.json` se respalda automáticamente al
+arrancar y cada 15 minutos (rotación de 20 copias en `data/backups/`).
+Pendiente conocido: la vida propia sigue siendo del cliente (un tramposo solo
+puede hacerse inmortal, no fabricar riqueza).
 
 ## Ideas para crecer
 
-- Lógica de misiones e inventario simulada también en el servidor (anti-trampas).
+- Vida del jugador simulada en el servidor (el último hueco de confianza).
+- SQLite en lugar del JSON, despliegue con WSS y reconexión automática.
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
 - Segunda rama del árbol de talentos por clase y respec (reasignar puntos).
 - Concurso de pesca semanal; recetas de cocina con varios ingredientes.

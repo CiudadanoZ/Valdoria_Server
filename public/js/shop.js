@@ -1,11 +1,9 @@
-// Tienda de Lyra: compra de provisiones y venta de botín.
+// Tienda de Lyra: compra y venta validadas por el servidor.
 import { ITEMS } from './items.js';
-import { inventory, addItem, removeItem, countItem, addGold } from './inventory.js';
-import { toast, showTooltip, hideTooltip } from './ui.js';
-import { renderTracker } from './quests.js';
-
-// Lo que Lyra tiene a la venta
-const BUY_LIST = ['pocion_vida', 'pocion_vida_mayor', 'pan_centeno', 'espada_acero'];
+import { SHOP_BUY_LIST } from './recipes.js';
+import { inventory, countItem } from './inventory.js';
+import { sendShopBuy, sendShopSell } from './network.js';
+import { showTooltip, hideTooltip } from './ui.js';
 
 let currentTab = 'buy';
 
@@ -17,6 +15,11 @@ export function initShop() {
 export function openShop() {
   setTab('buy');
   document.getElementById('shop-panel').classList.remove('hidden');
+}
+
+// Repintar si está abierta (llega un state_sync del servidor)
+export function refreshShop() {
+  if (!document.getElementById('shop-panel').classList.contains('hidden')) render();
 }
 
 function setTab(tab) {
@@ -32,20 +35,14 @@ function render() {
   list.innerHTML = '';
 
   if (currentTab === 'buy') {
-    for (const itemId of BUY_LIST) {
+    for (const itemId of SHOP_BUY_LIST) {
       const item = ITEMS[itemId];
       const canAfford = inventory.gold >= item.price;
-      list.appendChild(shopRow(item, `${item.price} 🪙`, 'Comprar', canAfford, () => {
-        if (inventory.gold < item.price) return;
-        if (!addItem(itemId, 1)) return; // inventario lleno
-        addGold(-item.price);
-        render();
-      }));
+      list.appendChild(shopRow(item, `${item.price} 🪙`, 'Comprar', canAfford, () => sendShopBuy(itemId)));
     }
     return;
   }
 
-  // Vender: todo lo del inventario con valor de venta
   const sellable = [];
   const seen = new Set();
   for (const s of inventory.slots) {
@@ -61,13 +58,7 @@ function render() {
     return;
   }
   for (const { item, count } of sellable) {
-    list.appendChild(shopRow(item, `${item.sell} 🪙`, `Vender (x${count})`, true, () => {
-      if (countItem(item.id) <= 0) return;
-      removeItem(item.id, 1);
-      addGold(item.sell);
-      renderTracker(); // por si vende objetos que cuentan para una misión
-      render();
-    }));
+    list.appendChild(shopRow(item, `${item.sell} 🪙`, `Vender (x${count})`, true, () => sendShopSell(item.id)));
   }
 }
 

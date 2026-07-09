@@ -1,9 +1,9 @@
-// Inventario del jugador: 24 casillas, apilado, oro, consumibles y EQUIPO.
-// Solo el arma y las piezas de armadura equipadas cuentan para el daño y la
-// reducción de daño. Clic en un objeto equipable -> se equipa (intercambiando
-// con lo que hubiera); clic en una casilla de equipo -> se desequipa.
+// Inventario del jugador: VISTA del estado autoritativo del servidor.
+// Toda mutación (usar, equipar, comprar, forjar...) se pide por red y el
+// servidor responde con un state_sync que vuelve a pintar este panel.
 import { ITEMS } from './items.js';
-import { toast, setGold, showTooltip, hideTooltip } from './ui.js';
+import { sendUseItem, sendEquip, sendUnequip } from './network.js';
+import { setGold, showTooltip, hideTooltip } from './ui.js';
 
 const SLOTS = 24;
 
@@ -22,13 +22,7 @@ export const inventory = {
   equipment: { arma: null, cabeza: null, torso: null, escudo: null, espalda: null, accesorio: null },
 };
 
-let onUseItem = null;   // callback (item) => bool, decide si se consume
-let onChanged = null;   // callback para guardar partida
-
-export function initInventory({ useItem, changed }) {
-  onUseItem = useItem;
-  onChanged = changed;
-
+export function initInventory() {
   const grid = document.getElementById('inventory-grid');
   grid.innerHTML = '';
   for (let i = 0; i < SLOTS; i++) {
@@ -48,7 +42,7 @@ export function initInventory({ useItem, changed }) {
     el.className = 'equip-slot';
     el.dataset.slot = slotId;
     el.innerHTML = `<span class="equip-icon"></span><span class="equip-label">${label}</span>`;
-    el.addEventListener('click', () => unequip(slotId));
+    el.addEventListener('click', () => { if (inventory.equipment[slotId]) sendUnequip(slotId); });
     el.addEventListener('mousemove', (e) => handleEquipHover(slotId, e));
     el.addEventListener('mouseleave', hideTooltip);
     eqGrid.appendChild(el);
@@ -57,95 +51,21 @@ export function initInventory({ useItem, changed }) {
   render();
 }
 
-export function addGold(amount) {
-  inventory.gold += amount;
+// Aplica el estado que envía el servidor (welcome y state_sync)
+export function applyInventory(data) {
+  if (!data) return;
+  if (Array.isArray(data.slots)) {
+    inventory.slots = data.slots.slice(0, SLOTS);
+    while (inventory.slots.length < SLOTS) inventory.slots.push(null);
+  }
+  inventory.gold = data.gold || 0;
+  if (data.equipment) inventory.equipment = { ...inventory.equipment, ...data.equipment };
   setGold(inventory.gold);
-  if (amount > 0) toast(`+${amount} de oro`);
-  onChanged?.();
-}
-
-export function addItem(itemId, count = 1) {
-  const item = ITEMS[itemId];
-  if (!item) return false;
-
-  if (item.stackable) {
-    const existing = inventory.slots.find((s) => s && s.itemId === itemId);
-    if (existing) {
-      existing.count += count;
-      finishAdd(item, count);
-      return true;
-    }
-  }
-  const needed = item.stackable ? 1 : count;
-  const free = inventory.slots.reduce((n, s) => n + (s ? 0 : 1), 0);
-  if (free < needed) {
-    toast('Inventario lleno');
-    return false;
-  }
-  if (item.stackable) {
-    inventory.slots[inventory.slots.findIndex((s) => !s)] = { itemId, count };
-  } else {
-    for (let c = 0; c < count; c++) {
-      inventory.slots[inventory.slots.findIndex((s) => !s)] = { itemId, count: 1 };
-    }
-  }
-  finishAdd(item, count);
-  return true;
-}
-
-function finishAdd(item, count) {
-  toast(`Obtenido: ${item.icon} ${item.name}${count > 1 ? ` x${count}` : ''}`);
   render();
-  onChanged?.();
-}
-
-export function removeItem(itemId, count = 1) {
-  let remaining = count;
-  for (let i = 0; i < SLOTS && remaining > 0; i++) {
-    const s = inventory.slots[i];
-    if (s && s.itemId === itemId) {
-      const take = Math.min(s.count, remaining);
-      s.count -= take;
-      remaining -= take;
-      if (s.count <= 0) inventory.slots[i] = null;
-    }
-  }
-  render();
-  onChanged?.();
-  return remaining === 0;
 }
 
 export function countItem(itemId) {
   return inventory.slots.reduce((n, s) => n + (s && s.itemId === itemId ? s.count : 0), 0);
-}
-
-// ---- Equipo ----
-export function equipFromSlot(i) {
-  const s = inventory.slots[i];
-  if (!s) return;
-  const item = ITEMS[s.itemId];
-  if (!item.slot) return;
-  const prev = inventory.equipment[item.slot];
-  inventory.equipment[item.slot] = s.itemId;
-  inventory.slots[i] = prev ? { itemId: prev, count: 1 } : null;
-  toast(`Equipado: ${item.icon} ${item.name}`);
-  render();
-  onChanged?.();
-}
-
-export function unequip(slotId) {
-  const itemId = inventory.equipment[slotId];
-  if (!itemId) return;
-  const free = inventory.slots.findIndex((s) => !s);
-  if (free === -1) {
-    toast('Inventario lleno: no puedes desequipar');
-    return;
-  }
-  inventory.slots[free] = { itemId, count: 1 };
-  inventory.equipment[slotId] = null;
-  toast(`Desequipado: ${ITEMS[itemId].icon} ${ITEMS[itemId].name}`);
-  render();
-  onChanged?.();
 }
 
 // Daño del arma EQUIPADA (0 si peleas con los puños).
@@ -161,24 +81,13 @@ export function getArmor() {
   );
 }
 
-// ---- Interacción ----
+// ---- Interacción (todo termina en un RPC al servidor) ----
 function handleSlotClick(i) {
   const s = inventory.slots[i];
   if (!s) return;
   const item = ITEMS[s.itemId];
-  if (item.slot) {
-    equipFromSlot(i);
-    return;
-  }
-  if (item.use && onUseItem) {
-    const consumed = onUseItem(item);
-    if (consumed) {
-      s.count -= 1;
-      if (s.count <= 0) inventory.slots[i] = null;
-      render();
-      onChanged?.();
-    }
-  }
+  if (item.slot) sendEquip(i);
+  else if (item.use) sendUseItem(item.id);
 }
 
 function itemTooltip(item) {
@@ -210,6 +119,7 @@ function handleEquipHover(slotId, e) {
 // ---- Renderizado ----
 function render() {
   const grid = document.getElementById('inventory-grid');
+  if (!grid.children.length) return;
   for (let i = 0; i < SLOTS; i++) {
     const el = grid.children[i];
     const s = inventory.slots[i];
@@ -241,46 +151,4 @@ function render() {
 
   const stats = document.getElementById('equip-stats');
   if (stats) stats.textContent = `⚔ Daño ${5 + getWeaponDamage()}–${9 + getWeaponDamage()} · 🛡 Armadura ${getArmor()}`;
-}
-
-// ---- Guardado / carga ----
-export function serializeInventory() {
-  return { slots: inventory.slots, gold: inventory.gold, equipment: inventory.equipment };
-}
-
-export function loadInventory(data) {
-  if (!data) return;
-  if (Array.isArray(data.slots)) {
-    inventory.slots = data.slots.slice(0, SLOTS);
-    while (inventory.slots.length < SLOTS) inventory.slots.push(null);
-  }
-  inventory.gold = data.gold || 0;
-
-  if (data.equipment) {
-    inventory.equipment = { ...inventory.equipment, ...data.equipment };
-  } else {
-    // Partida antigua sin equipo: equipar automáticamente lo mejor de cada casilla
-    autoEquipBest();
-  }
-  setGold(inventory.gold);
-  render();
-}
-
-function autoEquipBest() {
-  for (const slotId of Object.keys(EQUIP_SLOTS)) {
-    let bestIdx = -1, bestValue = -1;
-    for (let i = 0; i < SLOTS; i++) {
-      const s = inventory.slots[i];
-      if (!s) continue;
-      const item = ITEMS[s.itemId];
-      if (item.slot !== slotId) continue;
-      const value = (item.dmg || 0) + (item.armor || 0);
-      if (value > bestValue) { bestValue = value; bestIdx = i; }
-    }
-    if (bestIdx >= 0) {
-      const s = inventory.slots[bestIdx];
-      inventory.equipment[slotId] = s.itemId;
-      inventory.slots[bestIdx] = null;
-    }
-  }
 }

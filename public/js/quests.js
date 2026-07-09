@@ -6,9 +6,30 @@
 // Cadena de la Cripta (Maestre Aldric, se abre al completar el Exterior):
 //   a1: abatir 6 Esqueletos Guardianes -> a2: reunir 4 Esencias Espectrales
 //   -> a3: abatir al Señor de la Cripta y entregar la Reliquia.
-import { addItem, addGold, removeItem, countItem } from './inventory.js';
-import { addXp } from './progression.js';
+import { countItem } from './inventory.js';
+import { sendQuestClaim } from './network.js';
 import { toast, showDialog, hideDialog } from './ui.js';
+
+// ---- Reclamación de recompensas (las otorga el servidor, una sola vez) ----
+// Se envía quest_claim y, si el servidor confirma, se ejecuta la continuación
+// (avance de la cadena, toasts y diálogo siguiente).
+let pendingClaim = null; // { questId, fn }
+
+function requestClaim(questId, continuation) {
+  pendingClaim = { questId, fn: continuation };
+  sendQuestClaim(questId);
+}
+
+export function onClaimResult(questId, ok, reason) {
+  if (!pendingClaim || pendingClaim.questId !== questId) return;
+  const claim = pendingClaim;
+  pendingClaim = null;
+  if (ok) {
+    claim.fn();
+  } else {
+    toast(`No se pudo cobrar la recompensa: ${reason}`);
+  }
+}
 
 export const questState = {
   q1: 'active',   // inactive | active | turnin | done
@@ -94,8 +115,8 @@ export function toranMarker() {
 }
 
 // ---- Eventos del mundo ----
+// La hierba ya entró en la bolsa (la otorgó el servidor tras validar la recolección)
 export function onHerbCollected() {
-  addItem('hierba_lumina', 1);
   if (questState.q2 === 'active') {
     questState.herbs = Math.min(HERBS_NEEDED, countItem('hierba_lumina'));
     if (questState.herbs >= HERBS_NEEDED) {
@@ -198,7 +219,7 @@ function meetCitizen(npcId) {
 // Servicios inyectados por main.js (tienda de Lyra, forja de Bramm, curación de Mira)
 let openShopFn = null;
 let openForgeFn = null;
-let miraServices = null; // { getHp, getMaxHp, healFull, buyBlessing, blessings }
+let miraServices = null; // { getHp, getMaxHp, requestHeal, requestBless, blessings }
 export function setShopOpener(fn) { openShopFn = fn; }
 export function setForgeOpener(fn) { openForgeFn = fn; }
 export function setMiraServices(services) { miraServices = services; }
@@ -236,8 +257,7 @@ function miraDialog(npc) {
       label: `✙ Sanar heridas por completo (${HEAL_PRICE} oro)`,
       fn: () => {
         if (!hurt) { hideDialog(); return; }
-        if (!s.payGold(HEAL_PRICE)) return;
-        s.healFull();
+        s.requestHeal(); // el servidor cobra y confirma
         hideDialog();
       },
     },
@@ -245,7 +265,7 @@ function miraDialog(npc) {
   for (const b of Object.values(s.blessings)) {
     actions.push({
       label: `${b.icon} ${b.name} — ${b.desc}, 10 min (${b.price} oro)`,
-      fn: () => { s.buyBlessing(b.id); },
+      fn: () => { s.requestBless(b.id); },
     });
   }
   actions.push({ label: 'Hasta pronto, Sacerdotisa', fn: hideDialog });
@@ -261,19 +281,16 @@ function aldricDialog() {
       actions: [
         {
           label: '✦ Aceptar la bienvenida (10 oro, 2 Pociones de Vida)',
-          fn: () => {
+          fn: () => requestClaim('q1', () => {
             questState.q1 = 'done';
             questState.q2 = 'active';
-            addGold(10);
-            addItem('pocion_vida', 2);
-            addXp(50);
             toast('Misión completada: Bienvenido a Valdoria', 'quest');
             toast('Nueva misión: Hierbas para el Maestre', 'quest');
             save(); renderTracker();
             showDialog('Maestre Aldric',
               'Toma estas pociones, las necesitarás. Ahora, un favor: la luz de la Ciudadela se alimenta de Hierbas Lumina. Crecen brillando entre las piedras de la plaza. Tráeme 3 y te recompensaré.',
               [close]);
-          },
+          }),
         },
         close,
       ],
@@ -287,20 +304,16 @@ function aldricDialog() {
         actions: [
           {
             label: '✦ Entregar 3 Hierbas Lumina (25 oro, Espada de Recluta)',
-            fn: () => {
-              removeItem('hierba_lumina', HERBS_NEEDED);
+            fn: () => requestClaim('q2', () => {
               questState.q2 = 'done';
               questState.q3 = 'active';
-              addGold(25);
-              addItem('espada_recluta', 1);
-              addXp(80);
               toast('Misión completada: Hierbas para el Maestre', 'quest');
               toast('Nueva misión: Conoce a los ciudadanos', 'quest');
               save(); renderTracker();
               showDialog('Maestre Aldric',
                 'Esta espada la forjó Bramm para los nuevos defensores. Y hablando de él... deberías presentarte ante los ciudadanos: Bramm el Herrero, Lyra la Mercader y el Guardia Toran. Ellos cuidarán de ti.',
                 [close]);
-            },
+            }),
           },
           close,
         ],
@@ -326,20 +339,15 @@ function aldricDialog() {
       actions: [
         {
           label: '✦ Recibir recompensa final (50 oro, Casco de Cuero, Anillo de Valdoria)',
-          fn: () => {
+          fn: () => requestClaim('q3', () => {
             questState.q3 = 'done';
-            addGold(50);
-            addItem('casco_cuero', 1);
-            addXp(120);
-            addItem('anillo_valdoria', 1);
-            addItem('pan_centeno', 3);
             toast('Misión completada: Conoce a los ciudadanos', 'quest');
             toast('✦ ¡Bienvenida completada! Eres ciudadano de Valdoria ✦', 'quest');
             save(); renderTracker();
             showDialog('Maestre Aldric',
               'Una cosa más: el Guardia Toran anda buscando brazos fuertes para los problemas de ahí fuera. Habla con él en la puerta sur cuando estés listo para ver mundo.',
               [{ label: 'Lo haré', fn: hideDialog }]);
-          },
+          }),
         },
         close,
       ],
@@ -376,19 +384,16 @@ function aldricDialog() {
           actions: [
             {
               label: '✦ Cobrar recompensa (80 oro, 2 Pociones Mayores)',
-              fn: () => {
+              fn: () => requestClaim('a1', () => {
                 questState.a1 = 'done';
                 questState.a2 = 'active';
-                addGold(80);
-                addItem('pocion_vida_mayor', 2);
-                addXp(180);
                 toast('Misión completada: Ecos bajo la muralla', 'quest');
                 toast('Nueva misión: Esencias espectrales', 'quest');
                 save(); renderTracker();
                 showDialog('Maestre Aldric',
                   'Ahora necesito entender qué los despertó. Los guardianes dejan al caer una luz fría: Esencia Espectral. Tráeme 4 y podré leer en ellas. Por cierto: Bramm sabe forjar con los huesos antiguos de ahí abajo. Llévale lo que encuentres.',
                   [close]);
-              },
+              }),
             },
             close,
           ],
@@ -407,19 +412,16 @@ function aldricDialog() {
           actions: [
             {
               label: '✦ Entregar 4 Esencias Espectrales (120 oro)',
-              fn: () => {
-                removeItem('esencia_espectral', ESSENCES_NEEDED);
+              fn: () => requestClaim('a2', () => {
                 questState.a2 = 'done';
                 questState.a3 = 'active';
-                addGold(120);
-                addXp(200);
                 toast('Misión completada: Esencias espectrales', 'quest');
                 toast('Nueva misión: El Señor de la Cripta', 'quest');
                 save(); renderTracker();
                 showDialog('Maestre Aldric',
                   'Está en la sala del trono, al fondo de la cripta, custodiando una Reliquia sellada. Abátelo y tráeme esa urna. No vayas solo si puedes evitarlo: forma un grupo de caza con otros héroes. Y pásate antes por la forja de Bramm.',
                   [close]);
-              },
+              }),
             },
             close,
           ],
@@ -438,17 +440,13 @@ function aldricDialog() {
           actions: [
             {
               label: '✦ Entregar la Reliquia (200 oro, Amuleto del Guardián)',
-              fn: () => {
-                removeItem('reliquia_cripta', 1);
+              fn: () => requestClaim('a3', () => {
                 questState.a3 = 'done';
-                addGold(200);
-                addItem('amuleto_guardian', 1);
-                addXp(320);
                 toast('Misión completada: El Señor de la Cripta', 'quest');
                 toast('✦ ¡Las criptas de Valdoria descansan! ✦', 'quest');
                 save(); renderTracker();
                 hideDialog();
-              },
+              }),
             },
             close,
           ],
@@ -505,19 +503,16 @@ function toranDialog() {
         actions: [
           {
             label: '⚔ Cobrar recompensa (40 oro, 3 Pociones de Vida)',
-            fn: () => {
+            fn: () => requestClaim('t1', () => {
               questState.t1 = 'done';
               questState.t2 = 'active';
-              addGold(40);
-              addItem('pocion_vida', 3);
-              addXp(120);
               toast('Misión completada: Lobos en la llanura', 'quest');
               toast('Nueva misión: Pieles para el cuartel', 'quest');
               save(); renderTracker();
               showDialog('Guardia Toran',
                 'Ahora que les has tomado la medida... el cuartel necesita pieles para los catres del turno de noche. Tráeme 4 Pieles de Lobo. Los lobos las sueltan al caer; también puedes comprarlas si Lyra tuviera, pero dudo que le queden.',
                 [close]);
-            },
+            }),
           },
           close,
         ],
@@ -536,20 +531,16 @@ function toranDialog() {
         actions: [
           {
             label: '⚔ Entregar 4 Pieles de Lobo (60 oro, Escudo de Roble)',
-            fn: () => {
-              removeItem('piel_lobo', PELTS_NEEDED);
+            fn: () => requestClaim('t2', () => {
               questState.t2 = 'done';
               questState.t3 = 'active';
-              addGold(60);
-              addItem('escudo_roble', 1);
-              addXp(140);
               toast('Misión completada: Pieles para el cuartel', 'quest');
               toast('Nueva misión: El Alfa Sombrío', 'quest');
               save(); renderTracker();
               showDialog('Guardia Toran',
                 'Y ahora lo serio. Los lobos no bajan de las colinas porque sí: los guía una bestia enorme de ojos rojos. El Alfa Sombrío. Lo vieron en el círculo de piedras, al final del camino del sur. Llévate ese escudo... y no vayas sin pociones.',
                 [close]);
-            },
+            }),
           },
           close,
         ],
@@ -568,17 +559,13 @@ function toranDialog() {
         actions: [
           {
             label: '⚔ Recompensa del cuartel (100 oro, Capa del Explorador, 2 Pociones Mayores)',
-            fn: () => {
+            fn: () => requestClaim('t3', () => {
               questState.t3 = 'done';
-              addGold(100);
-              addItem('capa_exploradora', 1);
-              addItem('pocion_vida_mayor', 2);
-              addXp(220);
               toast('Misión completada: El Alfa Sombrío', 'quest');
               toast('✦ ¡Has limpiado el exterior de Valdoria! ✦', 'quest');
               save(); renderTracker();
               hideDialog();
-            },
+            }),
           },
           close,
         ],
@@ -627,19 +614,16 @@ function baldurDialog() {
         actions: [
           {
             label: '⚔ Cobrar recompensa (30 oro, 2 Pociones de Vida)',
-            fn: () => {
+            fn: () => requestClaim('b1', () => {
               questState.b1 = 'done';
               questState.b2 = 'active';
-              addGold(30);
-              addItem('pocion_vida', 2);
-              addXp(100);
               toast('Misión completada: Ratas en la oscuridad', 'quest');
               toast('Nueva misión: El Guardián del Bosque', 'quest');
               save(); renderTracker();
               showDialog('Ermitaño Baldur',
                 'Pero las ratas eran solo el principio. Al fondo de esa cripta camina un montón de huesos con nombre propio: el Guardián Óseo. Mientras siga en pie, esto no habrá terminado. Abátelo... y no vayas justo de vida.',
                 [close]);
-            },
+            }),
           },
           close,
         ],
@@ -658,17 +642,13 @@ function baldurDialog() {
         actions: [
           {
             label: '⚔ Cobrar recompensa (90 oro, 2 Esencias, Poción Mayor)',
-            fn: () => {
+            fn: () => requestClaim('b2', () => {
               questState.b2 = 'done';
-              addGold(90);
-              addItem('esencia_espectral', 2);
-              addItem('pocion_vida_mayor', 1);
-              addXp(180);
               toast('Misión completada: El Guardián del Bosque', 'quest');
               toast('✦ La Cripta del Bosque descansa ✦', 'quest');
               save(); renderTracker();
               hideDialog();
-            },
+            }),
           },
           close,
         ],
@@ -716,20 +696,16 @@ function nyraDialog() {
         actions: [
           {
             label: '⚔ Entregar 5 Colmillos de Lobo (40 oro, 2 Pociones de Vida)',
-            fn: () => {
-              removeItem('colmillo_lobo', FANGS_NEEDED);
+            fn: () => requestClaim('c1', () => {
               questState.c1 = 'done';
               questState.c2 = 'active';
-              addGold(40);
-              addItem('pocion_vida', 2);
-              addXp(100);
               toast('Misión completada: Puntas de colmillo', 'quest');
               toast('Nueva misión: El Centinela de la Colina', 'quest');
               save(); renderTracker();
               showDialog('Cazadora Nyra',
                 'Ahora lo importante: dentro de esa cripta manda el Centinela Óseo. Le he clavado seis flechas y ni se inmutó — esto es trabajo de acero, no de pluma. Abátelo y la colina será segura para las caravanas.',
                 [close]);
-            },
+            }),
           },
           close,
         ],
@@ -748,17 +724,13 @@ function nyraDialog() {
         actions: [
           {
             label: '⚔ Cobrar recompensa (90 oro, Poción Mayor, 2 Pieles de Oso)',
-            fn: () => {
+            fn: () => requestClaim('c2', () => {
               questState.c2 = 'done';
-              addGold(90);
-              addItem('pocion_vida_mayor', 1);
-              addItem('piel_oso', 2);
-              addXp(180);
               toast('Misión completada: El Centinela de la Colina', 'quest');
               toast('✦ La Cripta de la Colina descansa ✦', 'quest');
               save(); renderTracker();
               hideDialog();
-            },
+            }),
           },
           close,
         ],

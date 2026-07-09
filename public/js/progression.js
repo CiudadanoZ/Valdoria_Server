@@ -1,12 +1,12 @@
-// Progresión del héroe: experiencia, niveles y árbol de talentos por clase.
-// Cada nivel otorga +5 de vida máxima y 1 punto de talento. Los talentos dan
-// pasivas (daño, armadura, vida, velocidad, curas, enfriamientos) o desbloquean
-// una cuarta habilidad activa (tecla 4).
+// Progresión del héroe: VISTA del estado autoritativo del servidor.
+// La experiencia la otorga el servidor (caza, misiones, pesca, cocina) y los
+// puntos de talento se gastan por RPC validado. Aquí solo se muestra y se
+// detectan las subidas de nivel para celebrarlas.
+import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from './talents-data.js';
+import { sendTalentSpend } from './network.js';
 import { toast } from './ui.js';
 
-export const MAX_LEVEL = 15;
-export const HP_PER_LEVEL = 5;
-export const xpForLevel = (level) => 100 + (level - 1) * 60;
+export { MAX_LEVEL, HP_PER_LEVEL, xpForLevel };
 
 export const progression = {
   level: 1,
@@ -15,39 +15,11 @@ export const progression = {
   talents: {}, // nodeId -> rango
 };
 
-// Nodos: max = rangos; req = puntos gastados necesarios para desbloquear el nodo;
-// efecto: dmg/armor/hp/speed (fracción)/healMul (fracción)/cdr {skillId: seg}/unlock 'skillId'
-export const TALENT_TREES = {
-  guerrero: [
-    { id: 'furia', name: 'Furia', icon: '🔥', max: 3, req: 0, dmg: 1, desc: '+1 de daño por rango' },
-    { id: 'piel_hierro', name: 'Piel de Hierro', icon: '🛡', max: 3, req: 0, armor: 1, desc: '+1 de armadura por rango' },
-    { id: 'vigor', name: 'Vigor', icon: '❤️', max: 3, req: 2, hp: 10, desc: '+10 de vida máxima por rango' },
-    { id: 'maestria_golpe', name: 'Maestría: Golpe Poderoso', icon: '💥', max: 1, req: 2, cdr: { golpe: 2 }, desc: 'Golpe Poderoso: −2 s de enfriamiento' },
-    { id: 'ejecucion', name: 'Ejecución', icon: '⚔️', max: 1, req: 4, unlock: 'ejecucion', desc: 'Desbloquea la habilidad Ejecución (tecla 4): 350% de daño al objetivo' },
-  ],
-  explorador: [
-    { id: 'punteria', name: 'Puntería', icon: '🎯', max: 3, req: 0, dmg: 1, desc: '+1 de daño por rango' },
-    { id: 'pies_ligeros', name: 'Pies Ligeros', icon: '🥾', max: 2, req: 0, speed: 0.06, desc: '+6% de velocidad por rango' },
-    { id: 'supervivencia', name: 'Supervivencia', icon: '❤️', max: 3, req: 2, hp: 10, desc: '+10 de vida máxima por rango' },
-    { id: 'maestria_certero', name: 'Maestría: Disparo Certero', icon: '🏹', max: 1, req: 2, cdr: { certero: 1.5 }, desc: 'Disparo Certero: −1,5 s de enfriamiento' },
-    { id: 'descarga', name: 'Descarga Múltiple', icon: '🌠', max: 1, req: 4, unlock: 'descarga', desc: 'Desbloquea la habilidad Descarga Múltiple (tecla 4): 3 disparos del 70% de daño' },
-  ],
-  sacerdote: [
-    { id: 'devocion', name: 'Devoción', icon: '🕊️', max: 3, req: 0, healMul: 0.15, desc: 'Curas +15% por rango' },
-    { id: 'luz_interior', name: 'Luz Interior', icon: '❤️', max: 3, req: 0, hp: 10, desc: '+10 de vida máxima por rango' },
-    { id: 'castigo_mejorado', name: 'Castigo Mejorado', icon: '🌟', max: 3, req: 2, dmg: 1, desc: '+1 de daño por rango' },
-    { id: 'maestria_nova', name: 'Maestría: Nova Sagrada', icon: '💫', max: 1, req: 2, cdr: { nova: 4 }, desc: 'Nova Sagrada: −4 s de enfriamiento' },
-    { id: 'escudo_fe', name: 'Escudo de Fe', icon: '🔆', max: 1, req: 4, unlock: 'escudo_fe', desc: 'Desbloquea la habilidad Escudo de Fe (tecla 4): +6 de armadura durante 6 s' },
-  ],
-};
-
 let tree = TALENT_TREES.guerrero;
-let onChanged = null;
 let onProgressChange = null; // reconstruir barra de habilidades, refrescar vida máx...
 
-export function initProgression(classId, { changed, progressChanged }) {
+export function initProgression(classId, { progressChanged }) {
   tree = TALENT_TREES[classId] || TALENT_TREES.guerrero;
-  onChanged = changed;
   onProgressChange = progressChanged;
 
   document.getElementById('talents-open').addEventListener('click', toggleTalents);
@@ -55,44 +27,25 @@ export function initProgression(classId, { changed, progressChanged }) {
   renderPanel();
 }
 
-export function addXp(amount) {
-  if (!amount || progression.level >= MAX_LEVEL) { renderHud(); return; }
-  progression.xp += amount;
-  let leveled = false;
-  while (progression.level < MAX_LEVEL && progression.xp >= xpForLevel(progression.level)) {
-    progression.xp -= xpForLevel(progression.level);
-    progression.level++;
-    progression.points++;
-    leveled = true;
+// Aplica la progresión que envía el servidor; celebra subidas de nivel.
+export function applyProgression(data) {
+  if (!data) { renderHud(); return; }
+  const prevLevel = progression.level;
+  progression.level = data.level || 1;
+  progression.xp = data.xp || 0;
+  progression.points = data.points || 0;
+  progression.talents = data.talents || {};
+
+  if (progression.level > prevLevel && prevLevel >= 1) {
     toast(`✦ ¡Nivel ${progression.level}! +1 punto de talento (tecla T) ✦`, 'quest');
   }
-  if (progression.level >= MAX_LEVEL) progression.xp = 0;
   renderHud();
-  if (leveled) {
-    renderPanel();
-    onProgressChange?.();
-  }
-  onChanged?.();
+  renderPanel();
+  onProgressChange?.();
 }
 
 export function pointsSpent() {
   return Object.values(progression.talents).reduce((a, b) => a + b, 0);
-}
-
-export function spendPoint(nodeId) {
-  const node = tree.find((n) => n.id === nodeId);
-  if (!node) return;
-  const rank = progression.talents[nodeId] || 0;
-  if (progression.points < 1) { toast('No tienes puntos de talento'); return; }
-  if (rank >= node.max) return;
-  if (pointsSpent() < node.req) { toast(`Necesitas ${node.req} puntos gastados en el árbol`); return; }
-  progression.talents[nodeId] = rank + 1;
-  progression.points--;
-  toast(`${node.icon} ${node.name} (rango ${rank + 1})`);
-  renderHud();
-  renderPanel();
-  onProgressChange?.();
-  onChanged?.();
 }
 
 // ---- Bonificaciones acumuladas ----
@@ -154,24 +107,8 @@ function renderPanel() {
     btn.className = 'shop-btn';
     btn.textContent = maxed ? 'Máximo' : 'Mejorar';
     btn.disabled = maxed || locked || progression.points < 1;
-    btn.addEventListener('click', () => spendPoint(node.id));
+    btn.addEventListener('click', () => sendTalentSpend(node.id));
     row.appendChild(btn);
     list.appendChild(row);
   }
-}
-
-// ---- Guardado / carga ----
-export function serializeProgression() {
-  const { level, xp, points, talents } = progression;
-  return { level, xp, points, talents };
-}
-
-export function loadProgression(data) {
-  if (!data) { renderHud(); return; }
-  progression.level = data.level || 1;
-  progression.xp = data.xp || 0;
-  progression.points = data.points || 0;
-  progression.talents = data.talents || {};
-  renderHud();
-  renderPanel();
 }

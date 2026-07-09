@@ -1,6 +1,6 @@
 // Bendiciones de la Sacerdotisa Mira: mejoras temporales (10 minutos) que se
-// muestran junto al orbe de vida con su tiempo restante.
-import { inventory, addGold } from './inventory.js';
+// muestran junto al orbe de vida con su tiempo restante. El COBRO lo hace el
+// servidor (mensaje mira); aquí solo se activa cuando llega la confirmación.
 import { toast } from './ui.js';
 
 const DURATION_MS = 10 * 60 * 1000;
@@ -26,19 +26,14 @@ function isActive(id) {
   return state[id] > Date.now();
 }
 
-export function buyBlessing(id) {
+// El servidor ya cobró: activar la bendición
+export function activateBlessing(id) {
   const b = BLESSINGS[id];
-  if (!b) return false;
-  if (inventory.gold < b.price) {
-    toast('No llevas suficiente oro');
-    return false;
-  }
-  addGold(-b.price);
+  if (!b) return;
   state[id] = Date.now() + DURATION_MS;
   toast(`${b.icon} ${b.name} — ${b.desc} durante 10 minutos`, 'quest');
   render();
   onChanged?.();
-  return true;
 }
 
 // Bonificaciones activas

@@ -1,6 +1,6 @@
 // Base de datos de cuentas y personajes: un JSON en disco (data/accounts.json)
 // con escritura diferida. Las contraseñas se guardan con hash scrypt + sal.
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, copyFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -29,6 +29,28 @@ export function loadDb() {
       console.error('No se pudo leer accounts.json, empezando vacío:', err.message);
       accounts = {};
     }
+  }
+  // Copia de seguridad al arrancar y luego cada 15 minutos
+  backupNow();
+  setInterval(backupNow, 15 * 60 * 1000);
+}
+
+// ---- Copias de seguridad rotativas (se conservan las 20 últimas) ----
+const BACKUP_DIR = join(DATA_DIR, 'backups');
+const MAX_BACKUPS = 20;
+
+function backupNow() {
+  if (!existsSync(DB_FILE)) return;
+  try {
+    mkdirSync(BACKUP_DIR, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    copyFileSync(DB_FILE, join(BACKUP_DIR, `accounts-${stamp}.json`));
+    const backups = readdirSync(BACKUP_DIR).filter((f) => f.startsWith('accounts-')).sort();
+    while (backups.length > MAX_BACKUPS) {
+      unlinkSync(join(BACKUP_DIR, backups.shift()));
+    }
+  } catch (err) {
+    console.error('Error creando copia de seguridad:', err.message);
   }
 }
 
@@ -136,14 +158,33 @@ export function getCharacter(account, charId) {
   return account.characters.find((c) => c.id === charId) || null;
 }
 
-// Fusiona el estado recibido con el guardado (validación ligera de forma y tamaño).
+// Marca la base de datos como modificada (el servidor muta character.state
+// directamente en las operaciones autoritativas).
+export function touch() {
+  saveSoon();
+}
+
+// Fusiona SOLO las claves que el cliente tiene permitido reportar (vida,
+// banderas de misión y bendiciones). El oro, inventario, equipo y progresión
+// son autoritativos del servidor y se ignoran si el cliente los envía.
+const CLIENT_STATE_KEYS = ['hp', 'quests', 'blessings', 'x', 'z'];
+
 export function saveCharacterState(account, charId, state) {
   const character = getCharacter(account, charId);
   if (!character || typeof state !== 'object' || state === null) return false;
   try {
-    if (JSON.stringify(state).length > 40000) return false; // demasiado grande
+    if (JSON.stringify(state).length > 20000) return false; // demasiado grande
   } catch { return false; }
-  character.state = { ...character.state, ...state };
+  for (const key of CLIENT_STATE_KEYS) {
+    if (state[key] === undefined) continue;
+    if (key === 'hp') {
+      character.state.hp = Math.max(0, Math.min(250, Math.round(Number(state.hp) || 0)));
+    } else if ((key === 'x' || key === 'z') && typeof state[key] === 'number') {
+      character.state[key] = state[key];
+    } else if (typeof state[key] === 'object') {
+      character.state[key] = state[key];
+    }
+  }
   saveSoon();
   return true;
 }

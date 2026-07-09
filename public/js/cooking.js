@@ -1,33 +1,17 @@
-// Cocina en las hogueras: convierte pescado y carne cruda en platos que curan
-// mucho más. Cocinar da un poco de experiencia.
+// Cocina en las hogueras: el servidor valida ingredientes y otorga la comida y la EXP.
 import { ITEMS } from './items.js';
-import { addItem, removeItem, countItem } from './inventory.js';
-import { toast, showTooltip, hideTooltip } from './ui.js';
-import { addXp } from './progression.js';
-
-const RECIPES = [
-  { from: 'pez_comun', to: 'pescado_asado' },
-  { from: 'pez_grande', to: 'pescado_grande_asado' },
-  { from: 'carne_venado', to: 'venado_asado' },
-  { from: 'carne_jabali', to: 'jabali_asado' },
-  { from: 'pez_dorado', to: 'festin_dorado' },
-];
-
-const COOK_XP = 3;
+import { COOK_RECIPES, COOK_XP } from './recipes.js';
+import { countItem } from './inventory.js';
+import { sendCook } from './network.js';
+import { showTooltip, hideTooltip } from './ui.js';
 
 export function openCooking() {
   render();
   document.getElementById('cooking-panel').classList.remove('hidden');
 }
 
-function cook(recipe) {
-  if (countItem(recipe.from) < 1) return;
-  const dish = ITEMS[recipe.to];
-  if (!addItem(recipe.to, 1)) return; // inventario lleno
-  removeItem(recipe.from, 1);
-  addXp(COOK_XP);
-  toast(`🔥 Cocinado: ${dish.icon} ${dish.name}`);
-  render();
+export function refreshCooking() {
+  if (!document.getElementById('cooking-panel').classList.contains('hidden')) render();
 }
 
 function render() {
@@ -35,7 +19,7 @@ function render() {
   list.innerHTML = '';
 
   let anything = false;
-  for (const recipe of RECIPES) {
+  COOK_RECIPES.forEach((recipe, index) => {
     const raw = ITEMS[recipe.from];
     const dish = ITEMS[recipe.to];
     const have = countItem(recipe.from);
@@ -62,11 +46,11 @@ function render() {
     btn.className = 'shop-btn';
     btn.textContent = 'Asar';
     btn.disabled = have < 1;
-    btn.addEventListener('click', () => cook(recipe));
+    btn.addEventListener('click', () => sendCook(index));
     row.appendChild(btn);
 
     list.appendChild(row);
-  }
+  });
 
   document.getElementById('cooking-hint').textContent = anything
     ? 'El fuego crepita. Elige qué asar.'

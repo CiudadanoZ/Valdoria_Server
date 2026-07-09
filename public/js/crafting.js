@@ -1,18 +1,9 @@
-// Forja de Bramm: convierte materiales de caza (pieles, colmillos, huesos,
-// esencias) y oro en armas y armaduras.
+// Forja de Bramm: el servidor valida materiales y oro y aplica la receta.
 import { ITEMS } from './items.js';
-import { inventory, addItem, removeItem, countItem, addGold } from './inventory.js';
-import { toast, showTooltip, hideTooltip } from './ui.js';
-
-// Recetas: resultado + materiales + coste de mano de obra
-const RECIPES = [
-  { result: 'cuchillo_colmillos', mats: { colmillo_lobo: 4 }, gold: 15 },
-  { result: 'armadura_pieles', mats: { piel_lobo: 5 }, gold: 30 },
-  { result: 'capa_oso', mats: { piel_oso: 3 }, gold: 40 },
-  { result: 'hoja_cazador', mats: { colmillo_lobo: 6, piel_lobo: 2 }, gold: 60 },
-  { result: 'escudo_hueso', mats: { hueso_antiguo: 6 }, gold: 40 },
-  { result: 'espada_espectral', mats: { esencia_espectral: 4, hueso_antiguo: 6 }, gold: 100 },
-];
+import { CRAFT_RECIPES } from './recipes.js';
+import { inventory, countItem } from './inventory.js';
+import { sendCraft } from './network.js';
+import { showTooltip, hideTooltip } from './ui.js';
 
 export function initCrafting() {
   // El panel se rellena al abrirse
@@ -23,19 +14,13 @@ export function openCrafting() {
   document.getElementById('crafting-panel').classList.remove('hidden');
 }
 
+export function refreshCrafting() {
+  if (!document.getElementById('crafting-panel').classList.contains('hidden')) render();
+}
+
 function canCraft(recipe) {
   if (inventory.gold < recipe.gold) return false;
   return Object.entries(recipe.mats).every(([id, n]) => countItem(id) >= n);
-}
-
-function craft(recipe) {
-  if (!canCraft(recipe)) return;
-  const item = ITEMS[recipe.result];
-  if (!addItem(recipe.result, 1)) return; // inventario lleno
-  for (const [id, n] of Object.entries(recipe.mats)) removeItem(id, n);
-  addGold(-recipe.gold);
-  toast(`🔨 Bramm forja: ${item.icon} ${item.name}`, 'quest');
-  render();
 }
 
 function render() {
@@ -43,7 +28,7 @@ function render() {
   document.getElementById('crafting-gold').textContent = inventory.gold;
   list.innerHTML = '';
 
-  for (const recipe of RECIPES) {
+  CRAFT_RECIPES.forEach((recipe, index) => {
     const item = ITEMS[recipe.result];
     const row = document.createElement('div');
     row.className = 'craft-row';
@@ -67,11 +52,11 @@ function render() {
     btn.className = 'shop-btn';
     btn.textContent = 'Forjar';
     btn.disabled = !canCraft(recipe);
-    btn.addEventListener('click', () => craft(recipe));
+    btn.addEventListener('click', () => sendCraft(index));
     row.appendChild(btn);
 
     list.appendChild(row);
-  }
+  });
 }
 
 function matsHtml(recipe) {
