@@ -260,22 +260,26 @@ conexión en pleno juego, aparece un aviso de «Conexión perdida», el cliente
 sondea el servidor y, al volver, **reentra solo** con el mismo personaje
 (sesión por pestaña en `sessionStorage`).
 
-## Despliegue en producción
+## Despliegue
+
+**Jugar por Internet gratis** (tu PC de servidor, WSS automático con Cloudflare
+Tunnel): doble clic en `Jugar-online.bat` y comparte el enlace. Guía completa en
+**[DEPLIEGUE.md](DEPLIEGUE.md)**.
 
 ```bash
 # Red local (sin cifrado): http://<tu-ip>:3000
 npm start
 
-# Por Internet (HTTPS + WSS): con certificados TLS y cuentas admin
+# Con certificados TLS propios (HTTPS + WSS gestionado por ti) y cuentas admin
 TLS_CERT=/ruta/fullchain.pem TLS_KEY=/ruta/privkey.pem \
   ADMIN_ACCOUNTS=miAdmin PORT=443 npm start
 ```
 
 Variables de entorno: `PORT`, `TLS_CERT`/`TLS_KEY` (activan WSS),
 `ADMIN_ACCOUNTS` (admins, separados por comas) y `BANNED_WORDS` (palabras
-vetadas extra en los nombres). Detrás de un proxy inverso (nginx, Caddy) basta
-con que el proxy termine el TLS y reenvíe el WebSocket; en ese caso `npm start`
-sin `TLS_*` es suficiente.
+vetadas extra en los nombres). Detrás de un proxy inverso o túnel (Cloudflare,
+nginx, Caddy) el TLS lo pone el proxy y basta `npm start` sin `TLS_*` — el
+cliente elige `wss://` solo al servirse por `https://`.
 
 ## Ideas para crecer
 
