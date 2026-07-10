@@ -169,6 +169,21 @@ vida y posición) se guarda **en el servidor**: al moverte de equipo o navegador
 basta con entrar con tu cuenta. El cliente sincroniza cada pocos segundos y al
 salir; el servidor guarda además tu última posición al desconectar.
 
+### Sonido y ajustes
+Música ambiental de fantasía oscura y efectos (golpes, nivel, botín, pesca,
+cocina, portales...) generados **proceduralmente** con Web Audio API — sin
+archivos externos. El botón `⚙` (o la tecla `O`, y también desde el lobby) abre
+los **Ajustes**: volumen de música y de efectos, y sombras on/off para equipos
+modestos. Las preferencias se guardan en el navegador.
+
+### Administración
+Marca cuentas admin con la variable de entorno `ADMIN_ACCOUNTS` (nombres
+separados por comas; por defecto `oscarchan`). Un admin dispone de comandos de
+chat: `/say` (anuncio a todos los reinos), `/kick`, `/ban` y `/unban`, `/mute` y
+`/unmute`, `/who` y `/help`. Los baneos se persisten en la base de datos y hay
+un **filtro de nombres ofensivos** al crear cuentas y personajes (ampliable con
+`BANNED_WORDS`).
+
 ## Arquitectura
 
 ```
@@ -176,13 +191,15 @@ server/server.js       Express + WebSocket. Autoritativo: cuentas y entrada al
                        mundo, dos reinos con simulación propia de 40 criaturas
                        a 10 Hz (IA, daño, muerte, reaparición), botín por
                        participación, grupos de caza, posiciones y chat.
-server/db.js           Base de datos JSON en disco (data/accounts.json):
-                       cuentas con scrypt, personajes y su estado (inventario,
-                       equipo, misiones, bendiciones, vida, posición) con
-                       escritura diferida atómica.
+server/db.js           Base de datos SQLite (data/valdoria.db): cuentas con
+                       scrypt, personajes y su estado, baneos, filtro de nombres.
+server/state.js        Estado autoritativo: bolsa, equipo, vida, armadura,
+                       experiencia, talentos y sus cálculos.
 public/js/main.js      Punto de entrada: conexión, lobby->juego, escena, cámara,
                        bucle, controles, combate, bonificaciones de raza/clase,
                        sincronización del estado con el servidor.
+public/js/audio.js     Música y efectos procedurales (Web Audio API).
+public/js/settings.js  Panel de ajustes (audio, sombras).
 public/js/lobby.js     Lobby: cuenta, selección de mundo/personaje, creación.
 public/js/races.js     Razas y especializaciones (bonificaciones y aspecto).
 public/js/world.js     Ciudadela + bioma exterior + cripta (desplazada a x+500),
@@ -234,17 +251,19 @@ sondea el servidor y, al volver, **reentra solo** con el mismo personaje
 # Red local (sin cifrado): http://<tu-ip>:3000
 npm start
 
-# Por Internet (HTTPS + WSS): con certificados TLS
-TLS_CERT=/ruta/fullchain.pem TLS_KEY=/ruta/privkey.pem PORT=443 npm start
+# Por Internet (HTTPS + WSS): con certificados TLS y cuentas admin
+TLS_CERT=/ruta/fullchain.pem TLS_KEY=/ruta/privkey.pem \
+  ADMIN_ACCOUNTS=miAdmin PORT=443 npm start
 ```
 
-Detrás de un proxy inverso (nginx, Caddy) basta con que el proxy termine el TLS
-y reenvíe el WebSocket; en ese caso `npm start` sin variables es suficiente.
+Variables de entorno: `PORT`, `TLS_CERT`/`TLS_KEY` (activan WSS),
+`ADMIN_ACCOUNTS` (admins, separados por comas) y `BANNED_WORDS` (palabras
+vetadas extra en los nombres). Detrás de un proxy inverso (nginx, Caddy) basta
+con que el proxy termine el TLS y reenvíe el WebSocket; en ese caso `npm start`
+sin `TLS_*` es suficiente.
 
 ## Ideas para crecer
 
-- Gestión de servidor: cuenta admin (expulsar/banear), anuncios, filtro de nombres.
-- Sonido: música ambiental y efectos (golpes, nivel, pesca).
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
 - Segunda rama del árbol de talentos por clase y respec (reasignar puntos).
 - Concurso de pesca semanal; recetas de cocina con varios ingredientes.

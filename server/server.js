@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import {
   loadDb, authenticate, publicCharacters, createCharacter,
   deleteCharacter, getCharacter, saveCharacterState, touch,
+  isAdminAccount, banAccount, unbanAccount,
 } from './db.js';
 import {
   ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
@@ -154,6 +155,110 @@ function healPlayer(p, amount) {
   const healed = Math.min(maxHp - p.hp, amount);
   p.hp = Math.min(maxHp, p.hp + amount);
   return Math.max(0, Math.round(healed));
+}
+
+// Difunde a TODOS los jugadores dentro del mundo, sea cual sea su reino
+function broadcastAll(obj) {
+  const raw = JSON.stringify(obj);
+  for (const p of players.values()) {
+    if (p.realm && p.ws.readyState === p.ws.OPEN) p.ws.send(raw);
+  }
+}
+
+// Busca un jugador dentro del mundo por el nombre de su personaje (sin
+// distinguir mayúsculas)
+function findPlayerByName(name) {
+  const lower = String(name || '').toLowerCase();
+  for (const [pid, p] of players) {
+    if (p.realm && p.name && p.name.toLowerCase() === lower) return [pid, p];
+  }
+  return [null, null];
+}
+
+// ---- Comandos de chat (/) ----
+function sysTo(p, text) {
+  send(p.ws, { type: 'chat', from: 'Ciudadela', system: true, text });
+}
+
+const ADMIN_HELP = [
+  '/say <mensaje> — anuncio a todo el reino',
+  '/kick <héroe> — expulsa a un jugador (puede volver)',
+  '/ban <héroe> — expulsa y prohíbe la cuenta',
+  '/unban <cuenta> — levanta el veto de una cuenta',
+  '/mute <héroe> · /unmute <héroe> — silencia en el chat',
+  '/who — lista de jugadores conectados',
+].join('\n');
+
+function handleCommand(p, text) {
+  const parts = text.slice(1).split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const arg = parts.slice(1).join(' ').trim();
+
+  // Comandos para todos
+  if (cmd === 'help') {
+    sysTo(p, p.admin ? `Comandos de administración:\n${ADMIN_HELP}` : 'No hay comandos disponibles para tu cuenta.');
+    return;
+  }
+  if (cmd === 'who') {
+    const online = [...players.values()].filter((q) => q.realm).map((q) => `${q.name} (${q.realm}${q.admin ? ', admin' : ''})`);
+    sysTo(p, `Conectados (${online.length}): ${online.join(', ')}`);
+    return;
+  }
+
+  if (!p.admin) { sysTo(p, 'Comando desconocido. Escribe /help.'); return; }
+
+  switch (cmd) {
+    case 'say': {
+      if (!arg) { sysTo(p, 'Uso: /say <mensaje>'); return; }
+      broadcastAll({ type: 'announce', text: arg });
+      console.log(`[admin] ${p.name}: anuncio "${arg}"`);
+      return;
+    }
+    case 'kick': {
+      const [tid, target] = findPlayerByName(arg);
+      if (!target) { sysTo(p, `No encuentro a "${arg}" en el mundo.`); return; }
+      sysTo(p, `Has expulsado a ${target.name}.`);
+      broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${target.name} ha sido expulsado por un administrador.` });
+      send(target.ws, { type: 'kicked', reason: 'Un administrador te ha expulsado.' });
+      setTimeout(() => target.ws.close(), 200);
+      console.log(`[admin] ${p.name} expulsó a ${target.name}`);
+      return;
+    }
+    case 'ban': {
+      const [tid, target] = findPlayerByName(arg);
+      if (!target) { sysTo(p, `No encuentro a "${arg}" en el mundo.`); return; }
+      banAccount(target.account.name);
+      sysTo(p, `Has vetado la cuenta de ${target.name} (${target.account.name}).`);
+      broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${target.name} ha sido vetado del reino.` });
+      send(target.ws, { type: 'kicked', reason: 'Tu cuenta ha sido vetada del reino.' });
+      setTimeout(() => target.ws.close(), 200);
+      console.log(`[admin] ${p.name} vetó la cuenta ${target.account.name}`);
+      return;
+    }
+    case 'unban': {
+      if (!arg) { sysTo(p, 'Uso: /unban <nombre de cuenta>'); return; }
+      sysTo(p, unbanAccount(arg) ? `Veto levantado para la cuenta "${arg}".` : `La cuenta "${arg}" no estaba vetada.`);
+      return;
+    }
+    case 'mute': {
+      const [tid, target] = findPlayerByName(arg);
+      if (!target) { sysTo(p, `No encuentro a "${arg}" en el mundo.`); return; }
+      target.muted = true;
+      sysTo(p, `Has silenciado a ${target.name}.`);
+      sysTo(target, 'Un administrador te ha silenciado en el chat.');
+      return;
+    }
+    case 'unmute': {
+      const [tid, target] = findPlayerByName(arg);
+      if (!target) { sysTo(p, `No encuentro a "${arg}" en el mundo.`); return; }
+      target.muted = false;
+      sysTo(p, `Has devuelto la voz a ${target.name}.`);
+      sysTo(target, 'Un administrador te ha devuelto la voz.');
+      return;
+    }
+    default:
+      sysTo(p, 'Comando desconocido. Escribe /help.');
+  }
 }
 
 function realmPopulation() {
@@ -511,9 +616,11 @@ wss.on('connection', (ws) => {
           x: 0, z: 0, rot: 0, partyId: null,
           moveBudget: 4, lastMoveMs: Date.now(),
           herbCooldowns: {}, fishingSpot: null, fishingTimer: null,
+          admin: isAdminAccount(result.account.name), muted: false,
         });
         send(ws, {
           type: 'auth_ok',
+          admin: isAdminAccount(result.account.name),
           account: result.account.name,
           created: result.created,
           characters: publicCharacters(result.account),
@@ -593,6 +700,7 @@ wss.on('connection', (ws) => {
         });
         broadcast(realm.id, { type: 'player_join', id, name: p.name, race: p.race, class: p.class, x: spawn.x, z: spawn.z, rot: Math.PI }, id);
         broadcast(realm.id, { type: 'chat', from: 'Ciudadela', system: true, text: `${p.name} ha entrado en ${realm.name}.` });
+        if (p.admin) sysTo(p, 'Eres administrador. Escribe /help para ver tus comandos.');
         console.log(`[+] ${p.account.name}/${p.name} (#${id}) entró en ${realm.name}. Conectados: ${players.size}`);
         break;
       }
@@ -917,7 +1025,10 @@ wss.on('connection', (ws) => {
       case 'chat': {
         if (!p?.realm) return;
         const text = String(msg.text || '').slice(0, 200).trim();
-        if (text) broadcast(p.realm, { type: 'chat', from: p.name, text });
+        if (!text) break;
+        if (text.startsWith('/')) { handleCommand(p, text); break; }
+        if (p.muted) { sendTo(id, { type: 'chat', from: 'Ciudadela', system: true, text: 'Estás silenciado y no puedes hablar en el chat.' }); break; }
+        broadcast(p.realm, { type: 'chat', from: p.name, text });
         break;
       }
 

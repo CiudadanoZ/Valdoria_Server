@@ -32,7 +32,7 @@
           <h3>Mundo</h3>
           <div id="realm-list"></div>
           <h3>Opciones</h3>
-          <button class="lobby-secondary" disabled>⚙ Ajustes — próximamente</button>
+          <button id="settings-btn-lobby" class="lobby-secondary">⚙ Ajustes</button>
           <button class="lobby-secondary" disabled>🏆 Clasificaciones — próximamente</button>
           <button id="logout-btn" class="lobby-secondary">↩ Cambiar de cuenta</button>
         </div>
@@ -118,6 +118,9 @@
       <div id="party-members"></div>
       <button id="party-leave">Abandonar grupo</button>
     </div>
+
+    <!-- Botón de ajustes en el juego -->
+    <button id="settings-btn" title="Ajustes (O)">⚙</button>
   </div>
 
   <!-- Inventario -->
@@ -132,6 +135,29 @@
     <h3 class="inv-section">Bolsa</h3>
     <div id="inventory-grid"></div>
     <div class="panel-footer">🪙 <span id="inv-gold">0</span> de oro</div>
+  </div>
+
+  <!-- Ajustes (audio y gráficos) -->
+  <div id="settings-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Ajustes</h2>
+      <button class="close-btn" data-close="settings-panel">✕</button>
+    </div>
+    <div class="settings-row">
+      <label for="vol-music">🎵 Música</label>
+      <input id="vol-music" type="range" min="0" max="100" value="40" />
+      <span id="vol-music-val">40%</span>
+    </div>
+    <div class="settings-row">
+      <label for="vol-sfx">🔊 Efectos</label>
+      <input id="vol-sfx" type="range" min="0" max="100" value="60" />
+      <span id="vol-sfx-val">60%</span>
+    </div>
+    <div class="settings-row">
+      <label for="opt-shadows">🌑 Sombras</label>
+      <input id="opt-shadows" type="checkbox" checked />
+      <span class="settings-hint">Desactívalas si el juego va lento</span>
+    </div>
   </div>
 
   <!-- Destello rojo al recibir daño -->

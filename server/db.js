@@ -16,9 +16,33 @@ const VALID_RACES = ['humano', 'elfo', 'enano', 'orco'];
 const VALID_CLASSES = ['guerrero', 'explorador', 'sacerdote'];
 const MAX_CHARACTERS = 5;
 
+// Cuentas administradoras (variable de entorno, en minúsculas). Por defecto,
+// la cuenta del creador del reino.
+const ADMIN_ACCOUNTS = new Set(
+  (process.env.ADMIN_ACCOUNTS || 'oscarchan').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean)
+);
+
+// Filtro básico de nombres ofensivos (subcadenas prohibidas, sin distinción de
+// mayúsculas). Ampliable por entorno con BANNED_WORDS.
+const BANNED_WORDS = [
+  'puta', 'puto', 'mierda', 'cabron', 'gilipollas', 'joder', 'coño', 'polla',
+  'nazi', 'hitler', 'admin', 'moderador', 'gm', 'fuck', 'shit', 'nigger', 'bitch',
+  ...(process.env.BANNED_WORDS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean),
+];
+
+export function isCleanName(name) {
+  const lower = String(name || '').toLowerCase();
+  return !BANNED_WORDS.some((w) => lower.includes(w));
+}
+
+export function isAdminAccount(name) {
+  return ADMIN_ACCOUNTS.has(String(name || '').toLowerCase());
+}
+
 // Modelo en memoria: clave = nombre en minúsculas -> { name, salt, passHash, characters: [] }
 let accounts = {};
 let nextCharId = 1;
+let bannedAccounts = new Set(); // claves de cuenta baneadas
 let db = null;
 
 export function loadDb() {
@@ -36,6 +60,9 @@ export function loadDb() {
   }
   const metaCharId = db.prepare('SELECT value FROM meta WHERE key = ?').get('nextCharId');
   nextCharId = metaCharId ? Number(metaCharId.value) : 1;
+
+  const metaBans = db.prepare('SELECT value FROM meta WHERE key = ?').get('bans');
+  if (metaBans) { try { bannedAccounts = new Set(JSON.parse(metaBans.value)); } catch { /* nada */ } }
 
   // Migración desde el antiguo accounts.json (una sola vez)
   if (Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
@@ -69,6 +96,7 @@ function flushNow() {
       upsert.run(key, JSON.stringify(account));
     }
     setMeta.run('nextCharId', String(nextCharId));
+    setMeta.run('bans', JSON.stringify([...bannedAccounts]));
   })();
 }
 
@@ -116,10 +144,13 @@ export function authenticate(name, password) {
   if (String(password || '').length < 4) return { ok: false, reason: 'La contraseña necesita al menos 4 caracteres' };
 
   const key = clean.toLowerCase();
+  if (bannedAccounts.has(key)) return { ok: false, reason: 'Esta cuenta ha sido expulsada del reino' };
+
   let account = accounts[key];
   let created = false;
 
   if (!account) {
+    if (!isCleanName(clean)) return { ok: false, reason: 'Ese nombre de cuenta no está permitido' };
     const salt = randomBytes(16).toString('hex');
     account = { name: clean, salt, passHash: hashPassword(password, salt), characters: [] };
     accounts[key] = account;
@@ -153,6 +184,7 @@ function nameTaken(name) {
 export function createCharacter(account, { name, race, class: clazz }) {
   const clean = String(name || '').trim().slice(0, 16);
   if (clean.length < 3) return { ok: false, reason: 'El nombre necesita al menos 3 caracteres' };
+  if (!isCleanName(clean)) return { ok: false, reason: 'Ese nombre no está permitido' };
   if (!VALID_RACES.includes(race)) return { ok: false, reason: 'Raza desconocida' };
   if (!VALID_CLASSES.includes(clazz)) return { ok: false, reason: 'Especialización desconocida' };
   if (account.characters.length >= MAX_CHARACTERS) return { ok: false, reason: `Máximo ${MAX_CHARACTERS} personajes por cuenta` };
@@ -187,6 +219,22 @@ export function deleteCharacter(account, charId) {
   account.characters.splice(idx, 1);
   saveSoon();
   return true;
+}
+
+// ---- Baneos (por clave de cuenta en minúsculas) ----
+export function banAccount(accountName) {
+  bannedAccounts.add(String(accountName || '').toLowerCase());
+  saveSoon();
+}
+
+export function unbanAccount(accountName) {
+  const removed = bannedAccounts.delete(String(accountName || '').toLowerCase());
+  if (removed) saveSoon();
+  return removed;
+}
+
+export function isBanned(accountName) {
+  return bannedAccounts.has(String(accountName || '').toLowerCase());
 }
 
 export function getCharacter(account, charId) {

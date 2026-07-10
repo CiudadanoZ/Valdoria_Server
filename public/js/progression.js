@@ -4,6 +4,7 @@
 // detectan las subidas de nivel para celebrarlas.
 import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from './talents-data.js';
 import { sendTalentSpend } from './network.js';
+import { play } from './audio.js';
 import { toast } from './ui.js';
 
 export { MAX_LEVEL, HP_PER_LEVEL, xpForLevel };
@@ -38,6 +39,7 @@ export function applyProgression(data) {
 
   if (progression.level > prevLevel && prevLevel >= 1) {
     toast(`✦ ¡Nivel ${progression.level}! +1 punto de talento (tecla T) ✦`, 'quest');
+    play('levelup');
   }
   renderHud();
   renderPanel();

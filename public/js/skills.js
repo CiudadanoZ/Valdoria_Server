@@ -2,6 +2,7 @@
 // con enfriamientos, mejoras temporales y efectos visuales sencillos.
 // El daño lo valida el servidor a través del mensaje skill_hits.
 import * as THREE from 'three';
+import { play } from './audio.js';
 import { toast, showTooltip, hideTooltip } from './ui.js';
 
 export const SKILLS = {
@@ -182,6 +183,7 @@ export function castSkill(i) {
   }
 
   deps.swingArm?.();
+  play(skill.type === 'heal' ? 'heal' : 'skill');
   cooldowns[i] = effectiveCd(skill);
 }
 

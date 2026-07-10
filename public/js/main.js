@@ -26,7 +26,9 @@ import { initShop, openShop, refreshShop } from './shop.js';
 import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
 import { BLESSINGS, initBlessings, applyBlessings, blessingDamage } from './blessings.js';
 import { initParty, offerInvite, onInvite, onPartyUpdate, onPartyLeft, onPlayerLeave as partyPlayerLeave } from './party.js';
-import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby } from './lobby.js';
+import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby, clearSession } from './lobby.js';
+import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled } from './settings.js';
+import { play } from './audio.js';
 import * as ui from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +77,7 @@ function flushSave() {
 
 // ---------- Conexión y lobby ----------
 initLobby();
+initSettings({ onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; } });
 connect({
   auth_ok(msg) { onAuthOk(msg); },
   auth_fail(msg) { onAuthFail(msg); },
@@ -90,6 +93,19 @@ connect({
   player_state(msg) { remotes?.updateState(msg); },
   player_leave(msg) { remotes?.remove(msg.id); partyPlayerLeave(msg.id); },
   chat(msg) { ui.addChatMessage(msg); },
+  // Anuncio de administrador: destacado en el chat y como aviso central
+  announce(msg) {
+    ui.addChatMessage({ from: '📢 Anuncio', text: msg.text });
+    ui.toast(`📢 ${msg.text}`, 'quest');
+    play('quest');
+  },
+  // El servidor te expulsó/vetó: no reconectar automáticamente
+  kicked(msg) {
+    kickedOut = true;
+    clearSession();
+    ui.addChatMessage({ system: true, text: msg.reason });
+    ui.toast(`⚠ ${msg.reason}`, 'quest');
+  },
   mobs(msg) { mobs?.onSnapshot(msg.m); },
   mob_hit(msg) { mobs?.onHit(msg); },
   mob_dead(msg) {
@@ -100,11 +116,12 @@ connect({
   // El servidor ya aplicó oro/objetos/EXP a tu personaje (llega con state_sync);
   // aquí solo se celebra y se avanza el estado de las misiones.
   loot(msg) {
-    if (msg.gold) ui.toast(`+${msg.gold} de oro`);
+    if (msg.gold) { ui.toast(`+${msg.gold} de oro`); play('gold'); }
     for (const itemId of msg.items) {
       const item = ITEMS[itemId];
       if (item) ui.toast(`Obtenido: ${item.icon} ${item.name}`);
     }
+    if (msg.items.length) play('loot');
     onEnemyKilled(msg.mobType);
     onLootChanged();
     saveGame();
@@ -125,10 +142,12 @@ connect({
     const item = ITEMS[msg.itemId];
     setVitals(msg);
     ui.toast(`${item?.icon || ''} +${msg.heal} de vida`);
+    play('potion');
   },
   skill_heal_ok(msg) {
     setVitals(msg);
     if (msg.heal > 0) spawnFloatText(scene, `+${msg.heal}`, '#7fe8a8', player.mesh.position);
+    play('heal');
   },
   you_died(msg) {
     ui.hideDialog();
@@ -137,33 +156,37 @@ connect({
     player.mesh.position.set(msg.x, 0, msg.z);
     setVitals(msg);
     ui.toast(`☠ ${msg.by} te ha derribado. Despiertas junto a la fuente.`, 'quest');
+    play('death');
     saveGame();
   },
   rpc_ok(msg) {
     const item = ITEMS[msg.itemId];
-    if (msg.kind === 'buy' && item) ui.toast(`Comprado: ${item.icon} ${item.name}`);
-    else if (msg.kind === 'sell') ui.toast(`Vendido (+${msg.gold} de oro)`);
-    else if (msg.kind === 'craft' && item) ui.toast(`🔨 Bramm forja: ${item.icon} ${item.name}`, 'quest');
-    else if (msg.kind === 'cook' && item) ui.toast(`🔥 Cocinado: ${item.icon} ${item.name}`);
+    if (msg.kind === 'buy' && item) { ui.toast(`Comprado: ${item.icon} ${item.name}`); play('buy'); }
+    else if (msg.kind === 'sell') { ui.toast(`Vendido (+${msg.gold} de oro)`); play('gold'); }
+    else if (msg.kind === 'craft' && item) { ui.toast(`🔨 Bramm forja: ${item.icon} ${item.name}`, 'quest'); play('craft'); }
+    else if (msg.kind === 'cook' && item) { ui.toast(`🔥 Cocinado: ${item.icon} ${item.name}`); play('cook'); }
   },
-  rpc_fail(msg) { ui.toast(msg.reason); },
-  claim_ok(msg) { onClaimResult(msg.questId, true); },
+  rpc_fail(msg) { ui.toast(msg.reason); play('error'); },
+  claim_ok(msg) { onClaimResult(msg.questId, true); play('quest'); },
   claim_fail(msg) { onClaimResult(msg.questId, false, msg.reason); },
-  gather_ok(msg) { onHerbGathered(msg.herb); },
+  gather_ok(msg) { onHerbGathered(msg.herb); play('loot'); },
   fish_start_ok() { ui.toast('🎣 Lanzas el sedal...'); },
   fish_catch(msg) {
     const item = ITEMS[msg.itemId];
     if (item) ui.toast(`🎣 ¡Picó! ${item.icon} ${item.name}`);
     spawnFloatText(scene, '🎣', '#9adcf0', player.mesh.position);
+    play('fish');
   },
   fish_stop() { /* el servidor cortó la pesca (movimiento o bolsa llena) */ },
   mira_ok(msg) {
     if (msg.service === 'heal') {
       setVitals(msg);
       ui.toast('✙ Mira cierra tus heridas: vida al máximo', 'quest');
+      play('heal');
     } else if (msg.service === 'bless') {
       const b = BLESSINGS[msg.id];
       if (b) ui.toast(`${b.icon} ${b.name} — ${b.desc} durante 10 minutos`, 'quest');
+      play('buy');
     }
   },
   pos_correct(msg) {
@@ -172,10 +195,11 @@ connect({
     combatTarget = null;
     player.mesh.position.set(msg.x, 0, msg.z);
   },
-  player_hurt(msg) { onPlayerDamaged(msg); },
+  player_hurt(msg) { onPlayerDamaged(msg); play('hit'); },
   healed(msg) {
     setVitals(msg);
     if (msg.amount > 0) {
+      play('heal');
       spawnFloatText(scene, `+${msg.amount}`, '#7fe8a8', player.mesh.position);
       ui.toast(`✨ ${msg.from} te ha curado (+${msg.amount})`);
     }
@@ -184,6 +208,7 @@ connect({
   party_update(msg) { onPartyUpdate(msg); },
   party_left() { onPartyLeft(); },
   disconnected() {
+    if (kickedOut) return; // expulsado/vetado: no reconectar
     if (inWorld) {
       startReconnect();
     } else {
@@ -191,6 +216,8 @@ connect({
     }
   },
 });
+
+let kickedOut = false;
 
 // ---------- Reconexión automática ----------
 // Al caer la conexión en pleno juego: overlay + sondeo del servidor; en cuanto
@@ -228,7 +255,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = shadowsEnabled();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.prepend(renderer.domElement);
 
@@ -509,6 +536,7 @@ function approachPortal(portal) {
     player.stop();
     player.mesh.position.set(portal.to.x, 0, portal.to.z);
     ui.toast(portal.label, 'quest');
+    play('portal');
     saveGame();
   }, 3.0);
 }
@@ -523,6 +551,7 @@ function onKeyDown(e) {
   if (k === 'i') ui.togglePanel('inventory-panel');
   else if (k === 'm') toggleMap();
   else if (k === 't') toggleTalents();
+  else if (k === 'o') toggleSettings();
   else if (k === 'escape') {
     ui.hideDialog();
     $('inventory-panel').classList.add('hidden');
@@ -530,6 +559,7 @@ function onKeyDown(e) {
     $('crafting-panel').classList.add('hidden');
     $('talents-panel').classList.add('hidden');
     $('cooking-panel').classList.add('hidden');
+    closeSettings();
     closeMap();
   }
   else if (k === 'enter') { e.preventDefault(); $('chat-input').focus(); }
@@ -578,6 +608,7 @@ function updateCombat(dt) {
     attackCooldown = myClass.attackInterval;
     const dmg = 5 + getWeaponDamage() + blessingDamage() + myRace.dmg + myClass.dmg + talentDmg() + Math.floor(Math.random() * 5);
     player.mesh.getObjectByName('armR').rotation.x = -1.7;
+    play('attack');
     sendAttack(combatTarget.id, dmg);
   }
 }

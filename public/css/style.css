@@ -275,6 +275,31 @@ canvas { display: block; }
   font-size: 0.75em; color: #5a4d38;
 }
 
+/* Botón de ajustes en el juego */
+#settings-btn {
+  position: fixed; top: 16px; right: 130px; z-index: 20;
+  width: 36px; height: 36px; font-size: 1.1em;
+  background: var(--panel-bg); color: var(--gold);
+  border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer;
+}
+#settings-btn:hover { border-color: var(--gold); color: var(--gold-bright); }
+
+/* Panel de ajustes */
+#settings-panel {
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 420px;
+}
+#settings-panel.hidden { display: none !important; }
+.settings-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 4px; border-bottom: 1px solid #2a2118;
+}
+.settings-row label { width: 90px; color: var(--parchment); font-size: 0.95em; }
+.settings-row input[type="range"] { flex: 1; accent-color: var(--gold); }
+.settings-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--gold); }
+.settings-row span { color: var(--gold-bright); font-size: 0.85em; min-width: 40px; }
+.settings-row .settings-hint { color: #7a6a4d; min-width: 0; }
+
 #interact-hint {
   position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%); z-index: 20;
   padding: 8px 20px; background: var(--panel-bg);
