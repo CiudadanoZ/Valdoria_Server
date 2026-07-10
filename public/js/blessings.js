@@ -1,9 +1,7 @@
-// Bendiciones de la Sacerdotisa Mira: mejoras temporales (10 minutos) que se
-// muestran junto al orbe de vida con su tiempo restante. El COBRO lo hace el
-// servidor (mensaje mira); aquí solo se activa cuando llega la confirmación.
-import { toast } from './ui.js';
-
-const DURATION_MS = 10 * 60 * 1000;
+// Bendiciones de la Sacerdotisa Mira: ESPEJO del estado del servidor.
+// El servidor cobra, activa y aplica sus efectos (armadura y vida máxima);
+// aquí solo se muestran los chips con la cuenta atrás y se conserva el bono
+// de daño de la Bendición de la Fuerza para el daño que declara el cliente.
 
 export const BLESSINGS = {
   fuerza: { id: 'fuerza', name: 'Bendición de la Fuerza', icon: '⚡', price: 40, desc: '+4 de daño', dmg: 4 },
@@ -11,46 +9,28 @@ export const BLESSINGS = {
   vida:   { id: 'vida',   name: 'Bendición de la Vida',   icon: '💗', price: 50, desc: '+25 de vida máxima', maxHp: 25 },
 };
 
-// id -> instante de expiración (ms época); 0 = inactiva
-const state = { fuerza: 0, piedra: 0, vida: 0 };
+// id -> instante de expiración (ms época), tal y como lo envía el servidor
+let state = { fuerza: 0, piedra: 0, vida: 0 };
 
-let onChanged = null;
+export function initBlessings() {
+  setInterval(render, 1000);
+  render();
+}
 
-export function initBlessings({ changed }) {
-  onChanged = changed;
-  setInterval(tick, 1000);
+// Estado que llega en cada state_sync
+export function applyBlessings(data) {
+  if (!data) return;
+  state = { fuerza: 0, piedra: 0, vida: 0, ...data };
   render();
 }
 
 function isActive(id) {
-  return state[id] > Date.now();
+  return (state[id] || 0) > Date.now();
 }
 
-// El servidor ya cobró: activar la bendición
-export function activateBlessing(id) {
-  const b = BLESSINGS[id];
-  if (!b) return;
-  state[id] = Date.now() + DURATION_MS;
-  toast(`${b.icon} ${b.name} — ${b.desc} durante 10 minutos`, 'quest');
-  render();
-  onChanged?.();
-}
-
-// Bonificaciones activas
+// Bono de daño de la Fuerza (el cliente lo suma al daño que declara;
+// el servidor lo acota igualmente)
 export function blessingDamage() { return isActive('fuerza') ? BLESSINGS.fuerza.dmg : 0; }
-export function blessingArmor() { return isActive('piedra') ? BLESSINGS.piedra.armor : 0; }
-export function blessingMaxHp() { return isActive('vida') ? BLESSINGS.vida.maxHp : 0; }
-
-function tick() {
-  for (const id of Object.keys(state)) {
-    if (state[id] > 0 && state[id] <= Date.now()) {
-      state[id] = 0;
-      toast(`${BLESSINGS[id].icon} ${BLESSINGS[id].name} se ha desvanecido`);
-      onChanged?.();
-    }
-  }
-  render();
-}
 
 function render() {
   const hud = document.getElementById('blessings-hud');
@@ -64,17 +44,4 @@ function render() {
     chips.push(`<div class="blessing-chip" title="${b.name}: ${b.desc}">${b.icon} ${mm}:${ss}</div>`);
   }
   hud.innerHTML = chips.join('');
-}
-
-// ---- Guardado / carga ----
-export function serializeBlessings() {
-  return { ...state };
-}
-
-export function loadBlessings(data) {
-  if (!data) return;
-  for (const id of Object.keys(state)) {
-    if (typeof data[id] === 'number') state[id] = data[id];
-  }
-  render();
 }

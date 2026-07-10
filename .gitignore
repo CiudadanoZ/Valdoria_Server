@@ -1,7 +1,7 @@
 # Dependencias
 node_modules/
 
-# Datos de jugadores (cuentas, personajes) y sus copias de seguridad
+# Datos de jugadores (SQLite, migraciones, copias) y JSON heredado
 data/
 
 # Registros y temporales

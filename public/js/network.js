@@ -80,6 +80,14 @@ export function sendHealAlly(targetId, amount) {
   send({ type: 'heal_ally', targetId, amount });
 }
 
+// Curación de habilidad propia y mejoras de armadura (las aplica el servidor)
+export function sendSkillHeal(skillId) {
+  send({ type: 'skill_heal', skillId });
+}
+export function sendSkillBuff(skillId) {
+  send({ type: 'skill_buff', skillId });
+}
+
 // ---- Operaciones autoritativas (el servidor valida y sincroniza) ----
 export function sendUseItem(itemId) { send({ type: 'use_item', itemId }); }
 export function sendEquip(bagIndex) { send({ type: 'equip', bagIndex }); }

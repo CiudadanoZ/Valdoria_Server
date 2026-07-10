@@ -2,7 +2,9 @@
 // experiencia, talentos). El servidor es el único que muta estos datos; el
 // cliente recibe sincronizaciones y solo los muestra.
 import { ITEMS } from '../public/js/items.js';
-import { TALENT_TREES, MAX_LEVEL, xpForLevel } from '../public/js/talents-data.js';
+import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from '../public/js/talents-data.js';
+import { RACES, CLASSES } from '../public/js/races.js';
+import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
 
 const BAG_SLOTS = 24;
 const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio'];
@@ -22,7 +24,62 @@ export function ensureState(character) {
   st.progression = st.progression || { level: 1, xp: 0, points: 0, talents: {} };
   st.kills = st.kills || {};
   st.claimedQuests = st.claimedQuests || [];
+  // Bendiciones de Mira: id -> instante de expiración (ms época). Del servidor.
+  if (!st.blessings || typeof st.blessings !== 'object') st.blessings = {};
   return st;
+}
+
+// ---- Estadísticas del personaje (autoritativas) ----
+function raceOf(character) { return RACES[character.race] || RACES.humano; }
+function classOf(character) { return CLASSES[character.class] || CLASSES.guerrero; }
+
+function talentSum(character, field) {
+  const tree = TALENT_TREES[character.class] || TALENT_TREES.guerrero;
+  const talents = character.state.progression.talents || {};
+  return tree.reduce((sum, n) => sum + (n[field] || 0) * (talents[n.id] || 0), 0);
+}
+
+export function blessingActive(st, id) {
+  return (st.blessings[id] || 0) > Date.now();
+}
+
+export function computeMaxHp(character) {
+  const st = character.state;
+  return 100
+    + raceOf(character).hp + classOf(character).hp
+    + (st.progression.level - 1) * HP_PER_LEVEL
+    + talentSum(character, 'hp')
+    + (blessingActive(st, 'vida') ? 25 : 0);
+}
+
+// Armadura total: equipo + raza/clase + talentos + Bendición de la Piedra
+// + mejora temporal de habilidad (Grito de Guerra / Escudo de Fe).
+export function computeArmor(character, skillBuffArmor = 0) {
+  const st = character.state;
+  const equipArmor = Object.values(st.inventory.equipment).reduce(
+    (sum, itemId) => sum + (itemId ? (ITEMS[itemId]?.armor || 0) : 0), 0
+  );
+  return equipArmor
+    + raceOf(character).armor + classOf(character).armor
+    + talentSum(character, 'armor')
+    + (blessingActive(st, 'piedra') ? 3 : 0)
+    + skillBuffArmor;
+}
+
+export function computeHealMul(character) {
+  return classOf(character).healMul * (1 + talentSum(character, 'healMul'));
+}
+
+// Regeneración por segundo fuera de combate
+export function regenPerSec(character) {
+  return 2.5 * raceOf(character).regenMul * classOf(character).regenMul;
+}
+
+// Compra una bendición (el oro ya está comprobado por el llamador)
+export function applyBlessing(st, id) {
+  if (!MIRA_BLESSING_PRICES[id]) return false;
+  st.blessings[id] = Date.now() + 10 * 60 * 1000;
+  return true;
 }
 
 // ---- Bolsa ----
@@ -137,5 +194,6 @@ export function syncPayload(st) {
   return {
     inventory: st.inventory,
     progression: st.progression,
+    blessings: st.blessings,
   };
 }

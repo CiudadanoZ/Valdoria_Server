@@ -1,51 +1,95 @@
-// Base de datos de cuentas y personajes: un JSON en disco (data/accounts.json)
-// con escritura diferida. Las contraseñas se guardan con hash scrypt + sal.
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, copyFileSync, readdirSync, unlinkSync } from 'node:fs';
+// Base de datos de cuentas y personajes sobre SQLite (data/valdoria.db, modo WAL)
+// con escritura diferida y copias de seguridad rotativas. Si existe el antiguo
+// accounts.json, se migra automáticamente la primera vez.
+// Las contraseñas se guardan con hash scrypt + sal.
+import Database from 'better-sqlite3';
+import { readFileSync, existsSync, mkdirSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
-const DB_FILE = join(DATA_DIR, 'accounts.json');
+const DB_FILE = join(DATA_DIR, 'valdoria.db');
+const OLD_JSON = join(DATA_DIR, 'accounts.json');
 
 const VALID_RACES = ['humano', 'elfo', 'enano', 'orco'];
 const VALID_CLASSES = ['guerrero', 'explorador', 'sacerdote'];
 const MAX_CHARACTERS = 5;
 
-// accounts: clave = nombre en minúsculas -> { name, salt, passHash, characters: [] }
+// Modelo en memoria: clave = nombre en minúsculas -> { name, salt, passHash, characters: [] }
 let accounts = {};
 let nextCharId = 1;
+let db = null;
 
 export function loadDb() {
   mkdirSync(DATA_DIR, { recursive: true });
-  if (existsSync(DB_FILE)) {
+  db = new Database(DB_FILE);
+  db.pragma('journal_mode = WAL');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  `);
+
+  // Cargar el modelo en memoria
+  for (const row of db.prepare('SELECT key, data FROM accounts').all()) {
+    try { accounts[row.key] = JSON.parse(row.data); } catch { /* fila corrupta: se omite */ }
+  }
+  const metaCharId = db.prepare('SELECT value FROM meta WHERE key = ?').get('nextCharId');
+  nextCharId = metaCharId ? Number(metaCharId.value) : 1;
+
+  // Migración desde el antiguo accounts.json (una sola vez)
+  if (Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
     try {
-      const data = JSON.parse(readFileSync(DB_FILE, 'utf8'));
-      accounts = data.accounts || {};
-      nextCharId = data.nextCharId || 1;
-      const total = Object.values(accounts).reduce((n, a) => n + a.characters.length, 0);
-      console.log(`Base de datos cargada: ${Object.keys(accounts).length} cuentas, ${total} personajes`);
+      const old = JSON.parse(readFileSync(OLD_JSON, 'utf8'));
+      accounts = old.accounts || {};
+      nextCharId = old.nextCharId || 1;
+      flushNow();
+      renameSync(OLD_JSON, OLD_JSON.replace('.json', '.migrated.json'));
+      console.log(`Migradas ${Object.keys(accounts).length} cuentas de accounts.json a SQLite`);
     } catch (err) {
-      console.error('No se pudo leer accounts.json, empezando vacío:', err.message);
-      accounts = {};
+      console.error('No se pudo migrar accounts.json:', err.message);
     }
   }
-  // Copia de seguridad al arrancar y luego cada 15 minutos
+
+  const total = Object.values(accounts).reduce((n, a) => n + a.characters.length, 0);
+  console.log(`Base de datos SQLite cargada: ${Object.keys(accounts).length} cuentas, ${total} personajes`);
+
   backupNow();
   setInterval(backupNow, 15 * 60 * 1000);
+}
+
+// ---- Escritura diferida (el modelo en memoria es la verdad en caliente) ----
+let saveTimer = null;
+
+function flushNow() {
+  const upsert = db.prepare('INSERT INTO accounts (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data');
+  const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+  db.transaction(() => {
+    for (const [key, account] of Object.entries(accounts)) {
+      upsert.run(key, JSON.stringify(account));
+    }
+    setMeta.run('nextCharId', String(nextCharId));
+  })();
+}
+
+function saveSoon() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try { flushNow(); } catch (err) { console.error('Error guardando en SQLite:', err.message); }
+  }, 500);
 }
 
 // ---- Copias de seguridad rotativas (se conservan las 20 últimas) ----
 const BACKUP_DIR = join(DATA_DIR, 'backups');
 const MAX_BACKUPS = 20;
 
-function backupNow() {
-  if (!existsSync(DB_FILE)) return;
+async function backupNow() {
   try {
     mkdirSync(BACKUP_DIR, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    copyFileSync(DB_FILE, join(BACKUP_DIR, `accounts-${stamp}.json`));
-    const backups = readdirSync(BACKUP_DIR).filter((f) => f.startsWith('accounts-')).sort();
+    await db.backup(join(BACKUP_DIR, `valdoria-${stamp}.db`));
+    const backups = readdirSync(BACKUP_DIR).filter((f) => f.startsWith('valdoria-')).sort();
     while (backups.length > MAX_BACKUPS) {
       unlinkSync(join(BACKUP_DIR, backups.shift()));
     }
@@ -54,22 +98,13 @@ function backupNow() {
   }
 }
 
-let saveTimer = null;
-function saveSoon() {
-  if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    try {
-      // Escritura atómica: primero a un temporal, luego renombrar
-      const tmp = DB_FILE + '.tmp';
-      writeFileSync(tmp, JSON.stringify({ accounts, nextCharId }, null, 1));
-      renameSync(tmp, DB_FILE);
-    } catch (err) {
-      console.error('Error guardando la base de datos:', err.message);
-    }
-  }, 500);
+// Marca la base de datos como modificada (el servidor muta character.state
+// directamente en las operaciones autoritativas).
+export function touch() {
+  saveSoon();
 }
 
+// ---- Cuentas ----
 function hashPassword(password, salt) {
   return scryptSync(String(password), salt, 64).toString('hex');
 }
@@ -138,7 +173,7 @@ export function createCharacter(account, { name, race, class: clazz }) {
         equipment: {},
       },
       quests: null,    // null = misiones por defecto (bienvenida activa)
-      blessings: null,
+      blessings: {},
     },
   };
   account.characters.push(character);
@@ -158,16 +193,10 @@ export function getCharacter(account, charId) {
   return account.characters.find((c) => c.id === charId) || null;
 }
 
-// Marca la base de datos como modificada (el servidor muta character.state
-// directamente en las operaciones autoritativas).
-export function touch() {
-  saveSoon();
-}
-
-// Fusiona SOLO las claves que el cliente tiene permitido reportar (vida,
-// banderas de misión y bendiciones). El oro, inventario, equipo y progresión
-// son autoritativos del servidor y se ignoran si el cliente los envía.
-const CLIENT_STATE_KEYS = ['hp', 'quests', 'blessings', 'x', 'z'];
+// Fusiona SOLO las claves permitidas. Las banderas de misión vienen del
+// cliente; la vida y la posición las inyecta el propio servidor. El oro,
+// inventario, equipo, progresión y bendiciones se mutan solo por RPCs.
+const CLIENT_STATE_KEYS = ['hp', 'quests', 'x', 'z'];
 
 export function saveCharacterState(account, charId, state) {
   const character = getCharacter(account, charId);

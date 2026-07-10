@@ -162,14 +162,20 @@ export function castSkill(i) {
     if (targets.length > 0) {
       deps.sendSkillHits(targets.map((t) => ({ mobId: t.id, dmg })));
     }
-    if (skill.heal) deps.healSelf(skill.heal);
+    if (skill.heal) deps.castHeal(skill.id); // la cura la aplica el servidor
     spawnRing(playerPos, skill.fx, skill.radius);
   } else if (skill.type === 'heal') {
-    deps.healSelf(skill.heal);
+    deps.castHeal(skill.id); // la cura la aplica el servidor
     if (skill.allyHeal) deps.healAlly?.(skill.heal);
     spawnRing(playerPos, skill.fx, 2.2);
   } else if (skill.type === 'buff') {
-    if (skill.buff.armor) { buffs.armor = clockTime + skill.buff.dur; buffValues.armor = skill.buff.armor; }
+    // Estado local para el brillo de la casilla y la velocidad; la armadura
+    // la aplica también el servidor (skill_buff)
+    if (skill.buff.armor) {
+      buffs.armor = clockTime + skill.buff.dur;
+      buffValues.armor = skill.buff.armor;
+      deps.castBuff?.(skill.id);
+    }
     if (skill.buff.speed) { buffs.speed = clockTime + skill.buff.dur; buffValues.speed = skill.buff.speed; }
     toast(`${skill.icon} ${skill.name} — ${skill.desc}`);
     spawnRing(playerPos, skill.fx, 2.2);

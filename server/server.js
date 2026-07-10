@@ -7,6 +7,8 @@
 // - Dos reinos con simulación de criaturas independiente a 10 Hz
 import express from 'express';
 import { createServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
+import { readFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +19,7 @@ import {
 import {
   ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
   maxPlausibleHit, addXp, spendTalent, syncPayload,
+  computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
 } from './state.js';
 import { ITEMS } from '../public/js/items.js';
 import {
@@ -30,7 +33,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = express();
 app.use(express.static(join(root, 'public')));
 
-const httpServer = createServer(app);
+// Con TLS_CERT y TLS_KEY definidos, el servidor sirve HTTPS y el WebSocket pasa
+// a ser WSS automáticamente (necesario para jugar por Internet).
+const useTls = process.env.TLS_CERT && process.env.TLS_KEY;
+const httpServer = useTls
+  ? createHttpsServer({ cert: readFileSync(process.env.TLS_CERT), key: readFileSync(process.env.TLS_KEY) }, app)
+  : createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
 loadDb();
@@ -108,6 +116,44 @@ function sendSync(p) {
 
 function fail(p, reason) {
   send(p.ws, { type: 'rpc_fail', reason });
+}
+
+// ---- Vida autoritativa ----
+function vitals(p) {
+  return { hp: Math.round(p.hp), maxHp: computeMaxHp(p.character) };
+}
+
+function currentBuffArmor(p) {
+  return p.buffUntil > Date.now() ? p.buffArmor : 0;
+}
+
+// Aplica daño de una criatura: reduce por armadura, detecta la muerte y
+// reaparece al jugador junto a la fuente con el 60% de la vida.
+function damagePlayer(p, id, rawDmg, mobName) {
+  const reduced = Math.max(1, rawDmg - computeArmor(p.character, currentBuffArmor(p)));
+  p.hp = Math.max(0, p.hp - reduced);
+  p.lastCombatMs = Date.now();
+
+  if (p.hp <= 0) {
+    const maxHp = computeMaxHp(p.character);
+    p.hp = Math.round(maxHp * 0.6);
+    p.x = (Math.random() - 0.5) * 4;
+    p.z = FOUNTAIN[1];
+    p.moveBudget = 4;
+    stopFishing(p);
+    send(p.ws, { type: 'you_died', by: mobName, hp: Math.round(p.hp), maxHp, x: p.x, z: p.z });
+    broadcast(p.realm, { type: 'player_state', id, x: p.x, z: p.z, rot: p.rot }, id);
+  } else {
+    send(p.ws, { type: 'player_hurt', dmg: reduced, mobName, ...vitals(p) });
+  }
+}
+
+// Cura al jugador (pociones, habilidades, Mira, aliados)
+function healPlayer(p, amount) {
+  const maxHp = computeMaxHp(p.character);
+  const healed = Math.min(maxHp - p.hp, amount);
+  p.hp = Math.min(maxHp, p.hp + amount);
+  return Math.max(0, Math.round(healed));
 }
 
 function realmPopulation() {
@@ -334,7 +380,7 @@ setInterval(() => {
             if (m.attackTimer <= 0) {
               m.attackTimer = m.def.cd;
               const dmg = Math.round(m.def.dmgMin + Math.random() * (m.def.dmgMax - m.def.dmgMin));
-              sendTo(m.targetId, { type: 'player_hurt', dmg, mobName: m.def.name, mobId: m.id });
+              damagePlayer(target, m.targetId, dmg, m.def.name);
             }
           }
         }
@@ -368,6 +414,22 @@ setInterval(() => {
 
     if (realmPlayers.length > 0 && changed.length > 0) {
       broadcast(realm.id, { type: 'mobs', m: changed });
+    }
+  }
+
+  // Regeneración de vida fuera de combate + sincronización acotada
+  for (const [, p] of players) {
+    if (!p.realm || !p.character) continue;
+    const maxHp = computeMaxHp(p.character);
+    if (p.hp > maxHp) p.hp = maxHp; // p. ej. si expira la Bendición de la Vida
+    if (p.hp < maxHp && now - p.lastCombatMs > 5000) {
+      p.hp = Math.min(maxHp, p.hp + regenPerSec(p.character) * TICK);
+    }
+    // Avisar al cliente como mucho 2 veces por segundo y solo si cambió
+    if (Math.abs(p.hp - p.lastHpSent) >= 1 && now - p.lastHpSentMs > 500) {
+      p.lastHpSent = p.hp;
+      p.lastHpSentMs = now;
+      send(p.ws, { type: 'hp_sync', hp: Math.round(p.hp), maxHp });
     }
   }
 }, TICK * 1000);
@@ -420,8 +482,15 @@ wss.on('connection', (ws) => {
   let lastAttack = 0;
   let lastSkill = 0;
   let lastHeal = 0;
+  // Guardián anti-flood: como mucho 80 mensajes por segundo por conexión
+  let floodCount = 0;
+  let floodWindow = Date.now();
 
   ws.on('message', (raw) => {
+    const nowFlood = Date.now();
+    if (nowFlood - floodWindow > 1000) { floodWindow = nowFlood; floodCount = 0; }
+    if (++floodCount > 80) { ws.terminate(); return; }
+
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
     const p = players.get(id);
@@ -498,6 +567,14 @@ wss.on('connection', (ws) => {
         p.rot = Math.PI;
         p.moveBudget = 4;
         p.lastMoveMs = Date.now();
+        // Vida autoritativa
+        const maxHp0 = computeMaxHp(character);
+        p.hp = Math.min(maxHp0, Math.max(1, Number(state.hp) || maxHp0));
+        p.lastCombatMs = 0;
+        p.buffArmor = 0;
+        p.buffUntil = 0;
+        p.lastHpSent = p.hp;
+        p.lastHpSentMs = 0;
 
         const others = [];
         for (const [oid, op] of players) {
@@ -510,6 +587,7 @@ wss.on('connection', (ws) => {
           id, spawn,
           realm: { id: realm.id, name: realm.name },
           character: { name: character.name, race: character.race, class: character.class, state },
+          vitals: vitals(p),
           players: others,
           mobs: mobSnapshotFull(realm.id),
         });
@@ -554,10 +632,11 @@ wss.on('connection', (ws) => {
 
       case 'save_state': {
         if (!p?.realm || !p.charId) return;
-        // La posición la impone el servidor; el cliente solo reporta vida,
-        // banderas de misión y bendiciones
+        // El cliente solo reporta las banderas de diálogo de misiones; la vida
+        // y la posición las impone el servidor
         saveCharacterState(p.account, p.charId, {
-          ...((typeof msg.state === 'object' && msg.state) || {}),
+          quests: (typeof msg.state === 'object' && msg.state?.quests) || undefined,
+          hp: Math.round(p.hp),
           x: +p.x.toFixed(1),
           z: +p.z.toFixed(1),
         });
@@ -614,10 +693,42 @@ wss.on('connection', (ws) => {
         if (now - lastHeal < 1200) return;
         lastHeal = now;
         const target = players.get(Number(msg.targetId));
-        if (!target || target.realm !== p.realm) return;
+        if (!target || target.realm !== p.realm || !target.character) return;
         if (dist(p.x, p.z, target.x, target.z) > 15) return;
         const amount = Math.min(100, Math.max(1, Math.round(Number(msg.amount) || 1)));
-        send(target.ws, { type: 'healed', amount, from: p.name });
+        const healed = healPlayer(target, amount);
+        send(target.ws, { type: 'healed', amount: healed, from: p.name, ...vitals(target) });
+        break;
+      }
+
+      // Curación de habilidad propia (Palabra Sagrada, Nova Sagrada)
+      case 'skill_heal': {
+        if (!st) return;
+        const SKILL_HEALS = { palabra: 40, nova: 15 };
+        const base = SKILL_HEALS[msg.skillId];
+        if (!base || p.class !== 'sacerdote') return;
+        const now = Date.now();
+        if (now - lastHeal < 1200) return;
+        lastHeal = now;
+        const healed = healPlayer(p, Math.round(base * computeHealMul(p.character)));
+        send(ws, { type: 'skill_heal_ok', skillId: msg.skillId, heal: healed, ...vitals(p) });
+        break;
+      }
+
+      // Mejora temporal de armadura (Grito de Guerra / Escudo de Fe)
+      case 'skill_buff': {
+        if (!st) return;
+        const BUFF_SKILLS = {
+          grito: { armor: 5, dur: 8, cls: 'guerrero' },
+          escudo_fe: { armor: 6, dur: 6, cls: 'sacerdote' },
+        };
+        const buff = BUFF_SKILLS[msg.skillId];
+        if (!buff || p.class !== buff.cls) return;
+        const now = Date.now();
+        if (now - (p.lastBuffMs || 0) < 5000) return;
+        p.lastBuffMs = now;
+        p.buffArmor = buff.armor;
+        p.buffUntil = now + buff.dur * 1000;
         break;
       }
 
@@ -626,9 +737,11 @@ wss.on('connection', (ws) => {
         if (!st) return;
         const item = ITEMS[msg.itemId];
         if (!item?.heal) return;
+        if (p.hp >= computeMaxHp(p.character)) { fail(p, 'Ya tienes la vida al máximo'); return; }
         if (!bagRemove(st, item.id, 1)) { fail(p, 'No llevas ese objeto'); return; }
+        const healed = healPlayer(p, Math.round(item.heal * computeHealMul(p.character)));
         sendSync(p);
-        send(ws, { type: 'item_used', itemId: item.id, heal: item.heal });
+        send(ws, { type: 'item_used', itemId: item.id, heal: healed, ...vitals(p) });
         break;
       }
       case 'equip': {
@@ -742,13 +855,15 @@ wss.on('connection', (ws) => {
         if (msg.service === 'heal') {
           if (st.inventory.gold < MIRA_HEAL_PRICE) { fail(p, 'No llevas suficiente oro'); return; }
           st.inventory.gold -= MIRA_HEAL_PRICE;
+          p.hp = computeMaxHp(p.character);
           sendSync(p);
-          send(ws, { type: 'mira_ok', service: 'heal' });
+          send(ws, { type: 'mira_ok', service: 'heal', ...vitals(p) });
         } else if (msg.service === 'bless') {
           const price = MIRA_BLESSING_PRICES[msg.id];
           if (!price) return;
           if (st.inventory.gold < price) { fail(p, 'No llevas suficiente oro'); return; }
           st.inventory.gold -= price;
+          applyBlessing(st, msg.id);
           sendSync(p);
           send(ws, { type: 'mira_ok', service: 'bless', id: msg.id });
         }
@@ -847,7 +962,7 @@ wss.on('connection', (ws) => {
     stopFishing(p);
     leaveParty(id, false);
     if (p.realm && p.charId) {
-      saveCharacterState(p.account, p.charId, { x: +p.x.toFixed(1), z: +p.z.toFixed(1) });
+      saveCharacterState(p.account, p.charId, { x: +p.x.toFixed(1), z: +p.z.toFixed(1), hp: Math.round(p.hp) });
       broadcast(p.realm, { type: 'player_leave', id }, id);
       broadcast(p.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${p.name} ha abandonado el mundo.` }, id);
       console.log(`[-] ${p.account.name}/${p.name} (#${id}) desconectado. Conectados: ${players.size - 1}`);
@@ -857,6 +972,7 @@ wss.on('connection', (ws) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`Ciudadela de Valdoria en marcha: http://localhost:${PORT}`);
-  console.log(`Reinos: ${REALMS.map((r) => r.name).join(', ')} — ${SPAWNS.length} criaturas por reino (servidor autoritativo)`);
+  const proto = useTls ? 'https' : 'http';
+  console.log(`Ciudadela de Valdoria en marcha: ${proto}://localhost:${PORT} ${useTls ? '(TLS/WSS activado)' : '(sin TLS: usa ws://, solo para red local)'}`);
+  console.log(`Reinos: ${REALMS.map((r) => r.name).join(', ')} — ${SPAWNS.length} criaturas por reino (servidor autoritativo, vida incluida)`);
 });

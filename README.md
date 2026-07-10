@@ -205,22 +205,46 @@ public/js/network.js   Cliente WebSocket. · ui.js  Diálogos, chat, HUD.
 ```
 
 **Servidor autoritativo**: el oro, la bolsa, el equipo, la experiencia, los
-niveles, los talentos y las recompensas de misiones viven en el servidor y solo
-se mutan por operaciones validadas (comprar, forjar, cocinar, pescar, recoger,
-equipar, usar, cobrar misión...), cada una con comprobaciones de requisitos y
-**cercanía** (no se comercia con Lyra desde la otra punta del mapa). El
-movimiento se valida por velocidad (con lista blanca para portales y la
-reaparición en la fuente) y el daño declarado se acota según el arma equipada
-real. El cliente solo reporta su vida, las banderas de diálogo de misiones y
-las bendiciones activas. `data/accounts.json` se respalda automáticamente al
-arrancar y cada 15 minutos (rotación de 20 copias en `data/backups/`).
-Pendiente conocido: la vida propia sigue siendo del cliente (un tramposo solo
-puede hacerse inmortal, no fabricar riqueza).
+niveles, los talentos, las bendiciones, las recompensas de misiones **y la
+propia vida** viven en el servidor. El daño de las criaturas, la reducción por
+armadura, la muerte y reaparición, la regeneración y todas las curas (pociones,
+habilidades, Mira, aliados) se calculan allí; el cliente solo muestra la vida
+que le dicta el servidor (`hp_sync`, `you_died`...). Cada acción es un RPC
+validado con requisitos y **cercanía** (no se comercia con Lyra desde la otra
+punta del mapa). El movimiento se valida por velocidad (lista blanca para
+portales y la reaparición) y el daño declarado se acota según el arma equipada
+real. El cliente solo reporta las banderas de diálogo de misiones. Hay un
+guardián anti-flood (80 mensajes/s por conexión).
+
+**Base de datos**: SQLite (`data/valdoria.db`, modo WAL) mediante
+`better-sqlite3`, con escritura diferida y migración automática desde el antiguo
+`accounts.json`. Copias de seguridad rotativas al arrancar y cada 15 minutos
+(20 copias en `data/backups/`).
+
+**Despliegue y reconexión**: define `TLS_CERT` y `TLS_KEY` (rutas a los
+certificados) y el servidor sirve HTTPS con el WebSocket en **WSS**
+automáticamente — imprescindible para jugar por Internet. Si se pierde la
+conexión en pleno juego, aparece un aviso de «Conexión perdida», el cliente
+sondea el servidor y, al volver, **reentra solo** con el mismo personaje
+(sesión por pestaña en `sessionStorage`).
+
+## Despliegue en producción
+
+```bash
+# Red local (sin cifrado): http://<tu-ip>:3000
+npm start
+
+# Por Internet (HTTPS + WSS): con certificados TLS
+TLS_CERT=/ruta/fullchain.pem TLS_KEY=/ruta/privkey.pem PORT=443 npm start
+```
+
+Detrás de un proxy inverso (nginx, Caddy) basta con que el proxy termine el TLS
+y reenvíe el WebSocket; en ese caso `npm start` sin variables es suficiente.
 
 ## Ideas para crecer
 
-- Vida del jugador simulada en el servidor (el último hueco de confianza).
-- SQLite en lugar del JSON, despliegue con WSS y reconexión automática.
+- Gestión de servidor: cuenta admin (expulsar/banear), anuncios, filtro de nombres.
+- Sonido: música ambiental y efectos (golpes, nivel, pesca).
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
 - Segunda rama del árbol de talentos por clase y respec (reasignar puntos).
 - Concurso de pesca semanal; recetas de cocina con varios ingredientes.

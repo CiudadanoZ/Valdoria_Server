@@ -10,13 +10,13 @@ import { spawnNPCs, updateQuestMarkers } from './npcs.js';
 import { Mobs, spawnFloatText } from './enemies.js';
 import {
   connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly,
-  sendGather, sendFishStart, sendFishStop, sendMira,
+  sendGather, sendFishStart, sendFishStop, sendMira, sendSkillHeal, sendSkillBuff,
 } from './network.js';
-import { initSkills, refreshSkills, castSkill, updateSkills, skillArmorBonus, skillSpeedMul } from './skills.js';
+import { initSkills, refreshSkills, castSkill, updateSkills, skillSpeedMul } from './skills.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
   initProgression, applyProgression, toggleTalents,
-  talentDmg, talentArmor, talentHp, talentSpeedMul, talentHealMul, talentCdr, isSkillUnlocked,
+  talentDmg, talentSpeedMul, talentCdr, isSkillUnlocked,
 } from './progression.js';
 import { openCooking, refreshCooking } from './cooking.js';
 import { ITEMS } from './items.js';
@@ -24,7 +24,7 @@ import { initInventory, applyInventory, getWeaponDamage, getArmor } from './inve
 import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker } from './quests.js';
 import { initShop, openShop, refreshShop } from './shop.js';
 import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
-import { BLESSINGS, initBlessings, activateBlessing, blessingDamage, blessingArmor, blessingMaxHp, serializeBlessings, loadBlessings } from './blessings.js';
+import { BLESSINGS, initBlessings, applyBlessings, blessingDamage } from './blessings.js';
 import { initParty, offerInvite, onInvite, onPartyUpdate, onPartyLeft, onPlayerLeave as partyPlayerLeave } from './party.js';
 import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby } from './lobby.js';
 import * as ui from './ui.js';
@@ -37,20 +37,23 @@ let worldRefs, player, remotes, npcs, mobs;
 let charName = '';
 let myRace = RACES.humano;
 let myClass = CLASSES.guerrero;
-let hp = 100;
 let inWorld = false;
-const BASE_MAX_HP = 100;
-const maxHp = () => BASE_MAX_HP + myRace.hp + myClass.hp + blessingMaxHp() + talentHp();
-const healMulTotal = () => myClass.healMul * talentHealMul();
+// Vida: ESPEJO de lo que dicta el servidor (daño, curas, regeneración y muerte
+// se calculan allí; aquí solo se muestra)
+let hp = 100;
+let maxHpVal = 110;
+const maxHp = () => maxHpVal;
+function setVitals(msg) {
+  if (typeof msg.hp === 'number') hp = msg.hp;
+  if (typeof msg.maxHp === 'number') maxHpVal = msg.maxHp;
+  ui.setHP(hp, maxHpVal);
+}
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 // ---------- Combate ----------
 let combatTarget = null;
 let attackCooldown = 0;
-let lastCombatTime = -100;
-const REGEN_DELAY = 5;
-const baseRegenRate = () => 2.5 * myRace.regenMul * myClass.regenMul;
 
 // ---------- Sincronización del estado con el servidor ----------
 let saveTimer = null;
@@ -63,12 +66,10 @@ function flushSave() {
   clearTimeout(saveTimer);
   saveTimer = null;
   if (!inWorld) return;
-  // Solo se reporta lo que el cliente tiene permitido: vida, banderas de
-  // misión y bendiciones. El oro, la bolsa y la progresión viven en el servidor.
+  // Solo se reportan las banderas de diálogo de las misiones: todo lo demás
+  // (oro, bolsa, progresión, bendiciones, vida, posición) lo posee el servidor.
   sendSaveState({
     quests: serializeQuests(),
-    blessings: serializeBlessings(),
-    hp: Math.round(hp),
   });
 }
 
@@ -108,21 +109,34 @@ connect({
     onLootChanged();
     saveGame();
   },
-  // Estado autoritativo del personaje: bolsa, oro y progresión
+  // Estado autoritativo del personaje: bolsa, oro, progresión y bendiciones
   state_sync(msg) {
     applyInventory(msg.inventory);
     applyProgression(msg.progression);
+    applyBlessings(msg.blessings);
     refreshShop();
     refreshCrafting();
     refreshCooking();
     renderTracker();
   },
+  // Vida dictada por el servidor
+  hp_sync(msg) { setVitals(msg); },
   item_used(msg) {
     const item = ITEMS[msg.itemId];
-    const healed = Math.round(msg.heal * healMulTotal());
-    hp = Math.min(maxHp(), hp + healed);
-    ui.setHP(hp, maxHp());
-    ui.toast(`${item?.icon || ''} +${healed} de vida`);
+    setVitals(msg);
+    ui.toast(`${item?.icon || ''} +${msg.heal} de vida`);
+  },
+  skill_heal_ok(msg) {
+    setVitals(msg);
+    if (msg.heal > 0) spawnFloatText(scene, `+${msg.heal}`, '#7fe8a8', player.mesh.position);
+  },
+  you_died(msg) {
+    ui.hideDialog();
+    combatTarget = null;
+    player.stop();
+    player.mesh.position.set(msg.x, 0, msg.z);
+    setVitals(msg);
+    ui.toast(`☠ ${msg.by} te ha derribado. Despiertas junto a la fuente.`, 'quest');
     saveGame();
   },
   rpc_ok(msg) {
@@ -145,12 +159,11 @@ connect({
   fish_stop() { /* el servidor cortó la pesca (movimiento o bolsa llena) */ },
   mira_ok(msg) {
     if (msg.service === 'heal') {
-      hp = maxHp();
-      ui.setHP(hp, maxHp());
+      setVitals(msg);
       ui.toast('✙ Mira cierra tus heridas: vida al máximo', 'quest');
-      saveGame();
     } else if (msg.service === 'bless') {
-      activateBlessing(msg.id);
+      const b = BLESSINGS[msg.id];
+      if (b) ui.toast(`${b.icon} ${b.name} — ${b.desc} durante 10 minutos`, 'quest');
     }
   },
   pos_correct(msg) {
@@ -159,30 +172,50 @@ connect({
     combatTarget = null;
     player.mesh.position.set(msg.x, 0, msg.z);
   },
-  player_hurt(msg) { onPlayerDamaged(msg.dmg, msg.mobName); },
+  player_hurt(msg) { onPlayerDamaged(msg); },
   healed(msg) {
-    if (hp <= 0) return;
-    hp = Math.min(maxHp(), hp + msg.amount);
-    ui.setHP(hp, maxHp());
-    spawnFloatText(scene, `+${msg.amount}`, '#7fe8a8', player.mesh.position);
-    ui.toast(`✨ ${msg.from} te ha curado (+${msg.amount})`);
+    setVitals(msg);
+    if (msg.amount > 0) {
+      spawnFloatText(scene, `+${msg.amount}`, '#7fe8a8', player.mesh.position);
+      ui.toast(`✨ ${msg.from} te ha curado (+${msg.amount})`);
+    }
   },
   party_invite(msg) { onInvite(msg); },
   party_update(msg) { onPartyUpdate(msg); },
   party_left() { onPartyLeft(); },
   disconnected() {
     if (inWorld) {
-      ui.addChatMessage({ system: true, text: 'Conexión perdida con la Ciudadela. Recarga la página.' });
+      startReconnect();
     } else {
       onAuthFail({ reason: 'Sin conexión con el servidor. Recarga la página.' });
     }
   },
 });
 
+// ---------- Reconexión automática ----------
+// Al caer la conexión en pleno juego: overlay + sondeo del servidor; en cuanto
+// responde, la página se recarga y la sesión de la pestaña vuelve a entrar
+// directamente con el mismo personaje.
+let reconnecting = false;
+function startReconnect() {
+  if (reconnecting) return;
+  reconnecting = true;
+  $('reconnect-overlay').classList.remove('hidden');
+  const poll = setInterval(async () => {
+    try {
+      const res = await fetch('/', { cache: 'no-store' });
+      if (res.ok) {
+        clearInterval(poll);
+        location.reload();
+      }
+    } catch { /* servidor aún caído: seguir esperando */ }
+  }, 2000);
+}
+
 window.addEventListener('beforeunload', () => { if (inWorld) flushSave(); });
 
 // ---------- Inicialización de la escena ----------
-function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
+function startGame({ id, spawn, realm, character, vitals: initialVitals, players, mobs: mobList }) {
   charName = character.name;
   myRace = RACES[character.race] || RACES.humano;
   myClass = CLASSES[character.class] || CLASSES.guerrero;
@@ -211,7 +244,7 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
   initQuests({ changed: saveGame });
   initShop();
   initCrafting();
-  initBlessings({ changed: saveGame });
+  initBlessings();
   initParty(id);
   setShopOpener(openShop);
   setForgeOpener(openCrafting);
@@ -244,14 +277,9 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
     sendSkillHits,
     isUnlocked: isSkillUnlocked,
     getCdr: talentCdr,
-    healSelf(amount) {
-      const healed = Math.round(amount * healMulTotal());
-      if (hp >= maxHp()) { ui.toast('Ya tienes la vida al máximo'); return; }
-      hp = Math.min(maxHp(), hp + healed);
-      ui.setHP(hp, maxHp());
-      spawnFloatText(scene, `+${healed}`, '#7fe8a8', player.mesh.position);
-      saveGame();
-    },
+    // Curas y mejoras: las aplica el servidor y responde con la vida resultante
+    castHeal: (skillId) => sendSkillHeal(skillId),
+    castBuff: (skillId) => sendSkillBuff(skillId),
     healAlly(amount) {
       // Curar al aliado más cercano (12 m)
       let nearest = null, nearestDist = 12;
@@ -260,9 +288,8 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
         if (d < nearestDist) { nearest = p; nearestDist = d; }
       }
       if (!nearest) return;
-      const healed = Math.round(amount * healMulTotal());
-      sendHealAlly(nearest.id, healed);
-      ui.toast(`✨ Curas a ${nearest.name} (+${healed})`);
+      sendHealAlly(nearest.id, amount);
+      ui.toast(`✨ Curas a ${nearest.name}`);
     },
     swingArm() {
       player.mesh.getObjectByName('armR').rotation.x = -1.9;
@@ -283,11 +310,10 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
   const st = character.state || {};
   applyInventory(st.inventory);
   loadQuests(st.quests);
-  loadBlessings(st.blessings);
+  applyBlessings(st.blessings);
   applyProgression(st.progression);
   refreshSkills(); // por si hay habilidades desbloqueadas por talentos
-  if (typeof st.hp === 'number') hp = Math.min(st.hp, maxHp());
-  ui.setHP(hp, maxHp());
+  setVitals(initialVitals || {});
   renderTracker();
   ui.initPanelCloseButtons();
   inWorld = true;
@@ -337,31 +363,14 @@ function startGame({ id, spawn, realm, character, players, mobs: mobList }) {
   requestAnimationFrame(loop);
 }
 
-// ---------- Daño al jugador, muerte y reaparición ----------
-function onPlayerDamaged(amount, enemyName) {
-  if (hp <= 0 || !inWorld) return;
-  const reduced = Math.max(1, amount - getArmor() - blessingArmor() - skillArmorBonus() - talentArmor() - myRace.armor - myClass.armor);
-  hp -= reduced;
-  lastCombatTime = clock.elapsedTime;
-  ui.setHP(hp, maxHp());
-  spawnFloatText(scene, `-${reduced}`, '#ff5040', player.mesh.position);
+// ---------- Daño al jugador (ya reducido por armadura en el servidor) ----------
+function onPlayerDamaged(msg) {
+  if (!inWorld) return;
+  setVitals(msg);
+  spawnFloatText(scene, `-${msg.dmg}`, '#ff5040', player.mesh.position);
   const vignette = $('damage-vignette');
   vignette.classList.add('hit');
   setTimeout(() => vignette.classList.remove('hit'), 120);
-
-  if (hp <= 0) die(enemyName);
-}
-
-function die(enemyName) {
-  ui.hideDialog();
-  combatTarget = null;
-  stopFishing();
-  player.stop();
-  player.mesh.position.set((Math.random() - 0.5) * 4, 0, 14);
-  hp = Math.round(maxHp() * 0.6);
-  ui.setHP(hp, maxHp());
-  ui.toast(`☠ ${enemyName} te ha derribado. Despiertas junto a la fuente.`, 'quest');
-  saveGame();
 }
 
 // ---------- Controles ----------
@@ -567,7 +576,6 @@ function updateCombat(dt) {
 
   if (attackCooldown <= 0) {
     attackCooldown = myClass.attackInterval;
-    lastCombatTime = clock.elapsedTime;
     const dmg = 5 + getWeaponDamage() + blessingDamage() + myRace.dmg + myClass.dmg + talentDmg() + Math.floor(Math.random() * 5);
     player.mesh.getObjectByName('armR').rotation.x = -1.7;
     sendAttack(combatTarget.id, dmg);
@@ -637,15 +645,6 @@ function loop() {
   updateCamera();
   updateCryptLighting(dt);
   updateInteractHint();
-
-  // Regeneración fuera de combate (y ajuste si expira la Bendición de la Vida)
-  if (hp > maxHp()) {
-    hp = maxHp();
-    ui.setHP(hp, maxHp());
-  } else if (hp < maxHp() && time - lastCombatTime > REGEN_DELAY) {
-    hp = Math.min(maxHp(), hp + baseRegenRate() * dt);
-    ui.setHP(hp, maxHp());
-  }
 
   const p = player.mesh.position;
   sendMove(

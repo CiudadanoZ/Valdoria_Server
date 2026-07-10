@@ -527,6 +527,24 @@ canvas { display: block; }
 #tooltip .t-desc { color: #b8a988; margin-top: 4px; }
 #tooltip .t-use { color: #7fb069; margin-top: 4px; }
 
+/* ===== Overlay de reconexión ===== */
+#reconnect-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 3, 2, 0.88);
+}
+.reconnect-box {
+  text-align: center; padding: 36px 48px;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border); border-radius: 6px;
+  box-shadow: 0 0 60px rgba(201, 165, 92, 0.15);
+}
+.reconnect-box h2 { color: var(--gold-bright); margin-bottom: 10px; }
+.reconnect-box p { color: var(--parchment); }
+.reconnect-box .reconnect-hint { margin-top: 12px; font-size: 0.85em; color: #7a6a4d; }
+.reconnect-box .dots { animation: dots-blink 1.4s infinite; }
+@keyframes dots-blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #0d0906; }
 ::-webkit-scrollbar-thumb { background: #3a2d18; border-radius: 4px; }
