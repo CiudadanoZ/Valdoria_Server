@@ -3,9 +3,13 @@
 // puntos de talento se gastan por RPC validado. Aquí solo se muestra y se
 // detectan las subidas de nivel para celebrarlas.
 import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from './talents-data.js';
-import { sendTalentSpend } from './network.js';
+import { sendTalentSpend, sendTalentRespec } from './network.js';
 import { play } from './audio.js';
 import { toast } from './ui.js';
+
+// Oro del jugador para saber si se puede pagar el respec (lo actualiza main.js)
+let currentGold = 0;
+export function setGoldForRespec(g) { currentGold = g; }
 
 export { MAX_LEVEL, HP_PER_LEVEL, xpForLevel };
 
@@ -113,4 +117,18 @@ function renderPanel() {
     row.appendChild(btn);
     list.appendChild(row);
   }
+
+  // Botón de reasignar (respec): cuesta 50 de oro por nivel
+  const spent = pointsSpent();
+  const cost = 50 * progression.level;
+  const respecRow = document.createElement('div');
+  respecRow.className = 'talent-respec';
+  respecRow.innerHTML = `<span>Reasignar todos los puntos por 🪙 ${cost}</span>`;
+  const rbtn = document.createElement('button');
+  rbtn.className = 'shop-btn';
+  rbtn.textContent = 'Reasignar';
+  rbtn.disabled = spent < 1 || currentGold < cost;
+  rbtn.addEventListener('click', () => { sendTalentRespec(); play('click'); });
+  respecRow.appendChild(rbtn);
+  list.appendChild(respecRow);
 }

@@ -105,6 +105,8 @@ export function sendQuestClaim(questId) { send({ type: 'quest_claim', questId })
 export function sendBountyClaim(bountyId) { send({ type: 'bounty_claim', bountyId }); }
 export function sendChangePassword(oldPassword, newPassword) { send({ type: 'change_password', oldPassword, newPassword }); }
 export function sendBugReport(text, version) { send({ type: 'bug_report', text, version }); }
+export function sendTalentRespec() { send({ type: 'talent_respec' }); }
+export function sendLeaderboard() { send({ type: 'leaderboard' }); }
 
 // Persiste el estado del personaje en el servidor
 export function sendSaveState(state) {

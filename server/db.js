@@ -252,6 +252,37 @@ export function isBanned(accountName) {
   return bannedAccounts.has(String(accountName || '').toLowerCase());
 }
 
+// ---- Clasificaciones ----
+// Recorre todos los personajes de todas las cuentas y devuelve el top N por
+// nivel, oro y bajas totales. Excluye cuentas baneadas.
+export function getLeaderboards(topN = 10) {
+  const chars = [];
+  for (const [key, account] of Object.entries(accounts)) {
+    if (bannedAccounts.has(key)) continue;
+    for (const c of account.characters) {
+      const kills = Object.values(c.state?.kills || {}).reduce((a, b) => a + b, 0);
+      chars.push({
+        name: c.name,
+        race: c.race,
+        class: c.class,
+        level: c.state?.progression?.level || 1,
+        xp: c.state?.progression?.xp || 0,
+        gold: c.state?.inventory?.gold || 0,
+        kills,
+      });
+    }
+  }
+  const top = (metric, tiebreak) => [...chars]
+    .sort((a, b) => (b[metric] - a[metric]) || ((b[tiebreak] || 0) - (a[tiebreak] || 0)))
+    .slice(0, topN)
+    .map((c) => ({ name: c.name, race: c.race, class: c.class, level: c.level, gold: c.gold, kills: c.kills }));
+  return {
+    level: top('level', 'xp'),
+    gold: top('gold', 'level'),
+    kills: top('kills', 'level'),
+  };
+}
+
 export function getCharacter(account, charId) {
   return account.characters.find((c) => c.id === charId) || null;
 }

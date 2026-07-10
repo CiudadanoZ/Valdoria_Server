@@ -227,6 +227,21 @@ export function spendTalent(st, classId, nodeId) {
   return null; // sin error
 }
 
+// Coste de reasignar talentos: 50 de oro por nivel del personaje.
+export function respecCost(st) {
+  return 50 * st.progression.level;
+}
+
+// Reasigna: devuelve todos los puntos gastados y vacía el árbol. El cobro del
+// oro lo hace el llamador tras validar. Devuelve false si no hay nada que reasignar.
+export function respecTalents(st) {
+  const spent = Object.values(st.progression.talents).reduce((a, b) => a + b, 0);
+  if (spent < 1) return false;
+  st.progression.points += spent;
+  st.progression.talents = {};
+  return true;
+}
+
 // ---- Sincronización hacia el cliente ----
 export function syncPayload(st) {
   return {

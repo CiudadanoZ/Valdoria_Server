@@ -183,6 +183,22 @@ criatura a cambio de oro y experiencia. El progreso lo cuenta el servidor al
 cazar; al completarlos se cobran en el Tablón y **se renuevan cada jornada**.
 Son la fuente de progreso repetible una vez agotadas las cadenas de misiones.
 
+### Botín legendario de jefes
+Los jefes sueltan, con baja probabilidad, equipo **legendario** (brilla en
+naranja) mucho mejor que el forjado: el **Alfa Sombrío** → Colmillo del Alfa
+(arma) o Manto del Alfa; el **Señor de la Cripta** → Corona (+6 armadura) o
+Guadaña Espectral (+26 daño, la mejor arma); los **Guardianes/Centinelas Óseos**
+→ Sello del Guardián. Es la razón para repetir a los jefes.
+
+### Clasificaciones
+Botón 🏆 del lobby (o tecla `L` en el juego): top 10 de héroes del reino por
+**nivel**, **oro** y **bajas**, calculado por el servidor sobre todas las
+cuentas, con medallas e iconos de raza/clase.
+
+### Reasignar talentos (respec)
+En el panel de talentos (`T`), el botón **Reasignar** devuelve todos los puntos
+gastados por 50 de oro por nivel, para probar builds distintas.
+
 ### Administración
 Marca cuentas admin con la variable de entorno `ADMIN_ACCOUNTS` (nombres
 separados por comas; por defecto `oscarchan`). Un admin dispone de comandos de
@@ -225,6 +241,7 @@ public/js/progression.js Niveles, experiencia y árbol de talentos por clase.
 public/js/cooking.js   Cocina en las hogueras (crudo -> asado).
 public/js/bounties.js  Sorteo diario de encargos (datos compartidos).
 public/js/bountyboard.js Panel del Tablón de Encargos.
+public/js/leaderboard.js Panel de clasificaciones (nivel/oro/bajas).
 public/js/minimap.js   Minimapa y mapa grande (M): mundo, criptas, misiones.
 public/js/party.js     Grupos de caza: invitaciones y panel de miembros.
 public/js/npcs.js      NPCs y marcadores de misión (!/?).
@@ -284,7 +301,7 @@ cliente elige `wss://` solo al servirse por `https://`.
 ## Ideas para crecer
 
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
-- Segunda rama del árbol de talentos por clase y respec (reasignar puntos).
-- Botín único de jefes; concurso de pesca semanal.
-- JcJ opcional en la llanura, clasificaciones de caza (el botón ya espera en el lobby).
+- Segunda rama del árbol de talentos por clase.
+- Concurso de pesca semanal; recetas de cocina con varios ingredientes.
+- JcJ opcional en la llanura.
 - Panel de administración web para revisar reportes de fallo.

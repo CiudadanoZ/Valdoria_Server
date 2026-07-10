@@ -338,6 +338,32 @@ canvas { display: block; }
 .bounty-progress { color: #a89877; font-size: 0.85em; }
 .bounty-progress.done { color: #7fb069; }
 
+/* Reasignar talentos */
+.talent-respec {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 10px; padding: 10px 12px;
+  background: rgba(60, 40, 20, 0.3);
+  border: 1px dashed #6b5228; border-radius: 4px;
+}
+.talent-respec span { color: #a89877; font-size: 0.9em; }
+
+/* Clasificaciones */
+#leaderboard-panel {
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 440px; max-height: 76vh; display: flex; flex-direction: column;
+}
+#leaderboard-panel.hidden { display: none !important; }
+#lb-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+#lb-list { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.lb-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; background: rgba(0,0,0,0.35);
+  border: 1px solid #2a2118; border-radius: 4px;
+}
+.lb-rank { width: 32px; font-size: 1.05em; color: var(--gold-bright); text-align: center; }
+.lb-name { flex: 1; color: var(--parchment); }
+.lb-value { color: var(--gold-bright); font-size: 0.92em; }
+
 #interact-hint {
   position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%); z-index: 20;
   padding: 8px 20px; background: var(--panel-bg);
@@ -430,6 +456,8 @@ canvas { display: block; }
 }
 .inv-slot .rarity-uncommon { text-shadow: 0 0 8px #4a9e4a; }
 .inv-slot .rarity-rare { text-shadow: 0 0 8px #4a7ade; }
+.inv-slot .rarity-legendary { text-shadow: 0 0 10px #ff9a2e, 0 0 4px #ffcf6b; }
+.inv-slot.filled:has(.rarity-legendary) { border-color: #ff9a2e; }
 
 #dialog-panel {
   bottom: 110px; left: 50%; transform: translateX(-50%);

@@ -15,12 +15,13 @@ import {
 import { initSkills, refreshSkills, castSkill, updateSkills, skillSpeedMul } from './skills.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
-  initProgression, applyProgression, toggleTalents,
+  initProgression, applyProgression, toggleTalents, setGoldForRespec,
   talentDmg, talentSpeedMul, talentCdr, isSkillUnlocked,
 } from './progression.js';
 import { openCooking, refreshCooking } from './cooking.js';
+import { initLeaderboard, openLeaderboard, applyLeaderboard } from './leaderboard.js';
 import { ITEMS } from './items.js';
-import { initInventory, applyInventory, getWeaponDamage, getArmor } from './inventory.js';
+import { initInventory, applyInventory, getWeaponDamage, getArmor, inventory } from './inventory.js';
 import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker } from './quests.js';
 import { initShop, openShop, refreshShop } from './shop.js';
 import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
@@ -79,6 +80,8 @@ function flushSave() {
 // ---------- Conexión y lobby ----------
 initLobby();
 initSettings({ onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; } });
+initLeaderboard();
+document.getElementById('leaderboard-btn-lobby')?.addEventListener('click', openLeaderboard);
 connect({
   auth_ok(msg) { onAuthOk(msg); },
   auth_fail(msg) { onAuthFail(msg); },
@@ -118,11 +121,18 @@ connect({
   // aquí solo se celebra y se avanza el estado de las misiones.
   loot(msg) {
     if (msg.gold) { ui.toast(`+${msg.gold} de oro`); play('gold'); }
+    let legendary = false;
     for (const itemId of msg.items) {
       const item = ITEMS[itemId];
-      if (item) ui.toast(`Obtenido: ${item.icon} ${item.name}`);
+      if (!item) continue;
+      if (item.rarity === 'legendary') {
+        legendary = true;
+        ui.toast(`✦ ¡LEGENDARIO! ${item.icon} ${item.name} ✦`, 'quest');
+      } else {
+        ui.toast(`Obtenido: ${item.icon} ${item.name}`);
+      }
     }
-    if (msg.items.length) play('loot');
+    if (msg.items.length) play(legendary ? 'levelup' : 'loot');
     onEnemyKilled(msg.mobType);
     onLootChanged();
     saveGame();
@@ -130,6 +140,7 @@ connect({
   // Estado autoritativo del personaje: bolsa, oro, progresión y bendiciones
   state_sync(msg) {
     applyInventory(msg.inventory);
+    if (msg.inventory) setGoldForRespec(msg.inventory.gold || 0);
     applyProgression(msg.progression);
     applyBlessings(msg.blessings);
     applyBounties(msg.bounties);
@@ -142,6 +153,11 @@ connect({
     ui.toast(`📜 Encargo cobrado: +${msg.gold} oro, +${msg.xp} EXP`, 'quest');
     play('quest');
   },
+  respec_ok(msg) {
+    ui.toast(`🔄 Talentos reasignados (−${msg.cost} oro). Vuelve a repartir tus puntos.`, 'quest');
+    play('levelup');
+  },
+  leaderboard(msg) { applyLeaderboard(msg.boards); },
   password_ok() { onPasswordResult(true); },
   password_fail(msg) { onPasswordResult(false, msg.reason); },
   bug_ok() { onReportResult(); },
@@ -345,6 +361,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   // Hidratar el estado del personaje desde el servidor
   const st = character.state || {};
   applyInventory(st.inventory);
+  setGoldForRespec(inventory.gold);
   loadQuests(st.quests);
   applyBlessings(st.blessings);
   applyProgression(st.progression);
@@ -572,6 +589,7 @@ function onKeyDown(e) {
   else if (k === 'm') toggleMap();
   else if (k === 't') toggleTalents();
   else if (k === 'o') toggleSettings();
+  else if (k === 'l') openLeaderboard();
   else if (k === 'escape') {
     ui.hideDialog();
     $('inventory-panel').classList.add('hidden');
@@ -580,6 +598,7 @@ function onKeyDown(e) {
     $('talents-panel').classList.add('hidden');
     $('cooking-panel').classList.add('hidden');
     $('bounty-panel').classList.add('hidden');
+    $('leaderboard-panel').classList.add('hidden');
     closeSettings();
     closeMap();
   }

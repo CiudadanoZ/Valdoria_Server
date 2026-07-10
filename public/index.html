@@ -33,7 +33,7 @@
           <div id="realm-list"></div>
           <h3>Opciones</h3>
           <button id="settings-btn-lobby" class="lobby-secondary">⚙ Ajustes</button>
-          <button class="lobby-secondary" disabled>🏆 Clasificaciones — próximamente</button>
+          <button id="leaderboard-btn-lobby" class="lobby-secondary">🏆 Clasificaciones</button>
           <button id="logout-btn" class="lobby-secondary">↩ Cambiar de cuenta</button>
         </div>
         <div class="char-column">
@@ -110,7 +110,7 @@
     <!-- Notificaciones (objetos obtenidos, misiones, etc.) -->
     <div id="toast-container"></div>
 
-    <div id="controls-hint">Clic: mover / hablar / atacar · 1-4: habilidades · I: inventario · T: talentos · M: mapa · Enter: chat</div>
+    <div id="controls-hint">Clic: mover / hablar / atacar · 1-4: habilidades · I: inventario · T: talentos · M: mapa · L: rankings · Enter: chat</div>
 
     <!-- Grupo de caza -->
     <div id="party-hud" class="hidden">
@@ -186,6 +186,20 @@
       <button id="report-cancel" class="lobby-secondary">Cancelar</button>
     </div>
     <p id="report-msg" class="settings-msg"></p>
+  </div>
+
+  <!-- Clasificaciones -->
+  <div id="leaderboard-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>🏆 Clasificaciones</h2>
+      <button id="lb-close" class="close-btn">✕</button>
+    </div>
+    <div id="lb-tabs">
+      <button id="lb-tab-level" class="shop-tab active">Nivel</button>
+      <button id="lb-tab-gold" class="shop-tab">Oro</button>
+      <button id="lb-tab-kills" class="shop-tab">Bajas</button>
+    </div>
+    <div id="lb-list"></div>
   </div>
 
   <!-- Tablón de Encargos -->

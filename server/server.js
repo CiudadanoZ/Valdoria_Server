@@ -15,16 +15,16 @@ import { fileURLToPath } from 'node:url';
 import {
   loadDb, authenticate, publicCharacters, createCharacter,
   deleteCharacter, getCharacter, saveCharacterState, touch,
-  isAdminAccount, banAccount, unbanAccount, changePassword,
+  isAdminAccount, banAccount, unbanAccount, changePassword, getLeaderboards,
 } from './db.js';
 import {
   ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
   maxPlausibleHit, addXp, spendTalent, syncPayload,
   computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
-  onBountyKill, claimBounty,
+  onBountyKill, claimBounty, respecCost, respecTalents,
 } from './state.js';
-import { appendFileSync } from 'node:fs';
 import { ITEMS } from '../public/js/items.js';
+import { appendFileSync } from 'node:fs';
 import {
   CRAFT_RECIPES, COOK_RECIPES, COOK_XP, FISHING_XP, FISHING_TABLE,
   SHOP_BUY_LIST, MIRA_HEAL_PRICE, MIRA_BLESSING_PRICES, QUEST_REWARDS,
@@ -323,14 +323,14 @@ function leaveParty(id, notifySelf = true) {
 const MOB_TYPES = {
   lobo:    { name: 'Lobo Gris',       hp: 30,  dmgMin: 3,  dmgMax: 7,  speed: 5.8, aggro: 9,  range: 1.9, cd: 1.3, respawn: 20,  gold: [3, 7],   xp: 12,  drops: [['piel_lobo', 0.65], ['colmillo_lobo', 0.45]] },
   jabali:  { name: 'Jabalí Salvaje',  hp: 55,  dmgMin: 6,  dmgMax: 12, speed: 4.6, aggro: 7,  range: 2.0, cd: 1.6, respawn: 26,  gold: [8, 14],  xp: 20,  drops: [['carne_jabali', 0.85]] },
-  alfa:    { name: 'Alfa Sombrío',    hp: 150, dmgMin: 10, dmgMax: 16, speed: 6.4, aggro: 13, range: 2.3, cd: 1.1, respawn: 75,  gold: [55, 80], xp: 100, drops: [['piel_lobo', 1], ['colmillo_lobo', 1]] },
+  alfa:    { name: 'Alfa Sombrío',    hp: 150, dmgMin: 10, dmgMax: 16, speed: 6.4, aggro: 13, range: 2.3, cd: 1.1, respawn: 75,  gold: [55, 80], xp: 100, drops: [['piel_lobo', 1], ['colmillo_lobo', 1], ['colmillo_alfa', 0.2], ['manto_alfa', 0.15]] },
   rata:    { name: 'Rata de Cripta',  hp: 25,  dmgMin: 4,  dmgMax: 8,  speed: 6.5, aggro: 8,  range: 1.6, cd: 1.1, respawn: 18,  gold: [2, 5],   xp: 10,  drops: [['hueso_antiguo', 0.3]] },
   esqueleto: { name: 'Esqueleto Guardián', hp: 70, dmgMin: 8, dmgMax: 14, speed: 4.6, aggro: 10, range: 2.0, cd: 1.4, respawn: 30, gold: [10, 18], xp: 26, drops: [['hueso_antiguo', 0.7], ['esencia_espectral', 0.35]] },
-  guardian_oseo: { name: 'Guardián Óseo', hp: 180, dmgMin: 12, dmgMax: 18, speed: 4.8, aggro: 11, range: 2.2, cd: 1.3, respawn: 90, gold: [45, 65], xp: 75, drops: [['hueso_antiguo', 1], ['hueso_antiguo', 0.6], ['esencia_espectral', 0.6]] },
-  centinela_oseo: { name: 'Centinela Óseo', hp: 200, dmgMin: 13, dmgMax: 19, speed: 4.8, aggro: 11, range: 2.2, cd: 1.3, respawn: 90, gold: [50, 70], xp: 80, drops: [['hueso_antiguo', 1], ['hueso_antiguo', 0.6], ['esencia_espectral', 0.7]] },
+  guardian_oseo: { name: 'Guardián Óseo', hp: 180, dmgMin: 12, dmgMax: 18, speed: 4.8, aggro: 11, range: 2.2, cd: 1.3, respawn: 90, gold: [45, 65], xp: 75, drops: [['hueso_antiguo', 1], ['hueso_antiguo', 0.6], ['esencia_espectral', 0.6], ['sello_oseo', 0.12]] },
+  centinela_oseo: { name: 'Centinela Óseo', hp: 200, dmgMin: 13, dmgMax: 19, speed: 4.8, aggro: 11, range: 2.2, cd: 1.3, respawn: 90, gold: [50, 70], xp: 80, drops: [['hueso_antiguo', 1], ['hueso_antiguo', 0.6], ['esencia_espectral', 0.7], ['sello_oseo', 0.12]] },
   ciervo:  { name: 'Ciervo del Lago',  hp: 35,  dmgMin: 1,  dmgMax: 3,  speed: 7.5, aggro: 0,  range: 1.6, cd: 1.5, respawn: 25,  gold: [1, 3],   xp: 8,   drops: [['carne_venado', 0.9]] },
   oso:     { name: 'Oso Pardo',        hp: 120, dmgMin: 10, dmgMax: 16, speed: 5.0, aggro: 8,  range: 2.2, cd: 1.5, respawn: 60,  gold: [20, 35], xp: 40,  drops: [['piel_oso', 0.8], ['carne_venado', 0.6]] },
-  senor_cripta: { name: 'Señor de la Cripta', hp: 400, dmgMin: 14, dmgMax: 22, speed: 5.2, aggro: 14, range: 2.6, cd: 1.2, respawn: 120, gold: [150, 200], xp: 200, drops: [['reliquia_cripta', 1], ['esencia_espectral', 1], ['hueso_antiguo', 1]] },
+  senor_cripta: { name: 'Señor de la Cripta', hp: 400, dmgMin: 14, dmgMax: 22, speed: 5.2, aggro: 14, range: 2.6, cd: 1.2, respawn: 120, gold: [150, 200], xp: 200, drops: [['reliquia_cripta', 1], ['esencia_espectral', 1], ['hueso_antiguo', 1], ['corona_cripta', 0.25], ['guadana_espectral', 0.2]] },
 };
 
 const SPAWNS = [
@@ -1003,6 +1003,25 @@ wss.on('connection', (ws) => {
         addXp(st, reward.xp);
         sendSync(p);
         send(ws, { type: 'bounty_ok', bountyId: msg.bountyId, gold: reward.gold, xp: reward.xp });
+        break;
+      }
+
+      // ---- Reasignar talentos (respec) ----
+      case 'talent_respec': {
+        if (!st) return;
+        const cost = respecCost(st);
+        if (st.inventory.gold < cost) { fail(p, `Necesitas ${cost} de oro para reasignar`); return; }
+        if (!respecTalents(st)) { fail(p, 'No tienes talentos que reasignar'); return; }
+        st.inventory.gold -= cost;
+        sendSync(p);
+        send(ws, { type: 'respec_ok', cost });
+        break;
+      }
+
+      // ---- Clasificaciones ----
+      case 'leaderboard': {
+        if (!p) return; // solo cuentas autenticadas
+        send(ws, { type: 'leaderboard', boards: getLeaderboards(10) });
         break;
       }
 
