@@ -176,6 +176,13 @@ archivos externos. El botón `⚙` (o la tecla `O`, y también desde el lobby) a
 los **Ajustes**: volumen de música y de efectos, y sombras on/off para equipos
 modestos. Las preferencias se guardan en el navegador.
 
+### Encargos diarios (Tablón)
+Junto a la fuente hay un **Tablón de Encargos**: haz clic para ver los 3
+encargos del día (los mismos para todo el reino), cada uno de matar N de cierta
+criatura a cambio de oro y experiencia. El progreso lo cuenta el servidor al
+cazar; al completarlos se cobran en el Tablón y **se renuevan cada jornada**.
+Son la fuente de progreso repetible una vez agotadas las cadenas de misiones.
+
 ### Administración
 Marca cuentas admin con la variable de entorno `ADMIN_ACCOUNTS` (nombres
 separados por comas; por defecto `oscarchan`). Un admin dispone de comandos de
@@ -183,6 +190,12 @@ chat: `/say` (anuncio a todos los reinos), `/kick`, `/ban` y `/unban`, `/mute` y
 `/unmute`, `/who` y `/help`. Los baneos se persisten en la base de datos y hay
 un **filtro de nombres ofensivos** al crear cuentas y personajes (ampliable con
 `BANNED_WORDS`).
+
+### Cuenta y soporte
+Dentro del juego, el panel de Ajustes (`⚙`/`O`) permite **cambiar la contraseña**
+(verificando la actual) y **reportar un fallo**: el texto se guarda en el
+servidor (`data/bug-reports.log`) junto a tu posición, personaje y versión, para
+ayudar a diagnosticar problemas durante la alpha.
 
 ## Arquitectura
 
@@ -210,6 +223,8 @@ public/js/enemies.js   Renderizado e interpolación de mobs del servidor; mallas
 public/js/skills.js    Habilidades por clase: barra, enfriamientos, mejoras y efectos.
 public/js/progression.js Niveles, experiencia y árbol de talentos por clase.
 public/js/cooking.js   Cocina en las hogueras (crudo -> asado).
+public/js/bounties.js  Sorteo diario de encargos (datos compartidos).
+public/js/bountyboard.js Panel del Tablón de Encargos.
 public/js/minimap.js   Minimapa y mapa grande (M): mundo, criptas, misiones.
 public/js/party.js     Grupos de caza: invitaciones y panel de miembros.
 public/js/npcs.js      NPCs y marcadores de misión (!/?).
@@ -266,5 +281,6 @@ sin `TLS_*` es suficiente.
 
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
 - Segunda rama del árbol de talentos por clase y respec (reasignar puntos).
-- Concurso de pesca semanal; recetas de cocina con varios ingredientes.
+- Botín único de jefes; concurso de pesca semanal.
 - JcJ opcional en la llanura, clasificaciones de caza (el botón ya espera en el lobby).
+- Panel de administración web para revisar reportes de fallo.

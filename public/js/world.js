@@ -452,7 +452,10 @@ export function buildWorld(scene) {
   // ---- Criptas menores del exterior ----
   for (const cfg of MINI_CRYPTS) buildMiniCrypt(scene, portals, torchLights, cfg);
 
-  return { torchLights, herbs, portals, fishingSpots, campfires, lights: { ambient, hemi, sun } };
+  // ---- Tablón de Encargos (junto a la fuente) ----
+  const board = buildBountyBoard(scene, 8, 6);
+
+  return { torchLights, herbs, portals, fishingSpots, campfires, board, lights: { ambient, hemi, sun } };
 }
 
 // Portal clicable: arco de piedra con vacío oscuro y resplandor.
@@ -715,6 +718,50 @@ function buildRuins(scene) {
   scene.add(fallen);
   addRock(scene, cx - 4, cz + 3, 0.9);
   addRock(scene, cx + 5, cz - 2, 0.7);
+}
+
+// Tablón de Encargos clicable: dos postes, tablero de madera y pergaminos.
+function buildBountyBoard(scene, x, z) {
+  const group = new THREE.Group();
+  const woodDark = mat(0x4a3628);
+  const woodLight = mat(0x6b5233);
+
+  for (const side of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 2.6, 6), woodDark);
+    post.position.set(side * 1.1, 1.3, 0);
+    post.castShadow = true;
+    group.add(post);
+  }
+  const boardMesh = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.6, 0.15), woodLight);
+  boardMesh.position.set(0, 2, 0);
+  boardMesh.castShadow = true;
+  group.add(boardMesh);
+  // Marco superior
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.2, 0.5), woodDark);
+  roof.position.set(0, 2.9, 0);
+  group.add(roof);
+  // Pergaminos clavados
+  const paper = new THREE.MeshStandardMaterial({ color: 0xd8c9a3 });
+  for (const [px, py] of [[-0.7, 2.1], [0.6, 2.2], [-0.1, 1.7]]) {
+    const note = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.7), paper);
+    note.position.set(px, py, 0.09);
+    note.rotation.z = (Math.random() - 0.5) * 0.2;
+    group.add(note);
+  }
+
+  // Zona de clic generosa
+  const hitbox = new THREE.Mesh(
+    new THREE.BoxGeometry(3.2, 3, 1.4),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  hitbox.position.y = 1.5;
+  group.add(hitbox);
+
+  group.position.set(x, 0, z);
+  group.rotation.y = -Math.PI / 4;
+  group.userData.isBoard = true;
+  scene.add(group);
+  return group;
 }
 
 // Hoguera clicable (para cocinar): piedras, llama, luz y zona de clic.

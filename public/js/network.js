@@ -102,6 +102,9 @@ export function sendFishStop() { send({ type: 'fish_stop' }); }
 export function sendMira(service, id) { send({ type: 'mira', service, id }); }
 export function sendTalentSpend(nodeId) { send({ type: 'talent_spend', nodeId }); }
 export function sendQuestClaim(questId) { send({ type: 'quest_claim', questId }); }
+export function sendBountyClaim(bountyId) { send({ type: 'bounty_claim', bountyId }); }
+export function sendChangePassword(oldPassword, newPassword) { send({ type: 'change_password', oldPassword, newPassword }); }
+export function sendBugReport(text, version) { send({ type: 'bug_report', text, version }); }
 
 // Persiste el estado del personaje en el servidor
 export function sendSaveState(state) {

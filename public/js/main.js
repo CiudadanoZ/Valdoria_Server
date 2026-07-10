@@ -27,7 +27,8 @@ import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
 import { BLESSINGS, initBlessings, applyBlessings, blessingDamage } from './blessings.js';
 import { initParty, offerInvite, onInvite, onPartyUpdate, onPartyLeft, onPlayerLeave as partyPlayerLeave } from './party.js';
 import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby, clearSession } from './lobby.js';
-import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled } from './settings.js';
+import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled, enableAccountSettings, onPasswordResult, onReportResult } from './settings.js';
+import { applyBounties, openBountyBoard } from './bountyboard.js';
 import { play } from './audio.js';
 import * as ui from './ui.js';
 
@@ -131,11 +132,19 @@ connect({
     applyInventory(msg.inventory);
     applyProgression(msg.progression);
     applyBlessings(msg.blessings);
+    applyBounties(msg.bounties);
     refreshShop();
     refreshCrafting();
     refreshCooking();
     renderTracker();
   },
+  bounty_ok(msg) {
+    ui.toast(`📜 Encargo cobrado: +${msg.gold} oro, +${msg.xp} EXP`, 'quest');
+    play('quest');
+  },
+  password_ok() { onPasswordResult(true); },
+  password_fail(msg) { onPasswordResult(false, msg.reason); },
+  bug_ok() { onReportResult(); },
   // Vida dictada por el servidor
   hp_sync(msg) { setVitals(msg); },
   item_used(msg) {
@@ -339,10 +348,12 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   loadQuests(st.quests);
   applyBlessings(st.blessings);
   applyProgression(st.progression);
+  applyBounties(st.bounties);
   refreshSkills(); // por si hay habilidades desbloqueadas por talentos
   setVitals(initialVitals || {});
   renderTracker();
   ui.initPanelCloseButtons();
+  enableAccountSettings(); // cambio de contraseña disponible dentro del juego
   inWorld = true;
 
   ui.addChatMessage({ system: true, text: `Bienvenido a ${realm.name}, ${charName} (${myRace.name} ${myClass.name}).` });
@@ -456,6 +467,14 @@ function onPointerDown(e) {
     if (obj) { approachCampfire(obj); return; }
   }
 
+  // 4d) ¿Clic sobre el Tablón de Encargos?
+  const boardHits = raycaster.intersectObjects([worldRefs.board], true);
+  if (boardHits.length > 0) {
+    combatTarget = null;
+    player.moveTo(worldRefs.board.position.clone(), () => { openBountyBoard(); play('click'); }, 3.0);
+    return;
+  }
+
   // 5) ¿Clic sobre otro jugador? -> invitación de grupo
   const remoteHits = raycaster.intersectObjects(remotes.meshes(), true);
   if (remoteHits.length > 0) {
@@ -542,7 +561,8 @@ function approachPortal(portal) {
 }
 
 function onKeyDown(e) {
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
     if (e.key === 'Escape') document.activeElement.blur();
     return;
   }
@@ -559,6 +579,7 @@ function onKeyDown(e) {
     $('crafting-panel').classList.add('hidden');
     $('talents-panel').classList.add('hidden');
     $('cooking-panel').classList.add('hidden');
+    $('bounty-panel').classList.add('hidden');
     closeSettings();
     closeMap();
   }

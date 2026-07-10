@@ -5,6 +5,7 @@ import { ITEMS } from '../public/js/items.js';
 import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from '../public/js/talents-data.js';
 import { RACES, CLASSES } from '../public/js/races.js';
 import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
+import { dailyBounties, todayNumber } from '../public/js/bounties.js';
 
 const BAG_SLOTS = 24;
 const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio'];
@@ -26,7 +27,44 @@ export function ensureState(character) {
   st.claimedQuests = st.claimedQuests || [];
   // Bendiciones de Mira: id -> instante de expiración (ms época). Del servidor.
   if (!st.blessings || typeof st.blessings !== 'object') st.blessings = {};
+  // Encargos diarios: se regeneran cada día.
+  refreshBounties(st);
   return st;
+}
+
+// ---- Encargos diarios (Tablón de la Ciudadela) ----
+// st.bounties = { day, list: [{ id, mob, need, gold, xp, title, desc, count, claimed }] }
+export function refreshBounties(st) {
+  const day = todayNumber();
+  if (!st.bounties || st.bounties.day !== day) {
+    st.bounties = {
+      day,
+      list: dailyBounties(day).map((b) => ({ ...b, count: 0, claimed: false })),
+    };
+  }
+  return st.bounties;
+}
+
+// Al matar una criatura: avanza los encargos activos de ese tipo.
+export function onBountyKill(st, mobType) {
+  refreshBounties(st);
+  let changed = false;
+  for (const b of st.bounties.list) {
+    if (b.mob === mobType && !b.claimed && b.count < b.need) {
+      b.count++;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// Cobra un encargo completado. Devuelve la recompensa o null si no procede.
+export function claimBounty(st, bountyId) {
+  refreshBounties(st);
+  const b = st.bounties.list.find((x) => x.id === bountyId);
+  if (!b || b.claimed || b.count < b.need) return null;
+  b.claimed = true;
+  return { gold: b.gold, xp: b.xp };
 }
 
 // ---- Estadísticas del personaje (autoritativas) ----
@@ -195,5 +233,6 @@ export function syncPayload(st) {
     inventory: st.inventory,
     progression: st.progression,
     blessings: st.blessings,
+    bounties: st.bounties,
   };
 }

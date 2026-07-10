@@ -137,6 +137,23 @@ function hashPassword(password, salt) {
   return scryptSync(String(password), salt, 64).toString('hex');
 }
 
+function passwordMatches(account, password) {
+  const attempt = Buffer.from(hashPassword(password, account.salt), 'hex');
+  const stored = Buffer.from(account.passHash, 'hex');
+  return attempt.length === stored.length && timingSafeEqual(attempt, stored);
+}
+
+// Cambia la contraseña tras verificar la actual.
+export function changePassword(account, oldPassword, newPassword) {
+  if (!passwordMatches(account, oldPassword)) return { ok: false, reason: 'La contraseña actual es incorrecta' };
+  if (String(newPassword || '').length < 4) return { ok: false, reason: 'La nueva contraseña necesita al menos 4 caracteres' };
+  const salt = randomBytes(16).toString('hex');
+  account.salt = salt;
+  account.passHash = hashPassword(newPassword, salt);
+  saveSoon();
+  return { ok: true };
+}
+
 // Inicia sesión; si la cuenta no existe, la crea con esa contraseña.
 export function authenticate(name, password) {
   const clean = String(name || '').trim().slice(0, 20);
@@ -157,9 +174,7 @@ export function authenticate(name, password) {
     created = true;
     saveSoon();
   } else {
-    const attempt = Buffer.from(hashPassword(password, account.salt), 'hex');
-    const stored = Buffer.from(account.passHash, 'hex');
-    if (attempt.length !== stored.length || !timingSafeEqual(attempt, stored)) {
+    if (!passwordMatches(account, password)) {
       return { ok: false, reason: 'Contraseña incorrecta' };
     }
   }

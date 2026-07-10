@@ -158,7 +158,48 @@
       <input id="opt-shadows" type="checkbox" checked />
       <span class="settings-hint">Desactívalas si el juego va lento</span>
     </div>
+
+    <!-- Solo en el juego: cuenta -->
+    <div id="settings-account" class="hidden">
+      <h3 class="settings-section">Cuenta</h3>
+      <div class="settings-stack">
+        <input id="pw-old" type="password" placeholder="Contraseña actual" autocomplete="off" />
+        <input id="pw-new" type="password" placeholder="Nueva contraseña (mín. 4)" autocomplete="off" />
+        <button id="pw-btn" class="lobby-secondary">Cambiar contraseña</button>
+        <p id="pw-msg" class="settings-msg"></p>
+      </div>
+      <h3 class="settings-section">Ayuda</h3>
+      <button id="report-btn" class="lobby-secondary">🐛 Reportar un fallo</button>
+    </div>
   </div>
+
+  <!-- Reporte de fallo -->
+  <div id="report-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Reportar un fallo</h2>
+      <button class="close-btn" data-close="report-panel">✕</button>
+    </div>
+    <p class="talents-info">Describe qué ha pasado. Se enviará junto a tu posición y versión para ayudarnos a arreglarlo.</p>
+    <textarea id="report-text" maxlength="500" rows="4" placeholder="Ej.: al entrar a la Cripta del Bosque me quedé atascado en la pared..."></textarea>
+    <div class="create-buttons">
+      <button id="report-send">Enviar reporte</button>
+      <button id="report-cancel" class="lobby-secondary">Cancelar</button>
+    </div>
+    <p id="report-msg" class="settings-msg"></p>
+  </div>
+
+  <!-- Tablón de Encargos -->
+  <div id="bounty-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Tablón de Encargos</h2>
+      <button class="close-btn" data-close="bounty-panel">✕</button>
+    </div>
+    <p class="talents-info">Encargos del día para toda la Ciudadela. Se renuevan cada jornada.</p>
+    <div id="bounty-list"></div>
+  </div>
+
+  <!-- Destello rojo al recibir daño -->
+  <div id="damage-vignette"></div>
 
   <!-- Destello rojo al recibir daño -->
   <div id="damage-vignette"></div>
