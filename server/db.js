@@ -287,6 +287,20 @@ export function getCharacter(account, charId) {
   return account.characters.find((c) => c.id === charId) || null;
 }
 
+// Resumen de todas las cuentas para el panel de administración.
+export function getAccountsSummary() {
+  return Object.entries(accounts).map(([key, a]) => ({
+    account: a.name,
+    banned: bannedAccounts.has(key),
+    admin: isAdminAccount(a.name),
+    characters: a.characters.map((c) => ({
+      name: c.name, race: c.race, class: c.class,
+      level: c.state?.progression?.level || 1,
+      gold: c.state?.inventory?.gold || 0,
+    })),
+  }));
+}
+
 // Fusiona SOLO las claves permitidas. Las banderas de misión vienen del
 // cliente; la vida y la posición las inyecta el propio servidor. El oro,
 // inventario, equipo, progresión y bendiciones se mutan solo por RPCs.

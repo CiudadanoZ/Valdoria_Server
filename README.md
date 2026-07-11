@@ -89,10 +89,11 @@ en el servidor (multi-objetivo con límite de ritmo):
 ### Niveles y talentos (tecla T)
 Matar criaturas, completar misiones, pescar y cocinar da **experiencia** (barra
 morada bajo la barra de habilidades). Cada nivel: **+5 de vida máxima y 1 punto
-de talento** (máx. nivel 15). El **árbol de talentos** de cada clase tiene
-pasivas por rangos (daño, armadura, vida, velocidad, curas), maestrías que
-reducen enfriamientos y, con 4 puntos gastados, el nodo que **desbloquea la
-cuarta habilidad** (tecla 4). Todo se guarda en el servidor.
+de talento** (máx. nivel 15). Cada clase tiene **dos ramas de talentos** (una
+ofensiva y otra defensiva/alternativa), con pasivas por rangos, maestrías que
+reducen enfriamientos y **dos habilidades definitivas** desbloqueables (teclas
+4 y 5) — una por rama. Con puntos limitados, eliges tu camino; el botón
+**Reasignar** (50 oro/nivel) permite rehacer tu build. Todo en el servidor.
 
 ### Pesca y cocina
 En la orilla del **Lago de los Ciervos** brillan ondas de pesca: haz clic y tu
@@ -117,6 +118,14 @@ de huesos y esencias y sus propios vigías con misiones:
 - **Cripta de la Colina** (llama de brasa, este): la **Cazadora Nyra** vigila
   desde su campamento — *Puntas de colmillo* (5 colmillos de lobo) y *El
   Centinela de la Colina* (abatir al **Centinela Óseo**, 200 de vida).
+
+### La Ciénaga de los Ahogados (noroeste)
+Un pantano de aguas muertas, árboles retorcidos y fuegos fatuos, más allá del
+bosque oeste. Enemigos nuevos: **Sanguijuelas Gigantes**, **Ahogados** (no-muertos
+del pantano), **Chamanes de la Ciénaga** y el jefe **Rey del Fango** (450 de
+vida, suelta el Cetro del Rey del Fango o el Anillo de la Ciénaga). En una isla
+vive la **Vidente Ysra**, que da una cadena de misiones: *Aguas turbias* (6
+Ahogados) → *El fango que susurra* (5 Flores de Ciénaga) → *El Rey del Fango*.
 
 ### Criaturas sincronizadas y grupos de caza
 La IA de las criaturas corre en el servidor (acechar, perseguir, atacar, volver
@@ -207,6 +216,12 @@ chat: `/say` (anuncio a todos los reinos), `/kick`, `/ban` y `/unban`, `/mute` y
 un **filtro de nombres ofensivos** al crear cuentas y personajes (ampliable con
 `BANNED_WORDS`).
 
+**Panel de administración web** en `/admin`: protegido por una clave
+(`ADMIN_KEY`; si no la defines, se genera una al azar y se imprime en la consola
+al arrancar). Muestra jugadores conectados, cuentas, clasificaciones y reportes
+de fallo, y permite expulsar, vetar/quitar veto y enviar anuncios — todo desde
+el navegador, sin entrar al juego.
+
 ### Cuenta y soporte
 Dentro del juego, el panel de Ajustes (`⚙`/`O`) permite **cambiar la contraseña**
 (verificando la actual) y **reportar un fallo**: el texto se guarda en el
@@ -222,6 +237,7 @@ server/server.js       Express + WebSocket. Autoritativo: cuentas y entrada al
                        participación, grupos de caza, posiciones y chat.
 server/db.js           Base de datos SQLite (data/valdoria.db): cuentas con
                        scrypt, personajes y su estado, baneos, filtro de nombres.
+server/admin.html      Panel de administración web (/admin).
 server/state.js        Estado autoritativo: bolsa, equipo, vida, armadura,
                        experiencia, talentos y sus cálculos.
 public/js/main.js      Punto de entrada: conexión, lobby->juego, escena, cámara,
@@ -293,15 +309,16 @@ TLS_CERT=/ruta/fullchain.pem TLS_KEY=/ruta/privkey.pem \
 ```
 
 Variables de entorno: `PORT`, `TLS_CERT`/`TLS_KEY` (activan WSS),
-`ADMIN_ACCOUNTS` (admins, separados por comas) y `BANNED_WORDS` (palabras
-vetadas extra en los nombres). Detrás de un proxy inverso o túnel (Cloudflare,
-nginx, Caddy) el TLS lo pone el proxy y basta `npm start` sin `TLS_*` — el
-cliente elige `wss://` solo al servirse por `https://`.
+`ADMIN_ACCOUNTS` (admins, separados por comas), `ADMIN_KEY` (clave del panel
+`/admin`) y `BANNED_WORDS` (palabras vetadas extra en los nombres). Detrás de un
+proxy inverso o túnel (Cloudflare, nginx, Caddy) el TLS lo pone el proxy y basta
+`npm start` sin `TLS_*` — el cliente elige `wss://` solo al servirse por
+`https://`. **Nota**: el panel `/admin` queda accesible por Internet en un
+despliegue con túnel; define un `ADMIN_KEY` robusto.
 
 ## Ideas para crecer
 
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
-- Segunda rama del árbol de talentos por clase.
 - Concurso de pesca semanal; recetas de cocina con varios ingredientes.
 - JcJ opcional en la llanura.
-- Panel de administración web para revisar reportes de fallo.
+- Comercio entre jugadores; casa de subastas.

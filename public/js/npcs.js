@@ -1,7 +1,7 @@
 // NPCs de la Ciudadela. El Maestre Aldric entrega las misiones de Bienvenida;
 // el resto son ciudadanos con los que hay que hablar en la misión 3.
 import { makeCharacter, makeNameSprite, makeQuestMarker } from './entities.js';
-import { aldricMarker, toranMarker, baldurMarker, nyraMarker } from './quests.js';
+import { aldricMarker, toranMarker, baldurMarker, nyraMarker, ysraMarker } from './quests.js';
 
 export const NPC_DATA = [
   {
@@ -67,6 +67,15 @@ export const NPC_DATA = [
     bodyColor: 0x7a5a3a,
     dialog: '', // sus diálogos los gestiona quests.js
   },
+  {
+    id: 'ysra',
+    name: 'Vidente Ysra',
+    title: 'Bruja de la Ciénaga',
+    pos: [-75, -41],
+    rot: Math.PI * 1.3,
+    bodyColor: 0x4a5a6a,
+    dialog: '', // sus diálogos los gestiona quests.js
+  },
 ];
 
 // Crea las mallas y devuelve la lista de NPCs con referencia a su mesh.
@@ -85,7 +94,7 @@ export function spawnNPCs(scene) {
 }
 
 // Actualiza los marcadores (!/?) sobre los NPC de misiones y los hace flotar.
-const MARKER_SOURCES = { aldric: aldricMarker, toran: toranMarker, baldur: baldurMarker, nyra: nyraMarker };
+const MARKER_SOURCES = { aldric: aldricMarker, toran: toranMarker, baldur: baldurMarker, nyra: nyraMarker, ysra: ysraMarker };
 
 export function updateQuestMarkers(npcs, time) {
   for (const [npcId, markerFn] of Object.entries(MARKER_SOURCES)) {

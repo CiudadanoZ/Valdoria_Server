@@ -16,6 +16,7 @@ import {
   loadDb, authenticate, publicCharacters, createCharacter,
   deleteCharacter, getCharacter, saveCharacterState, touch,
   isAdminAccount, banAccount, unbanAccount, changePassword, getLeaderboards,
+  getAccountsSummary,
 } from './db.js';
 import {
   ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
@@ -24,7 +25,8 @@ import {
   onBountyKill, claimBounty, respecCost, respecTalents,
 } from './state.js';
 import { ITEMS } from '../public/js/items.js';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import {
   CRAFT_RECIPES, COOK_RECIPES, COOK_XP, FISHING_XP, FISHING_TABLE,
   SHOP_BUY_LIST, MIRA_HEAL_PRICE, MIRA_BLESSING_PRICES, QUEST_REWARDS,
@@ -35,7 +37,78 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BUG_LOG = join(root, 'data', 'bug-reports.log');
 
 const app = express();
+app.use(express.json({ limit: '16kb' }));
 app.use(express.static(join(root, 'public')));
+
+// Clave del panel de administración web (/admin). Si no se define ADMIN_KEY,
+// se genera una al azar y se imprime al arrancar.
+const ADMIN_KEY = process.env.ADMIN_KEY || randomBytes(6).toString('hex');
+const BUG_LOG_PATH = join(root, 'data', 'bug-reports.log');
+
+// Página del panel (no está en public/, se sirve explícitamente)
+app.get('/admin', (req, res) => res.sendFile(join(root, 'server', 'admin.html')));
+
+function checkAdminKey(req, res) {
+  const key = req.get('x-admin-key') || req.query.key;
+  if (key !== ADMIN_KEY) { res.status(401).json({ error: 'Clave incorrecta' }); return false; }
+  return true;
+}
+
+// Estado general para el panel
+app.get('/admin/api/overview', (req, res) => {
+  if (!checkAdminKey(req, res)) return;
+  const online = [];
+  for (const [id, p] of players) {
+    if (!p.realm) continue;
+    online.push({
+      id, name: p.name, account: p.account?.name, realm: p.realm,
+      admin: !!p.admin, muted: !!p.muted,
+      x: +p.x.toFixed(0), z: +p.z.toFixed(0), hp: Math.round(p.hp || 0),
+    });
+  }
+  let bugs = [];
+  try {
+    if (existsSync(BUG_LOG_PATH)) {
+      bugs = readFileSync(BUG_LOG_PATH, 'utf8').trim().split('\n').filter(Boolean)
+        .slice(-50).reverse().map((l) => { try { return JSON.parse(l); } catch { return { text: l }; } });
+    }
+  } catch { /* nada */ }
+  res.json({
+    online,
+    accounts: getAccountsSummary(),
+    bugs,
+    leaderboards: getLeaderboards(10),
+    serverTime: new Date().toISOString(),
+  });
+});
+
+// Acciones del panel: kick, ban, unban, announce
+app.post('/admin/api/command', (req, res) => {
+  if (!checkAdminKey(req, res)) return;
+  const { action, target, text } = req.body || {};
+  switch (action) {
+    case 'announce': {
+      const msg = String(text || '').slice(0, 200).trim();
+      if (!msg) return res.json({ ok: false, message: 'Mensaje vacío' });
+      doAnnounce(msg, 'panel-web');
+      return res.json({ ok: true, message: 'Anuncio enviado' });
+    }
+    case 'kick': {
+      const r = doKick(String(target || ''), 'panel-web');
+      return res.json({ ok: r.ok, message: r.ok ? `Expulsado ${r.name}` : r.reason });
+    }
+    case 'ban': {
+      const r = doBan(String(target || ''), 'panel-web');
+      return res.json({ ok: r.ok, message: r.ok ? `Vetada la cuenta de ${r.name}` : r.reason });
+    }
+    case 'unban': {
+      const ok = unbanAccount(String(target || ''));
+      return res.json({ ok, message: ok ? `Veto levantado a "${target}"` : `"${target}" no estaba vetada` });
+    }
+    default:
+      return res.json({ ok: false, message: 'Acción desconocida' });
+  }
+});
 
 // Con TLS_CERT y TLS_KEY definidos, el servidor sirve HTTPS y el WebSocket pasa
 // a ser WSS automáticamente (necesario para jugar por Internet).
@@ -213,29 +286,17 @@ function handleCommand(p, text) {
   switch (cmd) {
     case 'say': {
       if (!arg) { sysTo(p, 'Uso: /say <mensaje>'); return; }
-      broadcastAll({ type: 'announce', text: arg });
-      console.log(`[admin] ${p.name}: anuncio "${arg}"`);
+      doAnnounce(arg, p.name);
       return;
     }
     case 'kick': {
-      const [tid, target] = findPlayerByName(arg);
-      if (!target) { sysTo(p, `No encuentro a "${arg}" en el mundo.`); return; }
-      sysTo(p, `Has expulsado a ${target.name}.`);
-      broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${target.name} ha sido expulsado por un administrador.` });
-      send(target.ws, { type: 'kicked', reason: 'Un administrador te ha expulsado.' });
-      setTimeout(() => target.ws.close(), 200);
-      console.log(`[admin] ${p.name} expulsó a ${target.name}`);
+      const r = doKick(arg, p.name);
+      sysTo(p, r.ok ? `Has expulsado a ${r.name}.` : r.reason);
       return;
     }
     case 'ban': {
-      const [tid, target] = findPlayerByName(arg);
-      if (!target) { sysTo(p, `No encuentro a "${arg}" en el mundo.`); return; }
-      banAccount(target.account.name);
-      sysTo(p, `Has vetado la cuenta de ${target.name} (${target.account.name}).`);
-      broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${target.name} ha sido vetado del reino.` });
-      send(target.ws, { type: 'kicked', reason: 'Tu cuenta ha sido vetada del reino.' });
-      setTimeout(() => target.ws.close(), 200);
-      console.log(`[admin] ${p.name} vetó la cuenta ${target.account.name}`);
+      const r = doBan(arg, p.name);
+      sysTo(p, r.ok ? `Has vetado la cuenta de ${r.name} (${r.account}).` : r.reason);
       return;
     }
     case 'unban': {
@@ -262,6 +323,33 @@ function handleCommand(p, text) {
     default:
       sysTo(p, 'Comando desconocido. Escribe /help.');
   }
+}
+
+// Acciones de administración reutilizables (chat y panel web)
+function doAnnounce(text, by = 'panel') {
+  broadcastAll({ type: 'announce', text });
+  console.log(`[admin] ${by}: anuncio "${text}"`);
+}
+
+function doKick(name, by = 'panel') {
+  const [, target] = findPlayerByName(name);
+  if (!target) return { ok: false, reason: `No encuentro a "${name}" en el mundo.` };
+  broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${target.name} ha sido expulsado por un administrador.` });
+  send(target.ws, { type: 'kicked', reason: 'Un administrador te ha expulsado.' });
+  setTimeout(() => target.ws.close(), 200);
+  console.log(`[admin] ${by} expulsó a ${target.name}`);
+  return { ok: true, name: target.name };
+}
+
+function doBan(name, by = 'panel') {
+  const [, target] = findPlayerByName(name);
+  if (!target) return { ok: false, reason: `No encuentro a "${name}" en el mundo.` };
+  banAccount(target.account.name);
+  broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${target.name} ha sido vetado del reino.` });
+  send(target.ws, { type: 'kicked', reason: 'Tu cuenta ha sido vetada del reino.' });
+  setTimeout(() => target.ws.close(), 200);
+  console.log(`[admin] ${by} vetó la cuenta ${target.account.name}`);
+  return { ok: true, name: target.name, account: target.account.name };
 }
 
 function realmPopulation() {
@@ -331,6 +419,11 @@ const MOB_TYPES = {
   ciervo:  { name: 'Ciervo del Lago',  hp: 35,  dmgMin: 1,  dmgMax: 3,  speed: 7.5, aggro: 0,  range: 1.6, cd: 1.5, respawn: 25,  gold: [1, 3],   xp: 8,   drops: [['carne_venado', 0.9]] },
   oso:     { name: 'Oso Pardo',        hp: 120, dmgMin: 10, dmgMax: 16, speed: 5.0, aggro: 8,  range: 2.2, cd: 1.5, respawn: 60,  gold: [20, 35], xp: 40,  drops: [['piel_oso', 0.8], ['carne_venado', 0.6]] },
   senor_cripta: { name: 'Señor de la Cripta', hp: 400, dmgMin: 14, dmgMax: 22, speed: 5.2, aggro: 14, range: 2.6, cd: 1.2, respawn: 120, gold: [150, 200], xp: 200, drops: [['reliquia_cripta', 1], ['esencia_espectral', 1], ['hueso_antiguo', 1], ['corona_cripta', 0.25], ['guadana_espectral', 0.2]] },
+  // Ciénaga de los Ahogados (noroeste)
+  sanguijuela: { name: 'Sanguijuela Gigante', hp: 28, dmgMin: 4, dmgMax: 8, speed: 6.2, aggro: 8, range: 1.7, cd: 1.2, respawn: 20, gold: [3, 8], xp: 14, drops: [['limo_curativo', 0.5], ['flor_cienaga', 0.35]] },
+  ahogado: { name: 'Ahogado', hp: 90, dmgMin: 9, dmgMax: 15, speed: 4.2, aggro: 9, range: 2.0, cd: 1.5, respawn: 35, gold: [12, 22], xp: 34, drops: [['limo_curativo', 0.4], ['flor_cienaga', 0.3]] },
+  chaman_cienaga: { name: 'Chamán de la Ciénaga', hp: 110, dmgMin: 11, dmgMax: 17, speed: 4.6, aggro: 11, range: 2.1, cd: 1.4, respawn: 45, gold: [18, 30], xp: 48, drops: [['flor_cienaga', 0.7], ['esencia_espectral', 0.3]] },
+  rey_fango: { name: 'Rey del Fango', hp: 450, dmgMin: 15, dmgMax: 24, speed: 4.4, aggro: 14, range: 2.8, cd: 1.3, respawn: 130, gold: [170, 230], xp: 230, drops: [['flor_cienaga', 1], ['limo_curativo', 1], ['cetro_fango', 0.22], ['anillo_cienaga', 0.18]] },
 };
 
 const SPAWNS = [
@@ -355,6 +448,11 @@ const SPAWNS = [
   ['oso', 0, -82], ['oso', -24, -94], ['oso', 28, -90],
   ['lobo', 88, 8], ['lobo', 82, -12],
   ['jabali', -85, 62],
+  // Ciénaga de los Ahogados (noroeste, centro ~-95,-55)
+  ['sanguijuela', -82, -42], ['sanguijuela', -90, -38], ['sanguijuela', -100, -48], ['sanguijuela', -78, -55], ['sanguijuela', -108, -62],
+  ['ahogado', -88, -50], ['ahogado', -98, -58], ['ahogado', -85, -64], ['ahogado', -104, -50], ['ahogado', -95, -68],
+  ['chaman_cienaga', -100, -70], ['chaman_cienaga', -110, -55],
+  ['rey_fango', -102, -78],
 ];
 
 const CITADEL_SAFE_RADIUS = 45;
@@ -834,6 +932,7 @@ wss.on('connection', (ws) => {
         if (!st) return;
         const BUFF_SKILLS = {
           grito: { armor: 5, dur: 8, cls: 'guerrero' },
+          bastion: { armor: 10, dur: 8, cls: 'guerrero' },
           escudo_fe: { armor: 6, dur: 6, cls: 'sacerdote' },
         };
         const buff = BUFF_SKILLS[msg.skillId];
@@ -1160,4 +1259,5 @@ httpServer.listen(PORT, () => {
   const proto = useTls ? 'https' : 'http';
   console.log(`Ciudadela de Valdoria en marcha: ${proto}://localhost:${PORT} ${useTls ? '(TLS/WSS activado)' : '(sin TLS: usa ws://, solo para red local)'}`);
   console.log(`Reinos: ${REALMS.map((r) => r.name).join(', ')} — ${SPAWNS.length} criaturas por reino (servidor autoritativo, vida incluida)`);
+  console.log(`Panel de administración: ${proto}://localhost:${PORT}/admin  —  CLAVE: ${ADMIN_KEY}`);
 });

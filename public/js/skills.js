@@ -13,6 +13,12 @@ export const SKILLS = {
       type: 'target', range: 3.5, dmgMul: 2.5, fx: 0xffaa33,
     },
     {
+      id: 'bastion', name: 'Bastión', icon: '🏰', cd: 16,
+      desc: '+10 de armadura durante 8 s.',
+      type: 'buff', buff: { armor: 10, dur: 8 }, fx: 0xffe0a0,
+      unlockable: true,
+    },
+    {
       id: 'torbellino', name: 'Torbellino', icon: '🌀', cd: 10,
       desc: 'Giras el acero: 150% de daño a los enemigos a 5 m.',
       type: 'aoe', radius: 5, dmgMul: 1.5, fx: 0xffcc55,
@@ -51,6 +57,12 @@ export const SKILLS = {
       type: 'multi', range: 15, hits: 3, dmgMul: 0.7, projectile: true, fx: 0xc8ff8a,
       unlockable: true,
     },
+    {
+      id: 'andanada', name: 'Andanada', icon: '☄️', cd: 14,
+      desc: 'Lluvia de flechas: 160% de daño a los enemigos a 7 m.',
+      type: 'aoe', radius: 7, dmgMul: 1.6, fx: 0xc8ff8a,
+      unlockable: true,
+    },
   ],
   sacerdote: [
     {
@@ -72,6 +84,12 @@ export const SKILLS = {
       id: 'escudo_fe', name: 'Escudo de Fe', icon: '🔆', cd: 18,
       desc: '+6 de armadura durante 6 s.',
       type: 'buff', buff: { armor: 6, dur: 6 }, fx: 0xfff0b0,
+      unlockable: true,
+    },
+    {
+      id: 'juicio', name: 'Juicio', icon: '⚡', cd: 12,
+      desc: 'Rayo de luz sagrada a 12 m: 300% de daño.',
+      type: 'target', range: 12, dmgMul: 3, projectile: true, fx: 0xfff0b0,
       unlockable: true,
     },
   ],

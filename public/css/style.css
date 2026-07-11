@@ -338,6 +338,13 @@ canvas { display: block; }
 .bounty-progress { color: #a89877; font-size: 0.85em; }
 .bounty-progress.done { color: #7fb069; }
 
+.talent-branch {
+  color: var(--gold-bright); font-size: 0.95em; font-weight: bold;
+  letter-spacing: 1px; margin: 12px 0 4px; padding-bottom: 4px;
+  border-bottom: 1px solid #3a2d18;
+}
+.talent-branch:first-child { margin-top: 0; }
+
 /* Reasignar talentos */
 .talent-respec {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

@@ -12,6 +12,9 @@ export const BOUNTY_POOL = [
   { id: 'esqueletos', mob: 'esqueleto',     need: 6,  gold: 70,  xp: 110, title: 'Guardia inquieta', desc: 'Los esqueletos guardianes no descansan.' },
   { id: 'alfa',       mob: 'alfa',          need: 1,  gold: 80,  xp: 120, title: 'Cabeza de la manada', desc: 'El Alfa Sombrío ha vuelto a merodear.' },
   { id: 'guardian',   mob: 'guardian_oseo', need: 1,  gold: 90,  xp: 130, title: 'Centinela del bosque', desc: 'El Guardián Óseo bloquea la Cripta del Bosque.' },
+  { id: 'ahogados',   mob: 'ahogado',       need: 5,  gold: 55,  xp: 85,  title: 'Los que el agua devolvió', desc: 'Los Ahogados vagan por la ciénaga del noroeste.' },
+  { id: 'sanguijuelas', mob: 'sanguijuela', need: 8,  gold: 45,  xp: 60,  title: 'Sanguijuelas', desc: 'Las sanguijuelas infestan las charcas del pantano.' },
+  { id: 'chamanes',   mob: 'chaman_cienaga', need: 2, gold: 70,  xp: 105, title: 'Brujos del limo', desc: 'Los chamanes alimentan la podredumbre de la ciénaga.' },
 ];
 
 export const BOUNTY_COUNT = 3; // encargos activos por día

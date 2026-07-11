@@ -584,7 +584,7 @@ function onKeyDown(e) {
     return;
   }
   const k = e.key.toLowerCase();
-  if (k === '1' || k === '2' || k === '3' || k === '4') { castSkill(Number(k) - 1); return; }
+  if (k >= '1' && k <= '5') { castSkill(Number(k) - 1); return; }
   if (k === 'i') ui.togglePanel('inventory-panel');
   else if (k === 'm') toggleMap();
   else if (k === 't') toggleTalents();

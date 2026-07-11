@@ -46,6 +46,10 @@ export const QUEST_REWARDS = {
   b2: { gold: 90, items: { esencia_espectral: 2, pocion_vida_mayor: 1 }, xp: 180, kills: { guardian_oseo: 1 } },
   c1: { gold: 40, items: { pocion_vida: 2 }, xp: 100, removes: { colmillo_lobo: 5 } },
   c2: { gold: 90, items: { pocion_vida_mayor: 1, piel_oso: 2 }, xp: 180, kills: { centinela_oseo: 1 } },
+  // Ciénaga de los Ahogados (Vidente Ysra)
+  s1: { gold: 60, items: { limo_curativo: 3 }, xp: 100, kills: { ahogado: 6 } },
+  s2: { gold: 80, items: { pocion_vida_mayor: 1 }, xp: 150, removes: { flor_cienaga: 5 } },
+  s3: { gold: 150, items: { anillo_cienaga: 1, pocion_vida_mayor: 2 }, xp: 260, kills: { rey_fango: 1 } },
 };
 
 // Pesca: capturas y probabilidades acumuladas

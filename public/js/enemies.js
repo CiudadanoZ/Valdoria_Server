@@ -16,6 +16,11 @@ export const MOB_INFO = {
   senor_cripta: { name: 'Señor de la Cripta', maxHp: 400, kind: 'skeleton', color: 0x9a94a8, scale: 1.5, redEyes: true, crown: true, label: true },
   ciervo:       { name: 'Ciervo del Lago',    maxHp: 35,  kind: 'deer',     color: 0x9a7350, scale: 1 },
   oso:          { name: 'Oso Pardo',          maxHp: 120, kind: 'bear',     color: 0x5a4632, scale: 1.35 },
+  // Ciénaga de los Ahogados
+  sanguijuela:  { name: 'Sanguijuela Gigante', maxHp: 28, kind: 'blob',     color: 0x5a3a4a, scale: 0.8 },
+  ahogado:      { name: 'Ahogado',            maxHp: 90,  kind: 'drowned',  color: 0x5a7a5a, scale: 1 },
+  chaman_cienaga: { name: 'Chamán de la Ciénaga', maxHp: 110, kind: 'drowned', color: 0x6a5a8a, scale: 1.05, staff: true },
+  rey_fango:    { name: 'Rey del Fango',      maxHp: 450, kind: 'blob',     color: 0x4a5a38, scale: 2.4, redEyes: true, crown: true, label: true },
 };
 
 // ---- Malla cuadrúpeda (lobo / jabalí / rata) ----
@@ -188,6 +193,91 @@ function makeSkeleton(info) {
   return g;
 }
 
+// ---- Masa gelatinosa (sanguijuela pequeña / Rey del Fango grande) ----
+function makeBlob(info) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: info.color, roughness: 0.4, metalness: 0.1 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 10), bodyMat);
+  body.position.y = 0.6;
+  body.scale.set(1.1, 0.8, 1.3);
+  body.castShadow = true;
+  body.name = 'blobBody';
+  g.add(body);
+  // Bultos supurantes
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const lump = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), bodyMat);
+    lump.position.set(Math.cos(a) * 0.55, 0.5 + Math.random() * 0.3, Math.sin(a) * 0.7);
+    g.add(lump);
+  }
+
+  if (info.crown) {
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.4, 8, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0x8a7020, metalness: 0.7, roughness: 0.3 }));
+    crown.position.y = 1.4;
+    g.add(crown);
+  }
+  if (info.redEyes) {
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffe000, emissive: 0xffb000, emissiveIntensity: 2 });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), eyeMat);
+      eye.position.set(side * 0.22, 0.75, 0.95);
+      g.add(eye);
+    }
+  }
+  return g;
+}
+
+// ---- Ahogado / Chamán: humanoide encorvado de la ciénaga ----
+function makeDrowned(info) {
+  const g = new THREE.Group();
+  const skinMat = new THREE.MeshStandardMaterial({ color: info.color, roughness: 0.8 });
+
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 1.0, 8), skinMat);
+  torso.position.y = 1.0;
+  torso.rotation.x = 0.2; // encorvado
+  torso.castShadow = true;
+  g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), skinMat);
+  head.position.set(0, 1.7, 0.15);
+  head.castShadow = true;
+  g.add(head);
+  // Ojos vacíos
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x9affd0, emissive: 0x3aaa70, emissiveIntensity: 1.5 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
+    eye.position.set(side * 0.11, 1.72, 0.38);
+    g.add(eye);
+  }
+  // Brazos colgantes
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.85, 6), skinMat);
+    arm.position.set(side * 0.42, 1.05, 0.1);
+    arm.rotation.z = side * 0.25;
+    arm.name = side === -1 ? 'armL' : 'armR';
+    g.add(arm);
+  }
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.1, 0.7, 6), skinMat);
+    leg.position.set(side * 0.16, 0.35, 0);
+    leg.name = side === -1 ? 'legL' : 'legR';
+    g.add(leg);
+  }
+  // Bastón del chamán con una luz
+  if (info.staff) {
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x3a2d1f }));
+    staff.position.set(0.55, 0.9, 0.2);
+    g.add(staff);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xb090e0, emissive: 0x7050b0, emissiveIntensity: 1.5 }));
+    orb.position.set(0.55, 1.85, 0.2);
+    g.add(orb);
+  }
+  return g;
+}
+
 // ---- Barra de vida flotante ----
 function makeHPBar() {
   const canvas = document.createElement('canvas');
@@ -261,7 +351,10 @@ export class Mobs {
   create({ id, type, x, z, hp, dead }) {
     const info = MOB_INFO[type];
     if (!info || this.map.has(id)) return;
-    const mesh = info.kind === 'skeleton' ? makeSkeleton(info) : makeBeast(info);
+    const mesh = info.kind === 'skeleton' ? makeSkeleton(info)
+      : info.kind === 'blob' ? makeBlob(info)
+      : info.kind === 'drowned' ? makeDrowned(info)
+      : makeBeast(info);
     mesh.scale.setScalar(info.scale);
     mesh.position.set(x, 0, z);
     if (info.label) {

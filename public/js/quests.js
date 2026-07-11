@@ -54,6 +54,12 @@ export const questState = {
   rataKills: 0,          // para b1
   guardianDead: false,   // para b2
   centinelaDead: false,  // para c2
+  // Ciénaga de los Ahogados: Vidente Ysra
+  s1: 'inactive',
+  s2: 'inactive',
+  s3: 'inactive',
+  ahogadoKills: 0,       // para s1
+  reyFangoDead: false,   // para s3
 };
 
 let onChanged = null;
@@ -69,6 +75,8 @@ const SKELETONS_NEEDED = 6;
 const ESSENCES_NEEDED = 4;
 const RATS_NEEDED = 4;
 const FANGS_NEEDED = 5;
+const DROWNED_NEEDED = 6;
+const FLOWERS_NEEDED = 5;
 const CITIZENS = ['bramm', 'lyra', 'toran'];
 const CITIZEN_NAMES = { bramm: 'Bramm el Herrero', lyra: 'Lyra la Mercader', toran: 'Guardia Toran' };
 
@@ -102,6 +110,16 @@ export function nyraMarker() {
   if (questState.c1 === 'active' && countItem('colmillo_lobo') >= FANGS_NEEDED) return '?';
   if (questState.c1 === 'done' && questState.c2 === 'inactive') return '!';
   if (questState.c2 === 'active' && questState.centinelaDead) return '?';
+  return null;
+}
+
+export function ysraMarker() {
+  if (questState.s1 === 'inactive') return '!';
+  if (questState.s1 === 'active' && questState.ahogadoKills >= DROWNED_NEEDED) return '?';
+  if (questState.s1 === 'done' && questState.s2 === 'inactive') return '!';
+  if (questState.s2 === 'active' && countItem('flor_cienaga') >= FLOWERS_NEEDED) return '?';
+  if (questState.s2 === 'done' && questState.s3 === 'inactive') return '!';
+  if (questState.s3 === 'active' && questState.reyFangoDead) return '?';
   return null;
 }
 
@@ -161,6 +179,19 @@ export function onEnemyKilled(type) {
     toast('¡El Centinela Óseo ha caído! Vuelve con la Cazadora Nyra', 'quest');
     save();
   }
+  if (type === 'ahogado' && questState.s1 === 'active' && questState.ahogadoKills < DROWNED_NEEDED) {
+    questState.ahogadoKills++;
+    toast(`Ahogado abatido (${questState.ahogadoKills}/${DROWNED_NEEDED})`);
+    if (questState.ahogadoKills >= DROWNED_NEEDED) {
+      toast('Ahogados abatidos — vuelve con la Vidente Ysra', 'quest');
+    }
+    save();
+  }
+  if (type === 'rey_fango' && questState.s3 === 'active' && !questState.reyFangoDead) {
+    questState.reyFangoDead = true;
+    toast('¡El Rey del Fango ha caído! Vuelve con la Vidente Ysra', 'quest');
+    save();
+  }
   if (type === 'lobo' && questState.t1 === 'active' && questState.wolfKills < WOLVES_NEEDED) {
     questState.wolfKills++;
     toast(`Lobo Gris abatido (${questState.wolfKills}/${WOLVES_NEEDED})`);
@@ -198,6 +229,11 @@ export function onLootChanged() {
       toast('Colmillos reunidos — vuelve con la Cazadora Nyra', 'quest');
     }
   }
+  if (questState.s2 === 'active') {
+    if (countItem('flor_cienaga') === FLOWERS_NEEDED) {
+      toast('Flores reunidas — vuelve con la Vidente Ysra', 'quest');
+    }
+  }
   renderTracker();
 }
 
@@ -230,6 +266,7 @@ export function getDialog(npc) {
   if (npc.id === 'toran' && questState.q3 === 'done') return toranDialog();
   if (npc.id === 'baldur') return baldurDialog();
   if (npc.id === 'nyra') return nyraDialog();
+  if (npc.id === 'ysra') return ysraDialog();
   meetCitizen(npc.id);
   if (npc.id === 'mira' && miraServices) return miraDialog(npc);
   const actions = [];
@@ -748,6 +785,117 @@ function nyraDialog() {
   };
 }
 
+function ysraDialog() {
+  const close = { label: 'Que las aguas te guarden', fn: hideDialog };
+
+  if (questState.s1 === 'inactive') {
+    return {
+      text: 'Te esperaba, forastero... las aguas me mostraron tu rostro. Soy Ysra, y esta ciénaga fue mi hogar antes de que los muertos despertaran bajo el fango. Los llaman Ahogados: hombres que el pantano se tragó y devolvió sin alma. Ayúdame a mermarlos y te enseñaré lo que las aguas susurran.',
+      actions: [
+        {
+          label: '⚔ Aceptar: Aguas turbias (abatir 6 Ahogados)',
+          fn: () => {
+            questState.s1 = 'active';
+            questState.ahogadoKills = 0;
+            toast('Nueva misión: Aguas turbias', 'quest');
+            save(); renderTracker();
+            showDialog('Vidente Ysra',
+              'Los verás vagar entre las charcas del noroeste, arrastrando los pies. Seis bastarán para que el pantano recuerde el miedo. Ve con cuidado: no vienen solos.',
+              [close]);
+          },
+        },
+        close,
+      ],
+    };
+  }
+
+  if (questState.s1 === 'active') {
+    if (questState.ahogadoKills >= DROWNED_NEEDED) {
+      return {
+        text: 'Seis menos, y las aguas respiran más tranquilas. Toma esto: un lodo que cura, secreto de las brujas de ciénaga. Lo necesitarás para lo que viene.',
+        actions: [
+          {
+            label: '⚔ Cobrar recompensa (60 oro, 3 Limos Curativos)',
+            fn: () => requestClaim('s1', () => {
+              questState.s1 = 'done';
+              questState.s2 = 'active';
+              toast('Misión completada: Aguas turbias', 'quest');
+              toast('Nueva misión: El fango que susurra', 'quest');
+              save(); renderTracker();
+              showDialog('Vidente Ysra',
+                'Ahora necesito Flores de Ciénaga: pálidas, crecen sobre el agua muerta y las sueltan las criaturas al caer. Con cinco podré ver el corazón de este mal. Búscalas entre sanguijuelas y chamanes.',
+                [close]);
+            }),
+          },
+          close,
+        ],
+      };
+    }
+    return {
+      text: `¿Cuántos Ahogados quedan en pie? (${questState.ahogadoKills}/${DROWNED_NEEDED}) Búscalos entre las charcas del noroeste.`,
+      actions: [close],
+    };
+  }
+
+  if (questState.s2 === 'active') {
+    if (countItem('flor_cienaga') >= FLOWERS_NEEDED) {
+      return {
+        text: 'Las flores... sí. Las aguas me hablan a través de ellas. Y lo que dicen hiela la sangre: un Rey del Fango se alza en el fondo del pantano, una montaña de limo y huesos que devora todo lo que se ahoga. Él es la raíz de la podredumbre.',
+        actions: [
+          {
+            label: '⚔ Entregar 5 Flores de Ciénaga (80 oro, Poción Mayor)',
+            fn: () => requestClaim('s2', () => {
+              questState.s2 = 'done';
+              questState.s3 = 'active';
+              toast('Misión completada: El fango que susurra', 'quest');
+              toast('Nueva misión: El Rey del Fango', 'quest');
+              save(); renderTracker();
+              showDialog('Vidente Ysra',
+                'El Rey del Fango aguarda en el corazón de la ciénaga, al sur de aquí. Es enorme y no conoce la piedad. Ve con la vida llena y el mejor acero... y no dejes que sus fauces te arrastren al fondo.',
+                [close]);
+            }),
+          },
+          close,
+        ],
+      };
+    }
+    return {
+      text: `Necesito 5 Flores de Ciénaga y llevas ${countItem('flor_cienaga')}. Las criaturas del pantano las sueltan al morir.`,
+      actions: [close],
+    };
+  }
+
+  if (questState.s3 === 'active') {
+    if (questState.reyFangoDead) {
+      return {
+        text: '¡Lo has hecho! Siento cómo el fango se aquieta, cómo los ahogados por fin descansan. La ciénaga tardará años en volver a susurrar maldad. Has devuelto la paz a mi hogar, forastero, y eso una bruja no lo olvida.',
+        actions: [
+          {
+            label: '✦ Recompensa final (150 oro, Anillo de la Ciénaga, 2 Pociones Mayores)',
+            fn: () => requestClaim('s3', () => {
+              questState.s3 = 'done';
+              toast('Misión completada: El Rey del Fango', 'quest');
+              toast('✦ ¡Has purgado la Ciénaga de los Ahogados! ✦', 'quest');
+              save(); renderTracker();
+              hideDialog();
+            }),
+          },
+          close,
+        ],
+      };
+    }
+    return {
+      text: 'El Rey del Fango sigue en pie, al sur de la ciénaga. Mientras respire limo, los Ahogados volverán una y otra vez.',
+      actions: [close],
+    };
+  }
+
+  return {
+    text: 'La ciénaga descansa gracias a ti. Vuelve cuando quieras: las aguas siempre tienen algo que susurrar a quien sabe escuchar. Y si necesitas Limo Curativo, las sanguijuelas aún lo llevan dentro.',
+    actions: [close],
+  };
+}
+
 // ---- Rastreador en pantalla ----
 export function renderTracker() {
   const list = document.getElementById('quest-list');
@@ -840,6 +988,23 @@ export function renderTracker() {
     if (questState.centinelaDead) objs.push({ text: 'Vuelve con la Cazadora Nyra', done: false });
     entries.push({ title: 'El Centinela de la Colina', objs });
   }
+  if (questState.s1 === 'active') {
+    const done = questState.ahogadoKills >= DROWNED_NEEDED;
+    const objs = [{ text: `Abate Ahogados (${questState.ahogadoKills}/${DROWNED_NEEDED})`, done }];
+    if (done) objs.push({ text: 'Vuelve con la Vidente Ysra', done: false });
+    entries.push({ title: 'Aguas turbias', objs });
+  }
+  if (questState.s2 === 'active') {
+    const n = Math.min(FLOWERS_NEEDED, countItem('flor_cienaga'));
+    const objs = [{ text: `Reúne Flores de Ciénaga (${n}/${FLOWERS_NEEDED})`, done: n >= FLOWERS_NEEDED }];
+    if (n >= FLOWERS_NEEDED) objs.push({ text: 'Vuelve con la Vidente Ysra', done: false });
+    entries.push({ title: 'El fango que susurra', objs });
+  }
+  if (questState.s3 === 'active') {
+    const objs = [{ text: 'Abate al Rey del Fango (sur de la ciénaga)', done: questState.reyFangoDead }];
+    if (questState.reyFangoDead) objs.push({ text: 'Vuelve con la Vidente Ysra', done: false });
+    entries.push({ title: 'El Rey del Fango', objs });
+  }
 
   list.innerHTML = entries.map((e) =>
     `<div class="quest-entry"><div class="q-title">✦ ${e.title}</div>` +
@@ -853,9 +1018,11 @@ function save() { onChanged?.(); }
 // ---- Guardado / carga ----
 export function serializeQuests() {
   const { q1, q2, q3, herbs, met, t1, t2, t3, wolfKills, alfaDead, a1, a2, a3, skeletonKills,
-    b1, b2, c1, c2, rataKills, guardianDead, centinelaDead } = questState;
+    b1, b2, c1, c2, rataKills, guardianDead, centinelaDead,
+    s1, s2, s3, ahogadoKills, reyFangoDead } = questState;
   return { q1, q2, q3, herbs, met, t1, t2, t3, wolfKills, alfaDead, a1, a2, a3, skeletonKills,
-    b1, b2, c1, c2, rataKills, guardianDead, centinelaDead };
+    b1, b2, c1, c2, rataKills, guardianDead, centinelaDead,
+    s1, s2, s3, ahogadoKills, reyFangoDead };
 }
 
 export function loadQuests(data) {

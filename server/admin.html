@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ciudadela de Valdoria — Administración</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #14100a; color: #d8c9a3; padding: 18px; }
+    h1 { color: #ffd97a; font-size: 1.4em; margin-bottom: 4px; }
+    .sub { color: #8a7a5a; font-size: 0.85em; margin-bottom: 16px; }
+    .login { max-width: 380px; margin: 60px auto; background: #1c160e; border: 1px solid #6b5228; border-radius: 8px; padding: 28px; text-align: center; }
+    .login input { width: 100%; padding: 10px; margin: 10px 0; background: #0d0906; color: #d8c9a3; border: 1px solid #6b5228; border-radius: 4px; }
+    button { background: linear-gradient(180deg, #7a5c28, #4a3618); color: #ffd97a; border: 1px solid #c9a55c; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-family: inherit; }
+    button:hover { box-shadow: 0 0 10px rgba(201,165,92,0.4); }
+    button.danger { border-color: #c05040; color: #ff9080; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background: #1c160e; border: 1px solid #3a2d18; border-radius: 8px; padding: 14px; }
+    .card h2 { color: #c9a55c; font-size: 1em; margin-bottom: 10px; border-bottom: 1px solid #3a2d18; padding-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #2a2118; }
+    th { color: #8a7a5a; font-weight: normal; }
+    .tag { font-size: 0.75em; padding: 1px 6px; border-radius: 8px; background: #3a2d18; color: #c9a55c; }
+    .tag.ban { background: #4a1a12; color: #ff9080; }
+    .tag.adm { background: #2a3a4a; color: #8fd4ff; }
+    .row-actions button { padding: 2px 8px; font-size: 0.8em; margin-left: 4px; }
+    .announce { display: flex; gap: 8px; margin-bottom: 12px; }
+    .announce input { flex: 1; padding: 8px; background: #0d0906; color: #d8c9a3; border: 1px solid #6b5228; border-radius: 4px; }
+    .bug { border-bottom: 1px solid #2a2118; padding: 6px 0; font-size: 0.82em; }
+    .bug .meta { color: #7a6a4d; font-size: 0.9em; }
+    .hidden { display: none; }
+    .msg { color: #7fb069; font-size: 0.85em; min-height: 1.2em; margin-top: 8px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .full { grid-column: 1 / -1; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div id="login" class="login">
+    <h1>Panel de Administración</h1>
+    <p class="sub">Ciudadela de Valdoria</p>
+    <input id="key" type="password" placeholder="Clave de administración" />
+    <button onclick="doLogin()">Entrar</button>
+    <p id="login-msg" class="msg"></p>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="toolbar">
+      <div>
+        <h1>Panel de Administración</h1>
+        <p class="sub" id="status"></p>
+      </div>
+      <div>
+        <label style="font-size:0.8em;color:#8a7a5a"><input type="checkbox" id="auto" checked /> Auto-actualizar</label>
+        <button onclick="refresh()">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="card full">
+      <h2>📢 Anuncio a todos los reinos</h2>
+      <div class="announce">
+        <input id="announce-text" placeholder="Escribe un mensaje para todos los jugadores..." />
+        <button onclick="sendAnnounce()">Enviar</button>
+      </div>
+      <p id="cmd-msg" class="msg"></p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>🟢 Jugadores conectados (<span id="online-count">0</span>)</h2>
+        <table><thead><tr><th>Héroe</th><th>Cuenta</th><th>Reino</th><th>Vida</th><th></th></tr></thead>
+          <tbody id="online-body"></tbody></table>
+      </div>
+
+      <div class="card">
+        <h2>🏆 Clasificación por nivel</h2>
+        <table><thead><tr><th>#</th><th>Héroe</th><th>Nivel</th></tr></thead>
+          <tbody id="lb-body"></tbody></table>
+      </div>
+
+      <div class="card full">
+        <h2>👥 Cuentas (<span id="acc-count">0</span>)</h2>
+        <table><thead><tr><th>Cuenta</th><th>Personajes</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="acc-body"></tbody></table>
+      </div>
+
+      <div class="card full">
+        <h2>🐛 Reportes de fallo recientes</h2>
+        <div id="bugs"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminKey = '';
+    let timer = null;
+
+    function doLogin() {
+      adminKey = document.getElementById('key').value.trim();
+      refresh(true);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+      });
+      if (res.status === 401) throw new Error('Clave incorrecta');
+      return res.json();
+    }
+
+    async function refresh(fromLogin = false) {
+      try {
+        const d = await api('/admin/api/overview');
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('panel').classList.remove('hidden');
+        render(d);
+        if (!timer) tick();
+      } catch (e) {
+        if (fromLogin) document.getElementById('login-msg').textContent = e.message;
+      }
+    }
+
+    function tick() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (document.getElementById('auto').checked) refresh();
+        tick();
+      }, 5000);
+    }
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+    function render(d) {
+      document.getElementById('status').textContent = 'Actualizado ' + new Date(d.serverTime).toLocaleTimeString();
+
+      const online = d.online || [];
+      document.getElementById('online-count').textContent = online.length;
+      document.getElementById('online-body').innerHTML = online.map(p =>
+        `<tr><td>${esc(p.name)} ${p.admin?'<span class="tag adm">admin</span>':''}${p.muted?'<span class="tag">🔇</span>':''}</td>`+
+        `<td>${esc(p.account)}</td><td>${esc(p.realm)}</td><td>${p.hp}</td>`+
+        `<td class="row-actions"><button onclick="cmd('kick','${esc(p.name)}')">Expulsar</button>`+
+        `<button class="danger" onclick="cmd('ban','${esc(p.name)}')">Vetar</button></td></tr>`
+      ).join('') || '<tr><td colspan="5" style="color:#7a6a4d">Nadie conectado</td></tr>';
+
+      const lb = (d.leaderboards && d.leaderboards.level) || [];
+      document.getElementById('lb-body').innerHTML = lb.map((c, i) =>
+        `<tr><td>${i+1}</td><td>${esc(c.name)}</td><td>Nv ${c.level}</td></tr>`).join('');
+
+      const accs = d.accounts || [];
+      document.getElementById('acc-count').textContent = accs.length;
+      document.getElementById('acc-body').innerHTML = accs.map(a => {
+        const chars = a.characters.map(c => `${esc(c.name)} (Nv${c.level})`).join(', ') || '—';
+        const state = a.banned ? '<span class="tag ban">vetada</span>' : a.admin ? '<span class="tag adm">admin</span>' : '<span class="tag">activa</span>';
+        const action = a.banned ? `<button onclick="cmd('unban','${esc(a.account)}')">Levantar veto</button>` : '';
+        return `<tr><td>${esc(a.account)}</td><td>${chars}</td><td>${state}</td><td class="row-actions">${action}</td></tr>`;
+      }).join('');
+
+      const bugs = d.bugs || [];
+      document.getElementById('bugs').innerHTML = bugs.map(b =>
+        `<div class="bug"><div>${esc(b.text)}</div><div class="meta">${esc(b.account)}/${esc(b.character)} · ${esc(b.realm)} · ${esc(b.ts)}</div></div>`
+      ).join('') || '<p style="color:#7a6a4d">Sin reportes.</p>';
+    }
+
+    async function cmd(action, target) {
+      const r = await api('/admin/api/command', { method: 'POST', body: JSON.stringify({ action, target }) });
+      document.getElementById('cmd-msg').textContent = r.message || '';
+      refresh();
+    }
+
+    async function sendAnnounce() {
+      const text = document.getElementById('announce-text').value.trim();
+      if (!text) return;
+      const r = await api('/admin/api/command', { method: 'POST', body: JSON.stringify({ action: 'announce', text }) });
+      document.getElementById('cmd-msg').textContent = r.message || '';
+      document.getElementById('announce-text').value = '';
+    }
+
+    document.getElementById('key').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  </script>
+</body>
+</html>

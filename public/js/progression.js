@@ -97,7 +97,17 @@ function renderPanel() {
 
   const list = document.getElementById('talents-list');
   list.innerHTML = '';
+  let lastBranch = null;
   for (const node of tree) {
+    // Cabecera al cambiar de rama
+    if (node.branch && node.branch !== lastBranch) {
+      lastBranch = node.branch;
+      const h = document.createElement('div');
+      h.className = 'talent-branch';
+      h.textContent = node.branch;
+      list.appendChild(h);
+    }
+
     const rank = progression.talents[node.id] || 0;
     const locked = pointsSpent() < node.req;
     const maxed = rank >= node.max;

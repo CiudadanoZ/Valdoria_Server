@@ -427,6 +427,7 @@ export function buildWorld(scene) {
   // ---- El norte y el este: lago de los ciervos, ruinas, campamentos ----
   buildLake(scene, fishingSpots);
   buildRuins(scene);
+  buildSwamp(scene, torchLights);                          // Ciénaga de los Ahogados (noroeste)
   buildCamp(scene, torchLights, campfires, -67, 55, 0.6);   // campamento del Ermitaño Baldur (bosque)
   buildCamp(scene, torchLights, campfires, 70, 21, -2.2);   // campamento de la Cazadora Nyra (colina)
   // Hoguera de la posada, dentro de la Ciudadela
@@ -718,6 +719,90 @@ function buildRuins(scene) {
   scene.add(fallen);
   addRock(scene, cx - 4, cz + 3, 0.9);
   addRock(scene, cx + 5, cz - 2, 0.7);
+}
+
+// Ciénaga de los Ahogados (noroeste): charcas de agua turbia, árboles muertos,
+// juncos, fuegos fatuos y una isla con la choza de la Vidente Ysra.
+function buildSwamp(scene, torchLights) {
+  const cx = -95, cz = -55;
+
+  // Suelo cenagoso oscuro
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(34, 32), mat(0x2a3320, { roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(cx, 0.01, cz);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Charcas de agua turbia
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x2d3a2a, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.3 });
+  for (const [dx, dz, r] of [[-8, -6, 7], [10, 4, 6], [-4, 12, 5], [14, -10, 4.5], [-16, 2, 4]]) {
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(r, 20), waterMat);
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(cx + dx, 0.03, cz + dz);
+    scene.add(pool);
+  }
+
+  // Árboles muertos retorcidos
+  const deadMat = mat(0x2e2820);
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = Math.random() * 30;
+    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+    const h = 3 + Math.random() * 3;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.32, h, 6), deadMat);
+    trunk.position.set(x, h / 2, z);
+    trunk.rotation.z = (Math.random() - 0.5) * 0.3;
+    trunk.castShadow = true;
+    scene.add(trunk);
+    // Un par de ramas desnudas
+    for (let b = 0; b < 2; b++) {
+      const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 5), deadMat);
+      branch.position.set(x + (Math.random() - 0.5), h * 0.7, z + (Math.random() - 0.5));
+      branch.rotation.z = (Math.random() - 0.5) * 2;
+      scene.add(branch);
+    }
+  }
+
+  // Juncos
+  const reedMat = mat(0x3a4a28);
+  for (let i = 0; i < 40; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = Math.random() * 32;
+    const reed = new THREE.Mesh(new THREE.ConeGeometry(0.08, 1 + Math.random(), 4), reedMat);
+    reed.position.set(cx + Math.cos(a) * d, 0.5, cz + Math.sin(a) * d);
+    scene.add(reed);
+  }
+
+  // Fuegos fatuos: pequeñas luces flotantes verdosas (animadas como antorchas)
+  for (const [dx, dz] of [[-8, -6], [10, 4], [-4, 12], [14, -10], [0, 0], [-16, 2], [6, -14]]) {
+    const wisp = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x9affce })
+    );
+    wisp.position.set(cx + dx, 1.6, cz + dz);
+    scene.add(wisp);
+    const light = new THREE.PointLight(0x66ffaa, 8, 12, 2);
+    light.position.set(cx + dx, 1.8, cz + dz);
+    scene.add(light);
+    torchLights.push({ light, flame: wisp, base: 8, seed: Math.random() * 10 });
+  }
+
+  // Choza de la Vidente Ysra en una isla seca al borde
+  const island = new THREE.Mesh(new THREE.CircleGeometry(6, 16), mat(0x4a4530));
+  island.rotation.x = -Math.PI / 2;
+  island.position.set(cx + 20, 0.04, cz + 14);
+  island.receiveShadow = true;
+  scene.add(island);
+  const hut = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.4, 3, 7), mat(0x5c4a32));
+  hut.position.set(cx + 20, 1.5, cz + 14);
+  hut.castShadow = true;
+  scene.add(hut);
+  const hutRoof = new THREE.Mesh(new THREE.ConeGeometry(3, 2.2, 7), mat(0x3a2d1f));
+  hutRoof.position.set(cx + 20, 4, cz + 14);
+  hutRoof.castShadow = true;
+  scene.add(hutRoof);
+
+  scene.fog && addRock(scene, cx + 24, cz + 10, 1.1);
 }
 
 // Tablón de Encargos clicable: dos postes, tablero de madera y pergaminos.
