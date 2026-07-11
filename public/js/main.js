@@ -11,7 +11,9 @@ import { Mobs, spawnFloatText } from './enemies.js';
 import {
   connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly,
   sendGather, sendFishStart, sendFishStop, sendMira, sendSkillHeal, sendSkillBuff,
+  sendPvpToggle, sendPvpAttack, sendTradeRequest, sendTradeAccept,
 } from './network.js';
+import { initTrade, openTrade, applyTradeUpdate, closeTrade, tradeDone, isTrading, refreshTradeBag } from './trade.js';
 import { initSkills, refreshSkills, castSkill, updateSkills, skillSpeedMul } from './skills.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
@@ -56,8 +58,10 @@ const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 // ---------- Combate ----------
-let combatTarget = null;
+let combatTarget = null;   // criatura enganchada
+let pvpTarget = null;      // jugador remoto enganchado (JcJ)
 let attackCooldown = 0;
+let myPvp = false;
 
 // ---------- Sincronización del estado con el servidor ----------
 let saveTimer = null;
@@ -81,7 +85,9 @@ function flushSave() {
 initLobby();
 initSettings({ onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; } });
 initLeaderboard();
+initTrade();
 document.getElementById('leaderboard-btn-lobby')?.addEventListener('click', openLeaderboard);
+document.getElementById('pvp-btn')?.addEventListener('click', () => sendPvpToggle());
 connect({
   auth_ok(msg) { onAuthOk(msg); },
   auth_fail(msg) { onAuthFail(msg); },
@@ -141,6 +147,7 @@ connect({
   state_sync(msg) {
     applyInventory(msg.inventory);
     if (msg.inventory) setGoldForRespec(msg.inventory.gold || 0);
+    refreshTradeBag();
     applyProgression(msg.progression);
     applyBlessings(msg.blessings);
     applyBounties(msg.bounties);
@@ -232,6 +239,26 @@ connect({
   party_invite(msg) { onInvite(msg); },
   party_update(msg) { onPartyUpdate(msg); },
   party_left() { onPartyLeft(); },
+  // JcJ
+  pvp_state(msg) {
+    myPvp = msg.pvp;
+    const btn = $('pvp-btn');
+    btn.textContent = `⚔ JcJ: ${msg.pvp ? 'Sí' : 'No'}`;
+    btn.classList.toggle('on', msg.pvp);
+    ui.toast(msg.pvp ? '⚔ Combate entre jugadores ACTIVADO' : 'Combate entre jugadores desactivado');
+  },
+  player_flag(msg) { remotes?.setPvp(msg.id, msg.pvp); },
+  // Comercio
+  trade_request(msg) {
+    ui.showDialog(msg.fromName, `${msg.fromName} quiere comerciar contigo.`, [
+      { label: '💰 Aceptar comercio', fn: () => { sendTradeAccept(msg.fromId); ui.hideDialog(); } },
+      { label: 'Rechazar', fn: ui.hideDialog },
+    ]);
+  },
+  trade_open(msg) { ui.hideDialog(); openTrade(msg.partnerName); },
+  trade_update(msg) { applyTradeUpdate(msg); },
+  trade_done() { tradeDone(); },
+  trade_closed(msg) { closeTrade(msg.reason); },
   disconnected() {
     if (kickedOut) return; // expulsado/vetado: no reconectar
     if (inWorld) {
@@ -431,6 +458,8 @@ function onPlayerDamaged(msg) {
 // ---------- Controles ----------
 function onPointerDown(e) {
   if (e.button !== 0) return;
+  hidePlayerMenu();
+  pvpTarget = null; // la rama de ataque JcJ lo reasigna si procede
   const ndc = new THREE.Vector2(
     (e.clientX / window.innerWidth) * 2 - 1,
     -(e.clientY / window.innerHeight) * 2 + 1
@@ -492,18 +521,30 @@ function onPointerDown(e) {
     return;
   }
 
-  // 5) ¿Clic sobre otro jugador? -> invitación de grupo
+  // 5) ¿Clic sobre otro jugador?
   const remoteHits = raycaster.intersectObjects(remotes.meshes(), true);
   if (remoteHits.length > 0) {
     const remote = remotes.findByObject(remoteHits[0].object);
-    if (remote) { offerInvite(remote); return; }
+    if (remote) {
+      // Si ambos tenéis el JcJ activo y estáis fuera de la Ciudadela: atacar
+      if (myPvp && remote.pvp && !isTrading()) {
+        combatTarget = null;
+        pvpTarget = remote;
+        player.marker.visible = false;
+      } else {
+        showPlayerMenu(remote, e.clientX, e.clientY);
+      }
+      return;
+    }
   }
 
   // 6) Clic en el suelo: moverse (y romper el combate y la pesca)
   const point = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(groundPlane, point)) {
     ui.hideDialog();
+    hidePlayerMenu();
     combatTarget = null;
+    pvpTarget = null;
     stopFishing();
     player.moveTo(point);
   }
@@ -542,6 +583,29 @@ function approachNPC(npc) {
     updateQuestMarkers(npcs, 0);
     saveGame();
   }, 2.6);
+}
+
+// Menú al hacer clic sobre otro jugador: grupo, comercio y (si procede) atacar.
+function showPlayerMenu(remote, sx, sy) {
+  const menu = $('player-menu');
+  menu.innerHTML = `<div class="pm-name">${remote.name}</div>`;
+  const addBtn = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.addEventListener('click', () => { hidePlayerMenu(); fn(); });
+    menu.appendChild(b);
+  };
+  addBtn('🤝 Invitar al grupo', '', () => offerInvite(remote));
+  addBtn('💰 Comerciar', '', () => sendTradeRequest(remote.id));
+  if (myPvp && remote.pvp) addBtn('⚔ Atacar', 'attack', () => { combatTarget = null; pvpTarget = remote; });
+  menu.style.left = `${Math.min(sx, window.innerWidth - 170)}px`;
+  menu.style.top = `${Math.min(sy, window.innerHeight - 160)}px`;
+  menu.classList.remove('hidden');
+}
+
+function hidePlayerMenu() {
+  $('player-menu').classList.add('hidden');
 }
 
 function approachHerb(herb) {
@@ -599,6 +663,7 @@ function onKeyDown(e) {
     $('cooking-panel').classList.add('hidden');
     $('bounty-panel').classList.add('hidden');
     $('leaderboard-panel').classList.add('hidden');
+    hidePlayerMenu();
     closeSettings();
     closeMap();
   }
@@ -626,6 +691,25 @@ function onResize() {
 // ---------- Combate del jugador ----------
 function updateCombat(dt) {
   attackCooldown -= dt;
+
+  // Combate JcJ contra otro jugador
+  if (pvpTarget) {
+    if (!myPvp || !remotes.isPvp(pvpTarget.id) || !remotes.players.has(pvpTarget.id)) { pvpTarget = null; return; }
+    const tp = pvpTarget.mesh.position;
+    const d = player.mesh.position.distanceTo(tp);
+    if (d > 2.4) { player.target = tp.clone(); player.arriveDist = 2.2; player.onArrive = null; return; }
+    player.stop();
+    player.mesh.rotation.y = Math.atan2(tp.x - player.mesh.position.x, tp.z - player.mesh.position.z);
+    if (attackCooldown <= 0) {
+      attackCooldown = myClass.attackInterval;
+      const dmg = 5 + getWeaponDamage() + blessingDamage() + myRace.dmg + myClass.dmg + talentDmg() + Math.floor(Math.random() * 5);
+      player.mesh.getObjectByName('armR').rotation.x = -1.7;
+      play('attack');
+      sendPvpAttack(pvpTarget.id, dmg);
+    }
+    return;
+  }
+
   if (!combatTarget) return;
   if (combatTarget.dead) { combatTarget = null; return; }
 

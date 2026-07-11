@@ -10,6 +10,7 @@ const TABS = {
   level: { label: 'Nivel', render: (c) => `Nv ${c.level}` },
   gold: { label: 'Oro', render: (c) => `🪙 ${c.gold}` },
   kills: { label: 'Bajas', render: (c) => `⚔ ${c.kills}` },
+  pvp: { label: 'JcJ', render: (c) => `⚔ ${c.pvp || 0}` },
 };
 
 export function initLeaderboard() {

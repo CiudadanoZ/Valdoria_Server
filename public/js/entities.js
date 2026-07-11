@@ -237,7 +237,7 @@ export class RemotePlayers {
     this.players = new Map(); // id -> { mesh, target: {x,z,rot}, walkTime }
   }
 
-  add({ id, name, race, class: clazz, x, z, rot }) {
+  add({ id, name, race, class: clazz, x, z, rot, pvp }) {
     if (this.players.has(id)) return;
     const mesh = makeHero(race, clazz);
     mesh.position.set(x, 0, z);
@@ -245,8 +245,28 @@ export class RemotePlayers {
     mesh.add(makeNameSprite(name, '#ffd97a'));
     mesh.traverse((o) => { o.userData.remoteId = id; });
     this.scene.add(mesh);
-    this.players.set(id, { id, name, mesh, target: { x, z, rot: rot || 0 }, walkTime: 0 });
+    const p = { id, name, mesh, target: { x, z, rot: rot || 0 }, walkTime: 0, pvp: false, mark: null };
+    this.players.set(id, p);
+    if (pvp) this.setPvp(id, true);
   }
+
+  // Marca de JcJ: dos espadas rojas flotando sobre el jugador señalado.
+  setPvp(id, pvp) {
+    const p = this.players.get(id);
+    if (!p) return;
+    p.pvp = pvp;
+    if (pvp && !p.mark) {
+      p.mark = makeNameSprite('⚔', '#ff5040');
+      p.mark.position.y = 3.5;
+      p.mark.scale.set(1.4, 1.4, 1);
+      p.mesh.add(p.mark);
+    } else if (!pvp && p.mark) {
+      p.mesh.remove(p.mark);
+      p.mark = null;
+    }
+  }
+
+  isPvp(id) { return !!this.players.get(id)?.pvp; }
 
   meshes() {
     return [...this.players.values()].map((p) => p.mesh);

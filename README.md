@@ -127,6 +127,19 @@ vida, suelta el Cetro del Rey del Fango o el Anillo de la Ciénaga). En una isla
 vive la **Vidente Ysra**, que da una cadena de misiones: *Aguas turbias* (6
 Ahogados) → *El fango que susurra* (5 Flores de Ciénaga) → *El Rey del Fango*.
 
+### JcJ y comercio entre jugadores
+Al hacer clic sobre otro jugador se abre un menú: **🤝 Grupo**, **💰 Comerciar**
+y (si procede) **⚔ Atacar**.
+- **JcJ opcional**: activa el combate con el botón `⚔ JcJ` (arriba a la derecha).
+  Solo puedes atacar —y ser atacado por— jugadores que **también** lo tengan
+  activo, y **nunca dentro de la Ciudadela** (zona segura). No se pierden objetos
+  al morir; el atacante suma una baja en la clasificación **JcJ**. Los jugadores
+  con JcJ activo llevan unas espadas rojas sobre la cabeza.
+- **Comercio**: propón un trato (debéis estar cerca) y se abre una ventana con
+  tu oferta y la del socio. Añade objetos de tu bolsa y oro; cualquier cambio
+  anula las confirmaciones. Cuando **ambos confirmáis**, el servidor ejecuta el
+  intercambio de forma **atómica** (con reversión si una bolsa está llena).
+
 ### Criaturas sincronizadas y grupos de caza
 La IA de las criaturas corre en el servidor (acechar, perseguir, atacar, volver
 a casa y curarse, reaparecer). El servidor valida los ataques y reparte el botín
@@ -260,6 +273,7 @@ public/js/bountyboard.js Panel del Tablón de Encargos.
 public/js/leaderboard.js Panel de clasificaciones (nivel/oro/bajas).
 public/js/minimap.js   Minimapa y mapa grande (M): mundo, criptas, misiones.
 public/js/party.js     Grupos de caza: invitaciones y panel de miembros.
+public/js/trade.js     Comercio entre jugadores: panel de ofertas y bolsa.
 public/js/npcs.js      NPCs y marcadores de misión (!/?).
 public/js/quests.js    Tres cadenas de misiones, rastreador y servicios de Mira.
 public/js/inventory.js Inventario, equipo (6 casillas), oro, daño/armadura.
@@ -320,5 +334,5 @@ despliegue con túnel; define un `ADMIN_KEY` robusto.
 
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
 - Concurso de pesca semanal; recetas de cocina con varios ingredientes.
-- JcJ opcional en la llanura.
-- Comercio entre jugadores; casa de subastas.
+- Casa de subastas o mercado asíncrono entre jugadores.
+- Monturas y velocidad de viaje; puntos de teletransporte.

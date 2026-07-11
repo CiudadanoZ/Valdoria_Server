@@ -108,6 +108,17 @@ export function sendBugReport(text, version) { send({ type: 'bug_report', text, 
 export function sendTalentRespec() { send({ type: 'talent_respec' }); }
 export function sendLeaderboard() { send({ type: 'leaderboard' }); }
 
+// ---- JcJ ----
+export function sendPvpToggle() { send({ type: 'pvp_toggle' }); }
+export function sendPvpAttack(targetId, dmg) { send({ type: 'pvp_attack', targetId, dmg }); }
+
+// ---- Comercio entre jugadores ----
+export function sendTradeRequest(targetId) { send({ type: 'trade_request', targetId }); }
+export function sendTradeAccept(fromId) { send({ type: 'trade_accept', fromId }); }
+export function sendTradeOffer(slots, gold) { send({ type: 'trade_offer', slots, gold }); }
+export function sendTradeConfirm() { send({ type: 'trade_confirm' }); }
+export function sendTradeCancel() { send({ type: 'trade_cancel' }); }
+
 // Persiste el estado del personaje en el servidor
 export function sendSaveState(state) {
   send({ type: 'save_state', state });

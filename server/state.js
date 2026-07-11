@@ -24,6 +24,7 @@ export function ensureState(character) {
   }
   st.progression = st.progression || { level: 1, xp: 0, points: 0, talents: {} };
   st.kills = st.kills || {};
+  st.pvpKills = st.pvpKills || 0;
   st.claimedQuests = st.claimedQuests || [];
   // Bendiciones de Mira: id -> instante de expiración (ms época). Del servidor.
   if (!st.blessings || typeof st.blessings !== 'object') st.blessings = {};

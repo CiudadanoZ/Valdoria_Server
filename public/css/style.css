@@ -284,6 +284,61 @@ canvas { display: block; }
 }
 #settings-btn:hover { border-color: var(--gold); color: var(--gold-bright); }
 
+/* Botón de JcJ */
+#pvp-btn {
+  position: fixed; top: 16px; right: 172px; z-index: 20;
+  height: 36px; padding: 0 12px; font-size: 0.85em; font-family: inherit;
+  background: var(--panel-bg); color: #8a7a5a;
+  border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer;
+  white-space: nowrap;
+}
+#pvp-btn:hover { border-color: var(--gold); }
+#pvp-btn.on { color: #ff6a5a; border-color: #c05040; box-shadow: 0 0 10px rgba(200,80,64,0.4); }
+
+/* Menú al hacer clic en otro jugador */
+#player-menu {
+  position: fixed; z-index: 60; min-width: 150px;
+  background: var(--panel-bg); border: 1px solid var(--gold); border-radius: 6px;
+  padding: 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.8);
+}
+#player-menu.hidden { display: none; }
+#player-menu .pm-name { color: var(--gold-bright); font-size: 0.9em; text-align: center; padding: 4px 0 6px; border-bottom: 1px solid #3a2d18; margin-bottom: 4px; }
+#player-menu button {
+  display: block; width: 100%; text-align: left; margin: 2px 0; padding: 7px 10px;
+  font-family: inherit; font-size: 0.9em; background: rgba(58,45,24,0.4);
+  color: var(--gold-bright); border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer;
+}
+#player-menu button:hover { background: rgba(107,82,40,0.5); border-color: var(--gold); }
+#player-menu button.attack { color: #ff8070; border-color: #6b2820; }
+
+/* Comercio entre jugadores */
+#trade-panel {
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 560px; max-height: 84vh; display: flex; flex-direction: column;
+}
+#trade-panel.hidden { display: none !important; }
+.trade-cols { display: flex; gap: 14px; margin-bottom: 12px; }
+.trade-side { flex: 1; min-width: 0; }
+.trade-side h3 { color: var(--gold); font-size: 0.82em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.trade-offer {
+  min-height: 90px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+  padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #3a2d18; border-radius: 4px;
+}
+.trade-gold { margin-top: 8px; color: var(--gold-bright); font-size: 0.9em; }
+.trade-gold input { width: 90px; padding: 4px 8px; background: #0d0906; color: var(--parchment); border: 1px solid var(--panel-border); border-radius: 4px; }
+.trade-baglabel { color: var(--gold); font-size: 0.8em; text-transform: uppercase; margin: 4px 0 8px; }
+#trade-bag { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; overflow-y: auto; }
+.trade-slot { aspect-ratio: 1; border: 1px solid #3a2d18; border-radius: 4px; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; font-size: 1.35em; position: relative; }
+.trade-slot.filled { cursor: pointer; border-color: #56421f; }
+.trade-slot.filled:hover { border-color: var(--gold); }
+.trade-slot.offered { border-color: #7fb069; box-shadow: inset 0 0 8px rgba(127,176,105,0.4); }
+.trade-slot .count { position: absolute; bottom: 1px; right: 3px; font-size: 0.45em; color: #fff; text-shadow: 0 1px 2px #000; }
+.trade-state-ok { color: #7fb069; }
+.trade-state-wait { color: #c9a55c; }
+.trade-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+#trade-confirm { padding: 9px 20px; font-family: inherit; background: linear-gradient(180deg,#4a7a3a,#2e5423); color: #d8f0c8; border: 1px solid #7fb069; border-radius: 4px; cursor: pointer; }
+#trade-confirm.confirmed { background: linear-gradient(180deg,#7a5c28,#4a3618); color: var(--gold-bright); border-color: var(--gold); }
+
 /* Panel de ajustes */
 #settings-panel {
   top: 50%; left: 50%; transform: translate(-50%, -50%);

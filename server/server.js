@@ -225,6 +225,33 @@ function damagePlayer(p, id, rawDmg, mobName) {
   }
 }
 
+// Daño de un jugador a otro (JcJ). No hay pérdida de objetos: al morir,
+// reaparece en la fuente y el atacante suma una baja de JcJ.
+function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
+  const reduced = Math.max(1, rawDmg - computeArmor(target.character, currentBuffArmor(target)));
+  target.hp = Math.max(0, target.hp - reduced);
+  target.lastCombatMs = Date.now();
+
+  if (target.hp <= 0) {
+    const maxHp = computeMaxHp(target.character);
+    target.hp = Math.round(maxHp * 0.6);
+    target.x = (Math.random() - 0.5) * 4;
+    target.z = FOUNTAIN[1];
+    target.moveBudget = 4;
+    stopFishing(target);
+    cancelTrade(targetId); // morir cancela un comercio en curso
+    if (attacker.character) {
+      attacker.character.state.pvpKills = (attacker.character.state.pvpKills || 0) + 1;
+      touch();
+    }
+    send(target.ws, { type: 'you_died', by: attacker.name, hp: Math.round(target.hp), maxHp, x: target.x, z: target.z });
+    broadcast(target.realm, { type: 'player_state', id: targetId, x: target.x, z: target.z, rot: target.rot }, targetId);
+    broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `⚔ ${attacker.name} ha derrotado a ${target.name} en combate.` });
+  } else {
+    send(target.ws, { type: 'player_hurt', dmg: reduced, mobName: attacker.name, ...vitals(target) });
+  }
+}
+
 // Cura al jugador (pociones, habilidades, Mira, aliados)
 function healPlayer(p, amount) {
   const maxHp = computeMaxHp(p.character);
@@ -403,6 +430,97 @@ function leaveParty(id, notifySelf = true) {
   } else {
     broadcastPartyUpdate(partyId);
   }
+}
+
+// ============================ COMERCIO ENTRE JUGADORES ============================
+// Cada jugador en comercio guarda p.tradeWith (id del socio) y p.tradeOffer
+// { items:[itemId...], gold, confirmed }. El intercambio lo ejecuta el servidor
+// de forma atómica (con reversión si algo falla).
+const TRADE_RANGE = 14;
+
+function emptyOffer() { return { items: [], gold: 0, confirmed: false }; }
+
+function offerPayload(p) {
+  return { items: (p.tradeOffer?.items || []).slice(), gold: p.tradeOffer?.gold || 0, confirmed: !!p.tradeOffer?.confirmed };
+}
+
+function sendTradeUpdate(a, b) {
+  send(a.ws, { type: 'trade_update', mine: offerPayload(a), theirs: offerPayload(b) });
+  send(b.ws, { type: 'trade_update', mine: offerPayload(b), theirs: offerPayload(a) });
+}
+
+function startTrade(aId, bId) {
+  const a = players.get(aId), b = players.get(bId);
+  if (!a || !b) return;
+  a.tradeWith = bId; b.tradeWith = aId;
+  a.tradeOffer = emptyOffer(); b.tradeOffer = emptyOffer();
+  send(a.ws, { type: 'trade_open', partnerId: bId, partnerName: b.name });
+  send(b.ws, { type: 'trade_open', partnerId: aId, partnerName: a.name });
+}
+
+function cancelTrade(id, reason = 'El comercio se ha cancelado.') {
+  const p = players.get(id);
+  if (!p || !p.tradeWith) return;
+  const otherId = p.tradeWith;
+  const other = players.get(otherId);
+  p.tradeWith = null; p.tradeOffer = null;
+  send(p.ws, { type: 'trade_closed', reason });
+  if (other && other.tradeWith === id) {
+    other.tradeWith = null; other.tradeOffer = null;
+    send(other.ws, { type: 'trade_closed', reason });
+  }
+}
+
+// ¿Tiene el jugador los objetos y el oro que ofrece?
+function offerIsValid(p) {
+  const st = p.character.state;
+  if ((p.tradeOffer.gold || 0) > st.inventory.gold) return false;
+  const need = {};
+  for (const itemId of p.tradeOffer.items) need[itemId] = (need[itemId] || 0) + 1;
+  for (const [itemId, n] of Object.entries(need)) {
+    if (!ITEMS[itemId] || bagCount(st, itemId) < n) return false;
+  }
+  return true;
+}
+
+function executeTrade(aId, bId) {
+  const a = players.get(aId), b = players.get(bId);
+  if (!a || !b) return;
+  const sa = a.character.state, sb = b.character.state;
+
+  if (!offerIsValid(a) || !offerIsValid(b)) {
+    cancelTrade(aId, 'Uno de los dos ya no tiene lo que ofrecía.');
+    return;
+  }
+  // Reversión: copias de seguridad de ambos inventarios
+  const backupA = JSON.parse(JSON.stringify(sa.inventory));
+  const backupB = JSON.parse(JSON.stringify(sb.inventory));
+
+  // Retirar lo ofrecido de cada uno
+  for (const itemId of a.tradeOffer.items) bagRemove(sa, itemId, 1);
+  for (const itemId of b.tradeOffer.items) bagRemove(sb, itemId, 1);
+  sa.inventory.gold -= a.tradeOffer.gold;
+  sb.inventory.gold -= b.tradeOffer.gold;
+
+  // Entregar al otro (comprobando espacio en la bolsa)
+  let ok = true;
+  for (const itemId of a.tradeOffer.items) { if (!bagAdd(sb, itemId, 1)) { ok = false; break; } }
+  if (ok) for (const itemId of b.tradeOffer.items) { if (!bagAdd(sa, itemId, 1)) { ok = false; break; } }
+
+  if (!ok) {
+    sa.inventory = backupA; sb.inventory = backupB;
+    cancelTrade(aId, 'Una de las bolsas está llena: comercio cancelado.');
+    return;
+  }
+  sa.inventory.gold += b.tradeOffer.gold;
+  sb.inventory.gold += a.tradeOffer.gold;
+
+  a.tradeWith = null; a.tradeOffer = null;
+  b.tradeWith = null; b.tradeOffer = null;
+  sendSync(a); sendSync(b);
+  send(a.ws, { type: 'trade_done' });
+  send(b.ws, { type: 'trade_done' });
+  console.log(`[comercio] ${a.name} <-> ${b.name}`);
 }
 
 // ============================ CRIATURAS ============================
@@ -786,11 +904,14 @@ wss.on('connection', (ws) => {
         p.buffUntil = 0;
         p.lastHpSent = p.hp;
         p.lastHpSentMs = 0;
+        p.pvp = false;       // JcJ desactivado por defecto
+        p.tradeWith = null;  // id del socio de comercio (o null)
+        p.lastPvpMs = 0;
 
         const others = [];
         for (const [oid, op] of players) {
           if (oid !== id && op.realm === realm.id) {
-            others.push({ id: oid, name: op.name, race: op.race, class: op.class, x: op.x, z: op.z, rot: op.rot });
+            others.push({ id: oid, name: op.name, race: op.race, class: op.class, x: op.x, z: op.z, rot: op.rot, pvp: op.pvp });
           }
         }
         send(ws, {
@@ -1237,6 +1358,85 @@ wss.on('connection', (ws) => {
         leaveParty(id);
         break;
       }
+
+      // ---- JcJ (combate entre jugadores) ----
+      case 'pvp_toggle': {
+        if (!p?.realm) return;
+        p.pvp = !p.pvp;
+        send(ws, { type: 'pvp_state', pvp: p.pvp });
+        broadcast(p.realm, { type: 'player_flag', id, pvp: p.pvp }, id);
+        break;
+      }
+      case 'pvp_attack': {
+        if (!p?.realm || !st) return;
+        const now = Date.now();
+        if (now - p.lastPvpMs < 600) return;
+        p.lastPvpMs = now;
+        const target = players.get(Number(msg.targetId));
+        if (!target || target.realm !== p.realm || !target.character) return;
+        if (!p.pvp || !target.pvp) return;                       // ambos deben tener JcJ activo
+        if (target.tradeWith || p.tradeWith) return;             // no atacar mientras se comercia
+        // Zona segura: nadie recibe daño dentro de la Ciudadela
+        if (Math.hypot(p.x, p.z) < CITADEL_SAFE_RADIUS || Math.hypot(target.x, target.z) < CITADEL_SAFE_RADIUS) {
+          sendTo(id, { type: 'chat', from: 'Ciudadela', system: true, text: 'No se puede luchar dentro de la Ciudadela.' });
+          return;
+        }
+        if (dist(p.x, p.z, target.x, target.z) > 6) return;
+        const dmg = Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1)));
+        p.lastCombatMs = now;
+        damagePlayerByPlayer(p, target, Number(msg.targetId), dmg);
+        break;
+      }
+
+      // ---- Comercio entre jugadores ----
+      case 'trade_request': {
+        if (!p?.realm) return;
+        const target = players.get(Number(msg.targetId));
+        if (!target || target.realm !== p.realm) return;
+        if (p.tradeWith || target.tradeWith) { sendTo(id, { type: 'chat', from: 'Ciudadela', system: true, text: 'Uno de los dos ya está comerciando.' }); return; }
+        if (dist(p.x, p.z, target.x, target.z) > TRADE_RANGE) { sendTo(id, { type: 'chat', from: 'Ciudadela', system: true, text: `Acércate a ${target.name} para comerciar.` }); return; }
+        send(target.ws, { type: 'trade_request', fromId: id, fromName: p.name });
+        sendTo(id, { type: 'chat', from: 'Ciudadela', system: true, text: `Propuesta de comercio enviada a ${target.name}.` });
+        break;
+      }
+      case 'trade_accept': {
+        if (!p?.realm || p.tradeWith) return;
+        const inviter = players.get(Number(msg.fromId));
+        if (!inviter || inviter.realm !== p.realm || inviter.tradeWith) return;
+        if (dist(p.x, p.z, inviter.x, inviter.z) > TRADE_RANGE) return;
+        startTrade(Number(msg.fromId), id);
+        break;
+      }
+      case 'trade_offer': {
+        if (!p?.tradeWith || !st) return;
+        const other = players.get(p.tradeWith);
+        if (!other) { cancelTrade(id); return; }
+        // Resolver los índices de bolsa a itemIds (máx. 12 objetos)
+        const idxs = Array.isArray(msg.slots) ? msg.slots.slice(0, 12) : [];
+        const items = [];
+        for (const i of idxs) {
+          const slot = st.inventory.slots[Number(i)];
+          if (slot && ITEMS[slot.itemId]) items.push(slot.itemId);
+        }
+        const gold = Math.max(0, Math.min(st.inventory.gold, Math.round(Number(msg.gold) || 0)));
+        p.tradeOffer = { items, gold, confirmed: false };
+        other.tradeOffer.confirmed = false; // cualquier cambio anula la confirmación
+        sendTradeUpdate(p, other);
+        break;
+      }
+      case 'trade_confirm': {
+        if (!p?.tradeWith) return;
+        const other = players.get(p.tradeWith);
+        if (!other) { cancelTrade(id); return; }
+        p.tradeOffer.confirmed = true;
+        if (other.tradeOffer.confirmed) executeTrade(id, p.tradeWith);
+        else sendTradeUpdate(p, other);
+        break;
+      }
+      case 'trade_cancel': {
+        cancelTrade(id);
+        break;
+      }
     }
   });
 
@@ -1244,6 +1444,7 @@ wss.on('connection', (ws) => {
     const p = players.get(id);
     if (!p) return;
     stopFishing(p);
+    cancelTrade(id);
     leaveParty(id, false);
     if (p.realm && p.charId) {
       saveCharacterState(p.account, p.charId, { x: +p.x.toFixed(1), z: +p.z.toFixed(1), hp: Math.round(p.hp) });

@@ -269,17 +269,19 @@ export function getLeaderboards(topN = 10) {
         xp: c.state?.progression?.xp || 0,
         gold: c.state?.inventory?.gold || 0,
         kills,
+        pvp: c.state?.pvpKills || 0,
       });
     }
   }
   const top = (metric, tiebreak) => [...chars]
     .sort((a, b) => (b[metric] - a[metric]) || ((b[tiebreak] || 0) - (a[tiebreak] || 0)))
     .slice(0, topN)
-    .map((c) => ({ name: c.name, race: c.race, class: c.class, level: c.level, gold: c.gold, kills: c.kills }));
+    .map((c) => ({ name: c.name, race: c.race, class: c.class, level: c.level, gold: c.gold, kills: c.kills, pvp: c.pvp }));
   return {
     level: top('level', 'xp'),
     gold: top('gold', 'level'),
     kills: top('kills', 'level'),
+    pvp: top('pvp', 'level'),
   };
 }
 

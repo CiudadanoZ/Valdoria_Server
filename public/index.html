@@ -121,7 +121,12 @@
 
     <!-- Botón de ajustes en el juego -->
     <button id="settings-btn" title="Ajustes (O)">⚙</button>
+    <!-- Botón de JcJ -->
+    <button id="pvp-btn" title="Combate entre jugadores">⚔ JcJ: No</button>
   </div>
+
+  <!-- Menú al hacer clic en otro jugador -->
+  <div id="player-menu" class="hidden"></div>
 
   <!-- Inventario -->
   <div id="inventory-panel" class="panel hidden">
@@ -198,8 +203,35 @@
       <button id="lb-tab-level" class="shop-tab active">Nivel</button>
       <button id="lb-tab-gold" class="shop-tab">Oro</button>
       <button id="lb-tab-kills" class="shop-tab">Bajas</button>
+      <button id="lb-tab-pvp" class="shop-tab">JcJ</button>
     </div>
     <div id="lb-list"></div>
+  </div>
+
+  <!-- Comercio entre jugadores -->
+  <div id="trade-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Comercio con <span id="trade-partner">?</span></h2>
+      <button id="trade-close" class="close-btn">✕</button>
+    </div>
+    <div class="trade-cols">
+      <div class="trade-side">
+        <h3>Tu oferta <span id="trade-mine-state"></span></h3>
+        <div id="trade-mine" class="trade-offer"></div>
+        <div class="trade-gold">🪙 <input id="trade-gold" type="number" min="0" value="0" /> de oro</div>
+      </div>
+      <div class="trade-side">
+        <h3>Oferta de <span id="trade-partner2">?</span> <span id="trade-theirs-state"></span></h3>
+        <div id="trade-theirs" class="trade-offer"></div>
+        <div class="trade-gold" id="trade-theirs-gold">🪙 0 de oro</div>
+      </div>
+    </div>
+    <h3 class="trade-baglabel">Tu bolsa (clic para añadir/quitar de la oferta)</h3>
+    <div id="trade-bag"></div>
+    <div class="trade-actions">
+      <button id="trade-confirm">Confirmar</button>
+      <button id="trade-cancel" class="lobby-secondary">Cancelar</button>
+    </div>
   </div>
 
   <!-- Tablón de Encargos -->
