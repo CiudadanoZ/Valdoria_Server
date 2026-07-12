@@ -18,6 +18,8 @@ import {
   isAdminAccount, banAccount, unbanAccount, changePassword, getLeaderboards,
   getAccountsSummary, findCharacterByName,
   listAuctions, auctionsBySeller, getAuction, addAuction, removeAuction, countAuctionsBySeller,
+  getGuild, guildExists, createGuild, deleteGuild, guildAddMember, guildRemoveMember,
+  setGuildMotd, setGuildLeader, isCleanName,
 } from './db.js';
 import { WAYSTONES, waystoneById, MOUNTS } from '../public/js/world-data.js';
 import {
@@ -292,6 +294,56 @@ function findPlayerByName(name) {
   return [null, null];
 }
 
+// ---- Gremios ----
+// Difunde a todos los miembros conectados de un gremio (aunque estén en reinos
+// distintos: el chat de gremio es global).
+function broadcastGuild(guildName, obj) {
+  if (!guildName) return;
+  const raw = JSON.stringify(obj);
+  for (const p of players.values()) {
+    if (p.realm && p.character?.state.guild === guildName && p.ws.readyState === p.ws.OPEN) p.ws.send(raw);
+  }
+}
+
+// Datos del gremio para el panel: nombre, líder, lema y miembros con nivel y
+// estado de conexión.
+function guildInfoPayload(guildName) {
+  const g = getGuild(guildName);
+  if (!g) return null;
+  const onlineNames = new Set();
+  for (const p of players.values()) {
+    if (p.realm && p.character?.state.guild === g.name) onlineNames.add(p.name);
+  }
+  const members = g.members.map((charName) => {
+    const rec = findCharacterByName(charName);
+    return {
+      name: charName,
+      level: rec?.character?.state?.progression?.level || 1,
+      online: onlineNames.has(charName),
+      leader: charName === g.leader,
+    };
+  });
+  members.sort((a, b) => (b.online - a.online) || (b.level - a.level));
+  return { name: g.name, leader: g.leader, motd: g.motd, members };
+}
+
+// Envía la info actualizada del gremio a todos sus miembros conectados.
+function pushGuildInfo(guildName) {
+  const info = guildInfoPayload(guildName);
+  if (info) broadcastGuild(guildName, { type: 'guild_info', guild: info });
+}
+
+// Quita a un personaje de su gremio (limpia st.guild, sincroniza si está online).
+function clearMemberGuild(charName) {
+  const rec = findCharacterByName(charName);
+  if (!rec) return;
+  rec.character.state.guild = null;
+  touch();
+  for (const p of players.values()) {
+    if (p.character === rec.character) { sendSync(p); send(p.ws, { type: 'guild_info', guild: null }); }
+  }
+}
+
 // ---- Comandos de chat (/) ----
 function sysTo(p, text) {
   send(p.ws, { type: 'chat', from: 'Ciudadela', system: true, text });
@@ -313,7 +365,16 @@ function handleCommand(p, text) {
 
   // Comandos para todos
   if (cmd === 'help') {
-    sysTo(p, p.admin ? `Comandos de administración:\n${ADMIN_HELP}` : 'No hay comandos disponibles para tu cuenta.');
+    const base = '/g <mensaje> — chat de tu gremio';
+    sysTo(p, p.admin ? `Comandos:\n${base}\n${ADMIN_HELP}` : `Comandos:\n${base}`);
+    return;
+  }
+  if (cmd === 'g') {
+    const gname = p.character?.state.guild;
+    if (!gname) { sysTo(p, 'No perteneces a ningún gremio.'); return; }
+    if (p.muted) { sysTo(p, 'Estás silenciado.'); return; }
+    if (!arg) { sysTo(p, 'Uso: /g <mensaje>'); return; }
+    broadcastGuild(gname, { type: 'chat', from: `[Gremio] ${p.name}`, guild: true, text: arg.slice(0, 200) });
     return;
   }
   if (cmd === 'who') {
@@ -538,6 +599,11 @@ function executeTrade(aId, bId) {
 }
 
 // ============================ CRIATURAS ============================
+// Evento de mundo: cada cuánto reaparece el Coloso (segundos). Configurable.
+const EVENT_INTERVAL_S = Math.max(60, Number(process.env.EVENT_INTERVAL_S) || 900);
+// Posición del jefe de mundo (claro al norte de la Ciudadela, lejos del refugio).
+const COLOSO_SPOT = [0, 150];
+
 // Balance (alpha): la experiencia crece con la dificultad para que el contenido
 // de las criptas y los jefes compensen el riesgo frente a farmear lobos.
 const MOB_TYPES = {
@@ -556,6 +622,8 @@ const MOB_TYPES = {
   ahogado: { name: 'Ahogado', hp: 90, dmgMin: 9, dmgMax: 15, speed: 4.2, aggro: 9, range: 2.0, cd: 1.5, respawn: 35, gold: [12, 22], xp: 34, drops: [['limo_curativo', 0.4], ['flor_cienaga', 0.3]] },
   chaman_cienaga: { name: 'Chamán de la Ciénaga', hp: 110, dmgMin: 11, dmgMax: 17, speed: 4.6, aggro: 11, range: 2.1, cd: 1.4, respawn: 45, gold: [18, 30], xp: 48, drops: [['flor_cienaga', 0.7], ['esencia_espectral', 0.3]] },
   rey_fango: { name: 'Rey del Fango', hp: 450, dmgMin: 15, dmgMax: 24, speed: 4.4, aggro: 14, range: 2.8, cd: 1.3, respawn: 130, gold: [170, 230], xp: 230, drops: [['flor_cienaga', 1], ['limo_curativo', 1], ['cetro_fango', 0.22], ['anillo_cienaga', 0.18]] },
+  // Jefe de mundo (evento): aparece para todo el reino cada cierto tiempo.
+  coloso: { name: 'Coloso de Valdoria', hp: 3000, dmgMin: 20, dmgMax: 32, speed: 3.6, aggro: 16, range: 3.2, cd: 1.4, respawn: EVENT_INTERVAL_S, gold: [300, 450], xp: 500, drops: [['corona_cripta', 0.5], ['guadana_espectral', 0.4], ['cetro_fango', 0.4], ['pocion_vida_mayor', 1], ['pocion_vida_mayor', 1]] },
 };
 
 const SPAWNS = [
@@ -610,6 +678,27 @@ for (const realm of REALMS) {
       damagers: new Set(),
     });
   }
+  // Jefe de mundo: un único Coloso por reino, gestionado como evento.
+  // Empieza "muerto" y aparece por primera vez tras un intervalo.
+  {
+    const def = MOB_TYPES.coloso;
+    const [cx, cz] = COLOSO_SPOT;
+    const id = nextMobId++;
+    mobs.set(id, {
+      id, type: 'coloso', def,
+      x: cx, z: cz, rot: 0,
+      homeX: cx, homeZ: cz,
+      hp: def.hp,
+      state: 'dead',
+      wanderX: 0, wanderZ: 0,
+      idleTime: 2,
+      attackTimer: 0,
+      targetId: null,
+      deadUntil: Date.now() + EVENT_INTERVAL_S * 1000,
+      damagers: new Set(),
+      isEvent: true,
+    });
+  }
   realmMobs.set(realm.id, mobs);
 }
 
@@ -647,6 +736,11 @@ function killMob(realm, m, killerId) {
   m.damagers.clear();
 
   broadcast(realm, { type: 'mob_dead', id: m.id, by: killerId });
+
+  if (m.isEvent) {
+    const hero = players.get(killerId)?.name || 'un héroe';
+    broadcast(realm, { type: 'announce', text: `🏆 ¡El ${m.def.name} ha caído por la mano de ${hero} y sus aliados! El botín se reparte entre los valientes.` });
+  }
 
   for (const pid of recipients) {
     const p = players.get(pid);
@@ -689,6 +783,9 @@ setInterval(() => {
           m.state = 'idle';
           m.idleTime = 2;
           broadcast(realm.id, { type: 'mob_spawn', id: m.id, x: m.x, z: m.z, hp: m.hp });
+          if (m.isEvent) {
+            broadcast(realm.id, { type: 'announce', text: `⚔️ ¡El ${m.def.name} ha despertado al norte de la Ciudadela! ¡Reunid a los héroes!` });
+          }
         }
         continue;
       }
@@ -1375,6 +1472,107 @@ wss.on('connection', (ws) => {
       }
       case 'party_leave': {
         leaveParty(id);
+        break;
+      }
+
+      // ---- Gremios ----
+      case 'guild_create': {
+        if (!p?.realm || !st) return;
+        if (st.guild) { fail(p, 'Ya perteneces a un gremio'); return; }
+        const gname = String(msg.name || '').trim().slice(0, 24);
+        if (gname.length < 3) { fail(p, 'El nombre necesita al menos 3 caracteres'); return; }
+        if (!isCleanName(gname)) { fail(p, 'Ese nombre de gremio no está permitido'); return; }
+        if (guildExists(gname)) { fail(p, 'Ya existe un gremio con ese nombre'); return; }
+        const COST = 500;
+        if (st.inventory.gold < COST) { fail(p, `Fundar un gremio cuesta ${COST} de oro`); return; }
+        st.inventory.gold -= COST;
+        createGuild(gname, p.name);
+        st.guild = gname;
+        sendSync(p);
+        send(ws, { type: 'guild_info', guild: guildInfoPayload(gname) });
+        sysTo(p, `Has fundado el gremio «${gname}».`);
+        break;
+      }
+      case 'guild_invite': {
+        if (!p?.realm || !st?.guild) { fail(p, 'No perteneces a ningún gremio'); return; }
+        const [tid, target] = findPlayerByName(msg.targetName);
+        if (!target || !target.character) { fail(p, 'Ese héroe no está conectado'); return; }
+        if (target.character.state.guild) { fail(p, `${target.name} ya pertenece a un gremio`); return; }
+        send(target.ws, { type: 'guild_invite', fromName: p.name, guild: st.guild });
+        sysTo(p, `Invitación de gremio enviada a ${target.name}.`);
+        break;
+      }
+      case 'guild_accept': {
+        if (!p?.realm || !st) return;
+        if (st.guild) return;
+        const g = getGuild(msg.guild);
+        if (!g) { fail(p, 'Ese gremio ya no existe'); return; }
+        guildAddMember(g.name, p.name);
+        st.guild = g.name;
+        sendSync(p);
+        broadcastGuild(g.name, { type: 'chat', from: 'Gremio', system: true, guild: true, text: `${p.name} se ha unido al gremio.` });
+        pushGuildInfo(g.name);
+        break;
+      }
+      case 'guild_leave': {
+        if (!p?.realm || !st?.guild) return;
+        const gname = st.guild;
+        const g = getGuild(gname);
+        st.guild = null;
+        sendSync(p);
+        send(ws, { type: 'guild_info', guild: null });
+        if (g) {
+          guildRemoveMember(gname, p.name);
+          if (g.leader === p.name) {
+            // El líder se va: pasa el mando o disuelve el gremio
+            if (g.members.length > 0) {
+              setGuildLeader(gname, g.members[0]);
+              broadcastGuild(gname, { type: 'chat', from: 'Gremio', system: true, guild: true, text: `${p.name} ha dejado el gremio. Ahora lidera ${g.members[0]}.` });
+              pushGuildInfo(gname);
+            } else {
+              deleteGuild(gname);
+            }
+          } else {
+            broadcastGuild(gname, { type: 'chat', from: 'Gremio', system: true, guild: true, text: `${p.name} ha dejado el gremio.` });
+            pushGuildInfo(gname);
+          }
+        }
+        break;
+      }
+      case 'guild_kick': {
+        if (!p?.realm || !st?.guild) return;
+        const g = getGuild(st.guild);
+        if (!g || g.leader !== p.name) { fail(p, 'Solo el líder puede expulsar'); return; }
+        const targetName = String(msg.targetName || '');
+        if (targetName === p.name || !g.members.includes(targetName)) return;
+        guildRemoveMember(g.name, targetName);
+        clearMemberGuild(targetName);
+        broadcastGuild(g.name, { type: 'chat', from: 'Gremio', system: true, guild: true, text: `${targetName} ha sido expulsado del gremio.` });
+        pushGuildInfo(g.name);
+        break;
+      }
+      case 'guild_disband': {
+        if (!p?.realm || !st?.guild) return;
+        const g = getGuild(st.guild);
+        if (!g || g.leader !== p.name) { fail(p, 'Solo el líder puede disolver el gremio'); return; }
+        const gname = g.name;
+        const members = [...g.members];
+        broadcastGuild(gname, { type: 'chat', from: 'Gremio', system: true, guild: true, text: `El gremio «${gname}» ha sido disuelto.` });
+        deleteGuild(gname);
+        for (const m of members) clearMemberGuild(m);
+        break;
+      }
+      case 'guild_motd': {
+        if (!p?.realm || !st?.guild) return;
+        const g = getGuild(st.guild);
+        if (!g || g.leader !== p.name) { fail(p, 'Solo el líder puede cambiar el lema'); return; }
+        setGuildMotd(g.name, msg.motd);
+        pushGuildInfo(g.name);
+        break;
+      }
+      case 'guild_info': {
+        if (!p?.realm || !st) return;
+        send(ws, { type: 'guild_info', guild: st.guild ? guildInfoPayload(st.guild) : null });
         break;
       }
 

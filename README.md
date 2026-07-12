@@ -52,6 +52,8 @@ proporciones propias) y cada clase su color de túnica.
 | Habilidades | Teclas `1`-`4` |
 | Inventario | Tecla `I` |
 | Talentos | Tecla `T` |
+| Gremio | Tecla `G` (o botón 🛡️ Gremio) |
+| Chat de gremio | `/g <mensaje>` |
 | Mapa grande | Tecla `M` (minimapa siempre visible arriba a la izquierda) |
 | Pescar | Clic en las ondas del lago |
 | Cocinar | Clic en una hoguera |
@@ -152,6 +154,26 @@ y (si procede) **⚔ Atacar**.
   conectado. Pon un objeto a la venta (queda en depósito), otros lo compran, y
   recoges tus ganancias (menos un 5% de comisión) en el Subastador. Pestañas
   Comprar / Vender / Mis subastas.
+
+### Gremios / clanes (tecla `G`)
+- **Funda un gremio** por 500 de oro y reúne héroes bajo un mismo estandarte.
+  El fundador es el **líder**.
+- **Chat de gremio**: escribe `/g <mensaje>` para hablar solo con tus compañeros
+  de gremio (en verde), sin importar el reino en el que estén.
+- **Gestión**: el líder puede **invitar** por nombre (el invitado recibe un aviso
+  para unirse), **expulsar** miembros, poner un **lema** y **disolver** el gremio.
+  Cualquier miembro puede **abandonarlo**; si se va el líder, el mando pasa al
+  siguiente miembro (o el gremio se disuelve si queda vacío).
+- **Clasificación de gremios**: pestaña «Gremios» en las Clasificaciones, por
+  número de miembros.
+
+### Eventos de mundo: el Coloso de Valdoria
+Cada cierto tiempo (por defecto 15 min) un **jefe de mundo**, el Coloso de
+Valdoria, **despierta al norte de la Ciudadela** con un anuncio a todo el reino.
+Tiene muchísima vida (3000 PS): hace falta **reunir a varios héroes** para
+derribarlo. Al caer, un segundo anuncio celebra la victoria y el **botín
+generoso** (oro, experiencia y objetos raros) se reparte entre todos los que
+participaron. Vuelve a aparecer pasado el intervalo (`EVENT_INTERVAL_S`).
 
 ### Criaturas sincronizadas y grupos de caza
 La IA de las criaturas corre en el servidor (acechar, perseguir, atacar, volver
@@ -286,6 +308,7 @@ public/js/bountyboard.js Panel del Tablón de Encargos.
 public/js/leaderboard.js Panel de clasificaciones (nivel/oro/bajas).
 public/js/minimap.js   Minimapa y mapa grande (M): mundo, criptas, misiones.
 public/js/party.js     Grupos de caza: invitaciones y panel de miembros.
+public/js/guild.js     Gremios: fundar, invitar, miembros, lema y chat.
 public/js/trade.js     Comercio entre jugadores: panel de ofertas y bolsa.
 public/js/world-data.js Datos compartidos: piedras rúnicas y monturas.
 public/js/travel.js    Panel de viaje rápido (piedras rúnicas).

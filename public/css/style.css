@@ -305,6 +305,44 @@ canvas { display: block; }
 #mount-btn:hover { border-color: var(--gold); }
 #mount-btn.on { color: #9ad0ff; border-color: #4a90d0; box-shadow: 0 0 10px rgba(74,144,208,0.4); }
 
+/* Botón de gremio */
+#guild-btn {
+  position: fixed; top: 16px; right: 340px; z-index: 20;
+  height: 36px; padding: 0 12px; font-size: 0.85em; font-family: inherit;
+  background: var(--panel-bg); color: #8a7a5a;
+  border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer; white-space: nowrap;
+}
+#guild-btn:hover { border-color: var(--gold); }
+
+/* Chat de gremio */
+#chat-log .msg.guild .who { color: #7fd0a0; }
+#chat-log .msg.guild { color: #a8e0c0; }
+
+/* Panel de gremio */
+#guild-panel { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 460px; max-height: 80vh; display: flex; flex-direction: column; overflow-y: auto; }
+#guild-panel.hidden { display: none !important; }
+.guild-create, .guild-invite-row, .guild-motd-edit { display: flex; gap: 8px; margin: 10px 0; }
+.guild-create input, .guild-invite-row input, .guild-motd-edit input {
+  flex: 1; min-width: 0; padding: 7px 10px; font-family: inherit; font-size: 0.9em;
+  background: rgba(0,0,0,0.3); color: #e8dcc0;
+  border: 1px solid var(--panel-border); border-radius: 4px;
+}
+.guild-head { margin-bottom: 6px; }
+.guild-head h3 { color: var(--gold); margin: 0 0 4px; }
+.guild-motd { color: #a89877; font-size: 0.9em; font-style: italic; }
+.guild-member {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.guild-kick {
+  padding: 3px 9px; font-family: inherit; font-size: 0.8em; cursor: pointer;
+  background: rgba(140,50,40,0.25); color: #ff8a7a;
+  border: 1px solid #8a4030; border-radius: 4px;
+}
+.guild-kick:hover { background: rgba(180,60,50,0.4); }
+.guild-actions { display: flex; gap: 8px; margin-top: 14px; }
+.lb-sub { color: #a89877; font-size: 0.82em; }
+
 /* Viaje rápido */
 #travel-panel, #stable-panel { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 440px; max-height: 78vh; display: flex; flex-direction: column; }
 #travel-panel.hidden, #stable-panel.hidden { display: none !important; }

@@ -124,6 +124,16 @@ export function sendAuctionBuy(auctionId) { send({ type: 'auction_buy', id: auct
 export function sendAuctionCancel(auctionId) { send({ type: 'auction_cancel', id: auctionId }); }
 export function sendAuctionCollect() { send({ type: 'auction_collect' }); }
 
+// ---- Gremios ----
+export function sendGuildCreate(name) { send({ type: 'guild_create', name }); }
+export function sendGuildInvite(targetName) { send({ type: 'guild_invite', targetName }); }
+export function sendGuildAccept(guild) { send({ type: 'guild_accept', guild }); }
+export function sendGuildLeave() { send({ type: 'guild_leave' }); }
+export function sendGuildKick(targetName) { send({ type: 'guild_kick', targetName }); }
+export function sendGuildDisband() { send({ type: 'guild_disband' }); }
+export function sendGuildMotd(motd) { send({ type: 'guild_motd', motd }); }
+export function sendGuildInfo() { send({ type: 'guild_info' }); }
+
 // ---- Comercio entre jugadores ----
 export function sendTradeRequest(targetId) { send({ type: 'trade_request', targetId }); }
 export function sendTradeAccept(fromId) { send({ type: 'trade_accept', fromId }); }

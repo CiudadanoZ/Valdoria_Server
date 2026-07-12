@@ -34,10 +34,11 @@ export function isDialogOpen() {
 }
 
 // ---- Chat ----
-export function addChatMessage({ from, text, system }) {
+export function addChatMessage({ from, text, system, guild }) {
   const log = $('chat-log');
   const el = document.createElement('div');
   el.className = system ? 'msg system' : 'msg';
+  if (guild) el.classList.add('guild');
   if (system) {
     el.textContent = text;
   } else {

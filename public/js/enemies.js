@@ -21,6 +21,8 @@ export const MOB_INFO = {
   ahogado:      { name: 'Ahogado',            maxHp: 90,  kind: 'drowned',  color: 0x5a7a5a, scale: 1 },
   chaman_cienaga: { name: 'Chamán de la Ciénaga', maxHp: 110, kind: 'drowned', color: 0x6a5a8a, scale: 1.05, staff: true },
   rey_fango:    { name: 'Rey del Fango',      maxHp: 450, kind: 'blob',     color: 0x4a5a38, scale: 2.4, redEyes: true, crown: true, label: true },
+  // Jefe de mundo (evento)
+  coloso:       { name: 'Coloso de Valdoria', maxHp: 3000, kind: 'skeleton', color: 0x6a5030, scale: 3.6, redEyes: true, crown: true, label: true },
 };
 
 // ---- Malla cuadrúpeda (lobo / jabalí / rata) ----

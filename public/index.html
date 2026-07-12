@@ -125,6 +125,8 @@
     <button id="pvp-btn" title="Combate entre jugadores">⚔ JcJ: No</button>
     <!-- Botón de montura -->
     <button id="mount-btn" title="Montar / desmontar">🐴 Montar</button>
+    <!-- Botón de gremio -->
+    <button id="guild-btn" title="Gremio (G)">🛡️ Gremio</button>
   </div>
 
   <!-- Menú al hacer clic en otro jugador -->
@@ -206,6 +208,7 @@
       <button id="lb-tab-gold" class="shop-tab">Oro</button>
       <button id="lb-tab-kills" class="shop-tab">Bajas</button>
       <button id="lb-tab-pvp" class="shop-tab">JcJ</button>
+      <button id="lb-tab-guilds" class="shop-tab">Gremios</button>
     </div>
     <div id="lb-list"></div>
   </div>
@@ -282,6 +285,44 @@
     <div class="trade-actions">
       <button id="trade-confirm">Confirmar</button>
       <button id="trade-cancel" class="lobby-secondary">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Gremio / Clan -->
+  <div id="guild-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>🛡️ Gremio</h2>
+      <button class="close-btn" data-close="guild-panel">✕</button>
+    </div>
+    <!-- Sin gremio: fundar uno nuevo -->
+    <div id="guild-none">
+      <p class="talents-info">Funda un gremio para unir héroes bajo un mismo estandarte. Habla por el canal de gremio con <b>/g mensaje</b>.</p>
+      <div class="guild-create">
+        <input id="guild-name-input" type="text" maxlength="24" placeholder="Nombre del gremio" />
+        <button id="guild-create-btn" class="shop-btn">Fundar (🪙 500)</button>
+      </div>
+      <p class="talents-info">¿Recibiste una invitación? Acéptala desde el aviso que aparece en pantalla.</p>
+    </div>
+    <!-- Con gremio: información y gestión -->
+    <div id="guild-info" class="hidden">
+      <div class="guild-head">
+        <h3 id="guild-title">—</h3>
+        <div id="guild-motd" class="guild-motd"></div>
+      </div>
+      <div id="guild-motd-edit" class="guild-motd-edit hidden">
+        <input id="guild-motd-input" type="text" maxlength="120" placeholder="Lema del gremio" />
+        <button id="guild-motd-btn" class="shop-btn">Guardar lema</button>
+      </div>
+      <div class="guild-invite-row" id="guild-invite-row">
+        <input id="guild-invite-input" type="text" maxlength="24" placeholder="Nombre del héroe" />
+        <button id="guild-invite-btn" class="shop-btn">Invitar</button>
+      </div>
+      <h3 class="trade-baglabel">Miembros (<span id="guild-count">0</span>)</h3>
+      <div id="guild-members"></div>
+      <div class="guild-actions">
+        <button id="guild-leave-btn" class="lobby-secondary">Abandonar gremio</button>
+        <button id="guild-disband-btn" class="lobby-secondary hidden">Disolver gremio</button>
+      </div>
     </div>
   </div>
 

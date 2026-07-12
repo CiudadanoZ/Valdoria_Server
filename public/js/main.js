@@ -12,7 +12,7 @@ import {
   connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly,
   sendGather, sendFishStart, sendFishStop, sendMira, sendSkillHeal, sendSkillBuff,
   sendPvpToggle, sendPvpAttack, sendTradeRequest, sendTradeAccept,
-  sendWaystoneActivate, sendMountToggle,
+  sendWaystoneActivate, sendMountToggle, sendGuildAccept,
 } from './network.js';
 import { initTrade, openTrade, applyTradeUpdate, closeTrade, tradeDone, isTrading, refreshTradeBag } from './trade.js';
 import { pstate, applyPstate } from './pstate.js';
@@ -35,6 +35,7 @@ import { initShop, openShop, refreshShop } from './shop.js';
 import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
 import { BLESSINGS, initBlessings, applyBlessings, blessingDamage } from './blessings.js';
 import { initParty, offerInvite, onInvite, onPartyUpdate, onPartyLeft, onPlayerLeave as partyPlayerLeave } from './party.js';
+import { initGuild, toggleGuild, closeGuild, onGuildInfo, onGuildInvite } from './guild.js';
 import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby, clearSession } from './lobby.js';
 import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled, enableAccountSettings, onPasswordResult, onReportResult } from './settings.js';
 import { applyBounties, openBountyBoard } from './bountyboard.js';
@@ -297,6 +298,9 @@ connect({
   player_mount(msg) { remotes?.setMount(msg.id, msg.mount); },
   // Casa de subastas
   auction_data(msg) { applyAuctionData(msg); },
+  // Gremios
+  guild_info(msg) { onGuildInfo(msg); },
+  guild_invite(msg) { onGuildInvite(msg, (guild) => sendGuildAccept(guild)); },
   disconnected() {
     if (kickedOut) return; // expulsado/vetado: no reconectar
     if (inWorld) {
@@ -363,6 +367,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   initCrafting();
   initBlessings();
   initParty(id);
+  initGuild(charName);
   setShopOpener(openShop);
   setForgeOpener(openCrafting);
   setMiraServices({
@@ -707,6 +712,7 @@ function onKeyDown(e) {
   else if (k === 'm') toggleMap();
   else if (k === 't') toggleTalents();
   else if (k === 'o') toggleSettings();
+  else if (k === 'g') toggleGuild();
   else if (k === 'l') openLeaderboard();
   else if (k === 'escape') {
     ui.hideDialog();
@@ -720,6 +726,7 @@ function onKeyDown(e) {
     $('travel-panel').classList.add('hidden');
     $('stable-panel').classList.add('hidden');
     $('auction-panel').classList.add('hidden');
+    closeGuild();
     hidePlayerMenu();
     closeSettings();
     closeMap();

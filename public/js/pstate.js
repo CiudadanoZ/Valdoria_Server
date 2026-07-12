@@ -6,6 +6,7 @@ export const pstate = {
   auctionGold: 0,   // ganancias pendientes de la casa de subastas
   waystones: [],    // piedras rúnicas descubiertas
   riding: null,     // montura activa en esta sesión
+  guild: null,      // nombre del gremio al que pertenece, o null
 };
 
 export function applyPstate(msg) {
@@ -13,4 +14,5 @@ export function applyPstate(msg) {
   if (msg.mount !== undefined) pstate.mount = msg.mount;
   if (typeof msg.auctionGold === 'number') pstate.auctionGold = msg.auctionGold;
   if (Array.isArray(msg.waystones)) pstate.waystones = msg.waystones;
+  if (msg.guild !== undefined) pstate.guild = msg.guild;
 }

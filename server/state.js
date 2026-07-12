@@ -34,6 +34,8 @@ export function ensureState(character) {
   if (st.mount === undefined) st.mount = null;
   // Ganancias pendientes de la casa de subastas
   st.auctionGold = st.auctionGold || 0;
+  // Gremio al que pertenece (nombre) o null
+  if (st.guild === undefined) st.guild = null;
   // Bendiciones de Mira: id -> instante de expiración (ms época). Del servidor.
   if (!st.blessings || typeof st.blessings !== 'object') st.blessings = {};
   // Encargos diarios: se regeneran cada día.
@@ -262,5 +264,6 @@ export function syncPayload(st) {
     mounts: st.mounts,
     mount: st.mount,
     auctionGold: st.auctionGold,
+    guild: st.guild,
   };
 }

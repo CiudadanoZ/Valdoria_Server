@@ -43,6 +43,7 @@ export function isAdminAccount(name) {
 let accounts = {};
 let nextCharId = 1;
 let bannedAccounts = new Set(); // claves de cuenta baneadas
+let guilds = {}; // clave (nombre en minúsculas) -> { name, leader, members:[charName], motd, createdAt }
 let db = null;
 
 export function loadDb() {
@@ -57,6 +58,7 @@ export function loadDb() {
       seller TEXT NOT NULL, sellerName TEXT NOT NULL,
       item TEXT NOT NULL, price INTEGER NOT NULL, ts INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS guilds (key TEXT PRIMARY KEY, data TEXT NOT NULL);
   `);
 
   // Cargar el modelo en memoria
@@ -68,6 +70,10 @@ export function loadDb() {
 
   const metaBans = db.prepare('SELECT value FROM meta WHERE key = ?').get('bans');
   if (metaBans) { try { bannedAccounts = new Set(JSON.parse(metaBans.value)); } catch { /* nada */ } }
+
+  for (const row of db.prepare('SELECT key, data FROM guilds').all()) {
+    try { guilds[row.key] = JSON.parse(row.data); } catch { /* fila corrupta */ }
+  }
 
   // Migración desde el antiguo accounts.json (una sola vez)
   if (Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
@@ -96,12 +102,19 @@ let saveTimer = null;
 function flushNow() {
   const upsert = db.prepare('INSERT INTO accounts (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data');
   const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+  const upsertGuild = db.prepare('INSERT INTO guilds (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data');
+  const knownGuilds = new Set(Object.keys(guilds));
   db.transaction(() => {
     for (const [key, account] of Object.entries(accounts)) {
       upsert.run(key, JSON.stringify(account));
     }
     setMeta.run('nextCharId', String(nextCharId));
     setMeta.run('bans', JSON.stringify([...bannedAccounts]));
+    for (const [key, g] of Object.entries(guilds)) upsertGuild.run(key, JSON.stringify(g));
+    // Borrar gremios disueltos
+    for (const row of db.prepare('SELECT key FROM guilds').all()) {
+      if (!knownGuilds.has(row.key)) db.prepare('DELETE FROM guilds WHERE key = ?').run(row.key);
+    }
   })();
 }
 
@@ -287,6 +300,7 @@ export function getLeaderboards(topN = 10) {
     gold: top('gold', 'level'),
     kills: top('kills', 'level'),
     pvp: top('pvp', 'level'),
+    guilds: topGuilds(topN),
   };
 }
 
@@ -317,6 +331,60 @@ export function findCharacterByName(name) {
     if (character) return { account, character };
   }
   return null;
+}
+
+// ---- Gremios ----
+export function getGuild(name) {
+  return guilds[String(name || '').toLowerCase()] || null;
+}
+export function guildExists(name) {
+  return !!guilds[String(name || '').toLowerCase()];
+}
+export function createGuild(name, leaderChar) {
+  const key = name.toLowerCase();
+  if (guilds[key]) return null;
+  guilds[key] = { name, leader: leaderChar, members: [leaderChar], motd: '', createdAt: Date.now() };
+  saveSoon();
+  return guilds[key];
+}
+export function deleteGuild(name) {
+  delete guilds[String(name || '').toLowerCase()];
+  saveSoon();
+}
+export function guildAddMember(name, charName) {
+  const g = getGuild(name);
+  if (!g) return false;
+  if (!g.members.includes(charName)) g.members.push(charName);
+  saveSoon();
+  return true;
+}
+export function guildRemoveMember(name, charName) {
+  const g = getGuild(name);
+  if (!g) return false;
+  g.members = g.members.filter((m) => m !== charName);
+  saveSoon();
+  return true;
+}
+export function setGuildMotd(name, motd) {
+  const g = getGuild(name);
+  if (!g) return false;
+  g.motd = String(motd || '').slice(0, 200);
+  saveSoon();
+  return true;
+}
+export function setGuildLeader(name, charName) {
+  const g = getGuild(name);
+  if (!g) return false;
+  g.leader = charName;
+  saveSoon();
+  return true;
+}
+// Ranking de gremios por número de miembros (para clasificaciones).
+export function topGuilds(n = 10) {
+  return Object.values(guilds)
+    .sort((a, b) => b.members.length - a.members.length)
+    .slice(0, n)
+    .map((g) => ({ name: g.name, members: g.members.length, leader: g.leader }));
 }
 
 // ---- Casa de subastas ----

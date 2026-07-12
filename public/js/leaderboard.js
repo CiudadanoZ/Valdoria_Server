@@ -11,6 +11,7 @@ const TABS = {
   gold: { label: 'Oro', render: (c) => `🪙 ${c.gold}` },
   kills: { label: 'Bajas', render: (c) => `⚔ ${c.kills}` },
   pvp: { label: 'JcJ', render: (c) => `⚔ ${c.pvp || 0}` },
+  guilds: { label: 'Gremios', render: (g) => `👥 ${g.members}` },
 };
 
 export function initLeaderboard() {
@@ -46,12 +47,14 @@ function render() {
     return;
   }
   list.innerHTML = rows.map((c, i) => {
-    const race = RACES[c.race] || RACES.humano;
-    const clazz = CLASSES[c.class] || CLASSES.guerrero;
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+    // Los gremios no tienen raza/clase: se muestran con su estandarte y líder.
+    const name = tab === 'guilds'
+      ? `🛡️ ${escapeHtml(c.name)} <span class="lb-sub">líder ${escapeHtml(c.leader)}</span>`
+      : `${(RACES[c.race] || RACES.humano).icon}${(CLASSES[c.class] || CLASSES.guerrero).icon} ${escapeHtml(c.name)}`;
     return `<div class="lb-row">` +
       `<span class="lb-rank">${medal}</span>` +
-      `<span class="lb-name">${race.icon}${clazz.icon} ${escapeHtml(c.name)}</span>` +
+      `<span class="lb-name">${name}</span>` +
       `<span class="lb-value">${TABS[tab].render(c)}</span>` +
       `</div>`;
   }).join('');
