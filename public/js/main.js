@@ -12,8 +12,14 @@ import {
   connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly,
   sendGather, sendFishStart, sendFishStop, sendMira, sendSkillHeal, sendSkillBuff,
   sendPvpToggle, sendPvpAttack, sendTradeRequest, sendTradeAccept,
+  sendWaystoneActivate, sendMountToggle,
 } from './network.js';
 import { initTrade, openTrade, applyTradeUpdate, closeTrade, tradeDone, isTrading, refreshTradeBag } from './trade.js';
+import { pstate, applyPstate } from './pstate.js';
+import { openTravel, closeTravel } from './travel.js';
+import { openStable, refreshStable } from './stable.js';
+import { initAuction, openAuction, applyAuctionData, refreshAuction } from './auction.js';
+import { MOUNTS } from './world-data.js';
 import { initSkills, refreshSkills, castSkill, updateSkills, skillSpeedMul } from './skills.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
@@ -86,8 +92,10 @@ initLobby();
 initSettings({ onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; } });
 initLeaderboard();
 initTrade();
+initAuction();
 document.getElementById('leaderboard-btn-lobby')?.addEventListener('click', openLeaderboard);
 document.getElementById('pvp-btn')?.addEventListener('click', () => sendPvpToggle());
+document.getElementById('mount-btn')?.addEventListener('click', () => sendMountToggle());
 connect({
   auth_ok(msg) { onAuthOk(msg); },
   auth_fail(msg) { onAuthFail(msg); },
@@ -147,7 +155,10 @@ connect({
   state_sync(msg) {
     applyInventory(msg.inventory);
     if (msg.inventory) setGoldForRespec(msg.inventory.gold || 0);
+    applyPstate(msg);
     refreshTradeBag();
+    refreshStable();
+    refreshAuction();
     applyProgression(msg.progression);
     applyBlessings(msg.blessings);
     applyBounties(msg.bounties);
@@ -197,6 +208,11 @@ connect({
     else if (msg.kind === 'sell') { ui.toast(`Vendido (+${msg.gold} de oro)`); play('gold'); }
     else if (msg.kind === 'craft' && item) { ui.toast(`🔨 Bramm forja: ${item.icon} ${item.name}`, 'quest'); play('craft'); }
     else if (msg.kind === 'cook' && item) { ui.toast(`🔥 Cocinado: ${item.icon} ${item.name}`); play('cook'); }
+    else if (msg.kind === 'mount_buy') { ui.toast('🐴 ¡Montura comprada! Selecciónala y pulsa Montar.', 'quest'); play('buy'); }
+    else if (msg.kind === 'auction_create' && item) { ui.toast(`🏛️ Subastado: ${item.icon} ${item.name}`); play('buy'); }
+    else if (msg.kind === 'auction_buy' && item) { ui.toast(`Comprado en subasta: ${item.icon} ${item.name}`); play('gold'); }
+    else if (msg.kind === 'auction_cancel' && item) { ui.toast(`Subasta retirada: ${item.icon} ${item.name}`); }
+    else if (msg.kind === 'auction_collect') { ui.toast(`💰 Recogiste ${msg.gold} de oro de tus ventas`, 'quest'); play('gold'); }
   },
   rpc_fail(msg) { ui.toast(msg.reason); play('error'); },
   claim_ok(msg) { onClaimResult(msg.questId, true); play('quest'); },
@@ -259,6 +275,28 @@ connect({
   trade_update(msg) { applyTradeUpdate(msg); },
   trade_done() { tradeDone(); },
   trade_closed(msg) { closeTrade(msg.reason); },
+  // Viaje rápido
+  waystone_list(msg) { openTravel(msg); },
+  waystone_traveled(msg) {
+    player.stop();
+    combatTarget = null; pvpTarget = null;
+    player.mesh.position.set(msg.x, 0, msg.z);
+    ui.toast(`🗺️ Has viajado a ${msg.name}`, 'quest');
+    play('portal');
+    saveGame();
+  },
+  // Monturas
+  mount_state(msg) {
+    pstate.riding = msg.riding;
+    player.setMount(msg.riding);
+    const btn = $('mount-btn');
+    btn.textContent = msg.riding ? '🐴 Desmontar' : '🐴 Montar';
+    btn.classList.toggle('on', !!msg.riding);
+    if (msg.riding) { ui.toast(`Montas: ${MOUNTS[msg.riding]?.name || 'montura'}`); play('portal'); }
+  },
+  player_mount(msg) { remotes?.setMount(msg.id, msg.mount); },
+  // Casa de subastas
+  auction_data(msg) { applyAuctionData(msg); },
   disconnected() {
     if (kickedOut) return; // expulsado/vetado: no reconectar
     if (inWorld) {
@@ -521,6 +559,19 @@ function onPointerDown(e) {
     return;
   }
 
+  // 4e) ¿Clic sobre una piedra rúnica? -> viaje rápido
+  const wsHits = raycaster.intersectObjects(worldRefs.waystones, true);
+  if (wsHits.length > 0) {
+    let obj = wsHits[0].object;
+    while (obj && !obj.userData.waystoneId) obj = obj.parent;
+    if (obj) {
+      combatTarget = null;
+      const wsId = obj.userData.waystoneId;
+      player.moveTo(obj.position.clone(), () => { sendWaystoneActivate(wsId); play('click'); }, 3.0);
+      return;
+    }
+  }
+
   // 5) ¿Clic sobre otro jugador?
   const remoteHits = raycaster.intersectObjects(remotes.meshes(), true);
   if (remoteHits.length > 0) {
@@ -578,6 +629,9 @@ function approachNPC(npc) {
   player.moveTo(target, () => {
     const d = npc.mesh.position.clone().sub(player.mesh.position);
     player.mesh.rotation.y = Math.atan2(d.x, d.z);
+    // El Establero y el Subastador abren sus paneles en vez de dialogar
+    if (npc.id === 'establo') { openStable(); play('click'); return; }
+    if (npc.id === 'subastas') { openAuction(); play('click'); return; }
     const { text, actions } = getDialog(npc);
     ui.showDialog(`${npc.name} — ${npc.title}`, text, actions);
     updateQuestMarkers(npcs, 0);
@@ -663,6 +717,9 @@ function onKeyDown(e) {
     $('cooking-panel').classList.add('hidden');
     $('bounty-panel').classList.add('hidden');
     $('leaderboard-panel').classList.add('hidden');
+    $('travel-panel').classList.add('hidden');
+    $('stable-panel').classList.add('hidden');
+    $('auction-panel').classList.add('hidden');
     hidePlayerMenu();
     closeSettings();
     closeMap();
@@ -789,7 +846,8 @@ function loop() {
   const time = clock.elapsedTime;
 
   updateCombat(dt);
-  player.speedMul = skillSpeedMul() * talentSpeedMul();
+  const mountMul = pstate.riding ? (1 + (MOUNTS[pstate.riding]?.speed || 0)) : 1;
+  player.speedMul = skillSpeedMul() * talentSpeedMul() * mountMul;
   player.update(dt);
   remotes.update(dt);
   mobs.update(dt);

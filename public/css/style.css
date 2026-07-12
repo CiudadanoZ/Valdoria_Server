@@ -295,6 +295,35 @@ canvas { display: block; }
 #pvp-btn:hover { border-color: var(--gold); }
 #pvp-btn.on { color: #ff6a5a; border-color: #c05040; box-shadow: 0 0 10px rgba(200,80,64,0.4); }
 
+/* Botón de montura */
+#mount-btn {
+  position: fixed; top: 16px; right: 250px; z-index: 20;
+  height: 36px; padding: 0 12px; font-size: 0.85em; font-family: inherit;
+  background: var(--panel-bg); color: #8a7a5a;
+  border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer; white-space: nowrap;
+}
+#mount-btn:hover { border-color: var(--gold); }
+#mount-btn.on { color: #9ad0ff; border-color: #4a90d0; box-shadow: 0 0 10px rgba(74,144,208,0.4); }
+
+/* Viaje rápido */
+#travel-panel, #stable-panel { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 440px; max-height: 78vh; display: flex; flex-direction: column; }
+#travel-panel.hidden, #stable-panel.hidden { display: none !important; }
+#travel-list, #stable-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.travel-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(0,0,0,0.4); border: 1px solid #3a2d18; border-radius: 4px; }
+.travel-row span { color: var(--parchment); font-size: 0.95em; }
+.travel-row.locked span { color: #6a5d45; }
+
+/* Casa de subastas */
+#auction-panel { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 480px; max-height: 82vh; display: flex; flex-direction: column; }
+#auction-panel.hidden { display: none !important; }
+#ah-buy, #ah-mine { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+#ah-sell-bag { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-bottom: 12px; }
+.ah-sell-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--parchment); font-size: 0.9em; }
+.ah-sell-controls input { width: 90px; padding: 5px 8px; background: #0d0906; color: var(--parchment); border: 1px solid var(--panel-border); border-radius: 4px; }
+.ah-sell-controls b { color: var(--gold-bright); }
+#ah-collect { padding: 4px 12px; margin-left: 8px; }
+.trade-slot.locked { opacity: 0.4; cursor: not-allowed; }
+
 /* Menú al hacer clic en otro jugador */
 #player-menu {
   position: fixed; z-index: 60; min-width: 150px;

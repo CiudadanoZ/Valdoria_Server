@@ -2,6 +2,35 @@
 // (movimiento por clic estilo Diablo) y jugadores remotos interpolados.
 import * as THREE from 'three';
 import { isBlocked } from './world.js';
+import { MOUNTS } from './world-data.js';
+
+const MOUNT_LIFT = 0.75; // cuánto se eleva el héroe al ir montado
+
+// Malla sencilla de montura (cuadrúpedo) que se coloca bajo el héroe.
+export function makeMount(mountId) {
+  const def = MOUNTS[mountId] || MOUNTS.corcel;
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: def.color });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 1.7), m);
+  body.position.y = 0.7; body.castShadow = true; g.add(body);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.7, 6), m);
+  neck.position.set(0, 1.0, 0.9); neck.rotation.x = 0.7; g.add(neck);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.3, 0.55), m);
+  head.position.set(0, 1.25, 1.2); g.add(head);
+  for (const [lx, lz] of [[-0.26, 0.6], [0.26, 0.6], [-0.26, -0.6], [0.26, -0.6]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.75, 5), m);
+    leg.position.set(lx, 0.35, lz); g.add(leg);
+  }
+  // Cola / melena
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 5), new THREE.MeshStandardMaterial({ color: 0x2a2320 }));
+  tail.position.set(0, 0.8, -1.0); tail.rotation.x = 1.2; g.add(tail);
+  if (mountId === 'espectro') {
+    g.traverse((o) => { if (o.material) { o.material.transparent = true; o.material.opacity = 0.75; o.material.emissive = new THREE.Color(0x3a7a6a); o.material.emissiveIntensity = 0.6; } });
+  }
+  g.position.y = -MOUNT_LIFT; // el héroe se eleva; la montura queda en el suelo
+  g.name = 'mount';
+  return g;
+}
 import { RACES, CLASSES } from './races.js';
 
 // Héroe de un jugador: aspecto según raza (piel, proporciones, rasgos) y
@@ -212,6 +241,7 @@ export class LocalPlayer {
   }
 
   animate(dt, walking) {
+    const lift = this.mountLift || 0;
     if (walking) {
       this.walkTime += dt * 10;
       const swing = Math.sin(this.walkTime) * 0.5;
@@ -219,13 +249,24 @@ export class LocalPlayer {
       this.mesh.getObjectByName('legR').rotation.x = -swing;
       this.mesh.getObjectByName('armL').rotation.x = -swing * 0.7;
       this.mesh.getObjectByName('armR').rotation.x = swing * 0.7;
-      this.mesh.position.y = Math.abs(Math.sin(this.walkTime)) * 0.06;
+      this.mesh.position.y = lift + Math.abs(Math.sin(this.walkTime)) * 0.06;
     } else {
       for (const n of ['legL', 'legR', 'armL', 'armR']) {
         this.mesh.getObjectByName(n).rotation.x *= 0.8;
       }
-      this.mesh.position.y *= 0.8;
+      this.mesh.position.y += (lift - this.mesh.position.y) * 0.3;
       this.moving = false;
+    }
+  }
+
+  // Muestra u oculta la montura bajo el héroe local.
+  setMount(mountId) {
+    if (this.mountMesh) { this.mesh.remove(this.mountMesh); this.mountMesh = null; }
+    this.mountLift = 0;
+    if (mountId) {
+      this.mountMesh = makeMount(mountId);
+      this.mesh.add(this.mountMesh);
+      this.mountLift = MOUNT_LIFT;
     }
   }
 }
@@ -237,7 +278,7 @@ export class RemotePlayers {
     this.players = new Map(); // id -> { mesh, target: {x,z,rot}, walkTime }
   }
 
-  add({ id, name, race, class: clazz, x, z, rot, pvp }) {
+  add({ id, name, race, class: clazz, x, z, rot, pvp, mount }) {
     if (this.players.has(id)) return;
     const mesh = makeHero(race, clazz);
     mesh.position.set(x, 0, z);
@@ -245,9 +286,10 @@ export class RemotePlayers {
     mesh.add(makeNameSprite(name, '#ffd97a'));
     mesh.traverse((o) => { o.userData.remoteId = id; });
     this.scene.add(mesh);
-    const p = { id, name, mesh, target: { x, z, rot: rot || 0 }, walkTime: 0, pvp: false, mark: null };
+    const p = { id, name, mesh, target: { x, z, rot: rot || 0 }, walkTime: 0, pvp: false, mark: null, mountMesh: null, mountLift: 0 };
     this.players.set(id, p);
     if (pvp) this.setPvp(id, true);
+    if (mount) this.setMount(id, mount);
   }
 
   // Marca de JcJ: dos espadas rojas flotando sobre el jugador señalado.
@@ -267,6 +309,19 @@ export class RemotePlayers {
   }
 
   isPvp(id) { return !!this.players.get(id)?.pvp; }
+
+  // Muestra u oculta la montura de un jugador remoto.
+  setMount(id, mountId) {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (p.mountMesh) { p.mesh.remove(p.mountMesh); p.mountMesh = null; }
+    p.mountLift = 0;
+    if (mountId) {
+      p.mountMesh = makeMount(mountId);
+      p.mesh.add(p.mountMesh);
+      p.mountLift = MOUNT_LIFT;
+    }
+  }
 
   meshes() {
     return [...this.players.values()].map((p) => p.mesh);
@@ -314,6 +369,8 @@ export class RemotePlayers {
         p.mesh.getObjectByName('legL').rotation.x *= 0.8;
         p.mesh.getObjectByName('legR').rotation.x *= 0.8;
       }
+      // Elevación por montura
+      p.mesh.position.y += ((p.mountLift || 0) - p.mesh.position.y) * 0.3;
       // Interpolación suave de rotación
       let dr = p.target.rot - p.mesh.rotation.y;
       while (dr > Math.PI) dr -= Math.PI * 2;

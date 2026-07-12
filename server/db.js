@@ -52,6 +52,11 @@ export function loadDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS auctions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seller TEXT NOT NULL, sellerName TEXT NOT NULL,
+      item TEXT NOT NULL, price INTEGER NOT NULL, ts INTEGER NOT NULL
+    );
   `);
 
   // Cargar el modelo en memoria
@@ -301,6 +306,39 @@ export function getAccountsSummary() {
       gold: c.state?.inventory?.gold || 0,
     })),
   }));
+}
+
+// Busca un personaje por su nombre en cualquier cuenta (para pagar a vendedores
+// que estén desconectados). Devuelve { account, character } o null.
+export function findCharacterByName(name) {
+  const lower = String(name || '').toLowerCase();
+  for (const account of Object.values(accounts)) {
+    const character = account.characters.find((c) => c.name.toLowerCase() === lower);
+    if (character) return { account, character };
+  }
+  return null;
+}
+
+// ---- Casa de subastas ----
+export function listAuctions(limit = 100) {
+  return db.prepare('SELECT id, seller, sellerName, item, price, ts FROM auctions ORDER BY ts DESC LIMIT ?').all(limit);
+}
+export function auctionsBySeller(sellerKey) {
+  return db.prepare('SELECT id, sellerName, item, price, ts FROM auctions WHERE seller = ? ORDER BY ts DESC').all(sellerKey);
+}
+export function getAuction(id) {
+  return db.prepare('SELECT id, seller, sellerName, item, price, ts FROM auctions WHERE id = ?').get(Number(id));
+}
+export function addAuction(sellerKey, sellerName, item, price) {
+  const info = db.prepare('INSERT INTO auctions (seller, sellerName, item, price, ts) VALUES (?, ?, ?, ?, ?)')
+    .run(sellerKey, sellerName, item, Math.round(price), Date.now());
+  return info.lastInsertRowid;
+}
+export function removeAuction(id) {
+  return db.prepare('DELETE FROM auctions WHERE id = ?').run(Number(id)).changes > 0;
+}
+export function countAuctionsBySeller(sellerKey) {
+  return db.prepare('SELECT COUNT(*) AS n FROM auctions WHERE seller = ?').get(sellerKey).n;
 }
 
 // Fusiona SOLO las claves permitidas. Las banderas de misión vienen del

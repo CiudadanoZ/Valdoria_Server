@@ -26,6 +26,14 @@ export function ensureState(character) {
   st.kills = st.kills || {};
   st.pvpKills = st.pvpKills || 0;
   st.claimedQuests = st.claimedQuests || [];
+  // Viaje rápido: piedras rúnicas descubiertas (la Ciudadela siempre)
+  if (!Array.isArray(st.waystones)) st.waystones = [];
+  if (!st.waystones.includes('ciudadela')) st.waystones.push('ciudadela');
+  // Monturas en propiedad y montura activa
+  if (!Array.isArray(st.mounts)) st.mounts = [];
+  if (st.mount === undefined) st.mount = null;
+  // Ganancias pendientes de la casa de subastas
+  st.auctionGold = st.auctionGold || 0;
   // Bendiciones de Mira: id -> instante de expiración (ms época). Del servidor.
   if (!st.blessings || typeof st.blessings !== 'object') st.blessings = {};
   // Encargos diarios: se regeneran cada día.
@@ -250,5 +258,9 @@ export function syncPayload(st) {
     progression: st.progression,
     blessings: st.blessings,
     bounties: st.bounties,
+    waystones: st.waystones,
+    mounts: st.mounts,
+    mount: st.mount,
+    auctionGold: st.auctionGold,
   };
 }

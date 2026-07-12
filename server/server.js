@@ -16,8 +16,10 @@ import {
   loadDb, authenticate, publicCharacters, createCharacter,
   deleteCharacter, getCharacter, saveCharacterState, touch,
   isAdminAccount, banAccount, unbanAccount, changePassword, getLeaderboards,
-  getAccountsSummary,
+  getAccountsSummary, findCharacterByName,
+  listAuctions, auctionsBySeller, getAuction, addAuction, removeAuction, countAuctionsBySeller,
 } from './db.js';
+import { WAYSTONES, waystoneById, MOUNTS } from '../public/js/world-data.js';
 import {
   ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
   maxPlausibleHit, addXp, spendTalent, syncPayload,
@@ -154,6 +156,8 @@ const NPC_SPOTS = {
   lyra: [-16, 9.5],   // tienda
   bramm: [16.5, -14.5], // forja
   mira: [-3, -22],    // curación y bendiciones
+  establo: [24, 8],   // Establero (monturas)
+  subastas: [-24, 10], // Subastador (casa de subastas)
 };
 const CAMPFIRE_SPOTS = [
   [-67 + Math.sin(0.6) * 4, 55 + Math.cos(0.6) * 4],   // campamento de Baldur
@@ -207,6 +211,7 @@ function currentBuffArmor(p) {
 // Aplica daño de una criatura: reduce por armadura, detecta la muerte y
 // reaparece al jugador junto a la fuente con el 60% de la vida.
 function damagePlayer(p, id, rawDmg, mobName) {
+  dismount(p, id);
   const reduced = Math.max(1, rawDmg - computeArmor(p.character, currentBuffArmor(p)));
   p.hp = Math.max(0, p.hp - reduced);
   p.lastCombatMs = Date.now();
@@ -228,6 +233,7 @@ function damagePlayer(p, id, rawDmg, mobName) {
 // Daño de un jugador a otro (JcJ). No hay pérdida de objetos: al morir,
 // reaparece en la fuente y el atacante suma una baja de JcJ.
 function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
+  dismount(target, targetId);
   const reduced = Math.max(1, rawDmg - computeArmor(target.character, currentBuffArmor(target)));
   target.hp = Math.max(0, target.hp - reduced);
   target.lastCombatMs = Date.now();
@@ -250,6 +256,14 @@ function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
   } else {
     send(target.ws, { type: 'player_hurt', dmg: reduced, mobName: attacker.name, ...vitals(target) });
   }
+}
+
+// Bajar de la montura (al entrar en combate). Avisa al cliente y a la zona.
+function dismount(p, id) {
+  if (!p.riding) return;
+  p.riding = null;
+  send(p.ws, { type: 'mount_state', riding: null });
+  broadcast(p.realm, { type: 'player_mount', id, mount: null }, id);
 }
 
 // Cura al jugador (pociones, habilidades, Mira, aliados)
@@ -907,11 +921,12 @@ wss.on('connection', (ws) => {
         p.pvp = false;       // JcJ desactivado por defecto
         p.tradeWith = null;  // id del socio de comercio (o null)
         p.lastPvpMs = 0;
+        p.riding = null;     // montura activa en esta sesión (o null)
 
         const others = [];
         for (const [oid, op] of players) {
           if (oid !== id && op.realm === realm.id) {
-            others.push({ id: oid, name: op.name, race: op.race, class: op.class, x: op.x, z: op.z, rot: op.rot, pvp: op.pvp });
+            others.push({ id: oid, name: op.name, race: op.race, class: op.class, x: op.x, z: op.z, rot: op.rot, pvp: op.pvp, mount: op.riding });
           }
         }
         send(ws, {
@@ -936,7 +951,9 @@ wss.on('connection', (ws) => {
         const nx = Number(msg.x) || 0;
         const nz = Number(msg.z) || 0;
         const now = Date.now();
-        p.moveBudget = Math.min(20, p.moveBudget + ((now - p.lastMoveMs) / 1000) * MAX_SPEED);
+        // La montura activa aumenta el presupuesto de velocidad
+        const speedCap = MAX_SPEED * (1 + (p.riding ? (MOUNTS[p.riding]?.speed || 0) : 0));
+        p.moveBudget = Math.min(speedCap + 6, p.moveBudget + ((now - p.lastMoveMs) / 1000) * speedCap);
         p.lastMoveMs = now;
 
         const d = dist(p.x, p.z, nx, nz);
@@ -982,6 +999,7 @@ wss.on('connection', (ws) => {
         const now = Date.now();
         if (now - lastAttack < 600) return;
         lastAttack = now;
+        dismount(p, id);
         const m = realmMobs.get(p.realm).get(Number(msg.mobId));
         if (!m || m.state === 'dead') return;
         if (dist(p.x, p.z, m.x, m.z) > 6) return;
@@ -1001,6 +1019,7 @@ wss.on('connection', (ws) => {
         const now = Date.now();
         if (now - lastSkill < 1500) return;
         lastSkill = now;
+        dismount(p, id);
         const hits = Array.isArray(msg.hits) ? msg.hits.slice(0, 8) : [];
         const mobsHere = realmMobs.get(p.realm);
         const maxSkillHit = Math.round(maxPlausibleHit(st) * 3.6);
@@ -1382,6 +1401,7 @@ wss.on('connection', (ws) => {
           return;
         }
         if (dist(p.x, p.z, target.x, target.z) > 6) return;
+        dismount(p, id);
         const dmg = Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1)));
         p.lastCombatMs = now;
         damagePlayerByPlayer(p, target, Number(msg.targetId), dmg);
@@ -1435,6 +1455,136 @@ wss.on('connection', (ws) => {
       }
       case 'trade_cancel': {
         cancelTrade(id);
+        break;
+      }
+
+      // ---- Viaje rápido (piedras rúnicas) ----
+      case 'waystone_activate': {
+        if (!p?.realm || !st) return;
+        const w = waystoneById(msg.id);
+        if (!w) return;
+        if (dist(p.x, p.z, w.x, w.z) > 6) { fail(p, 'Acércate a la piedra rúnica'); return; }
+        if (!st.waystones.includes(w.id)) { st.waystones.push(w.id); touch(); sendSync(p); }
+        send(ws, { type: 'waystone_list', discovered: st.waystones, all: WAYSTONES });
+        break;
+      }
+      case 'waystone_travel': {
+        if (!p?.realm || !st) return;
+        const dest = waystoneById(msg.id);
+        if (!dest || !st.waystones.includes(dest.id)) return;
+        // Debe partir desde junto a una piedra rúnica
+        const nearAny = WAYSTONES.some((w) => dist(p.x, p.z, w.x, w.z) < 6);
+        if (!nearAny) { fail(p, 'Debes estar junto a una piedra rúnica para viajar'); return; }
+        dismount(p, id);
+        p.x = dest.x; p.z = dest.z; p.moveBudget = 4;
+        broadcast(p.realm, { type: 'player_state', id, x: p.x, z: p.z, rot: p.rot }, id);
+        send(ws, { type: 'waystone_traveled', x: p.x, z: p.z, name: dest.name });
+        break;
+      }
+
+      // ---- Monturas ----
+      case 'mount_buy': {
+        if (!st) return;
+        if (!nearSpot(p, NPC_SPOTS.establo)) { fail(p, 'Estás demasiado lejos del Establo'); return; }
+        const mount = MOUNTS[msg.id];
+        if (!mount) return;
+        if (st.mounts.includes(mount.id)) { fail(p, 'Ya tienes esa montura'); return; }
+        if (st.inventory.gold < mount.price) { fail(p, 'No llevas suficiente oro'); return; }
+        st.inventory.gold -= mount.price;
+        st.mounts.push(mount.id);
+        st.mount = st.mount || mount.id; // primera compra: la deja seleccionada
+        sendSync(p);
+        send(ws, { type: 'rpc_ok', kind: 'mount_buy', itemId: null });
+        break;
+      }
+      case 'mount_select': {
+        if (!st) return;
+        if (msg.id !== null && !st.mounts.includes(msg.id)) return;
+        st.mount = msg.id;
+        sendSync(p);
+        break;
+      }
+      case 'mount_toggle': {
+        if (!p?.realm || !st) return;
+        if (p.riding) { dismount(p, id); break; }
+        const mountId = st.mount || st.mounts[0];
+        if (!mountId || !st.mounts.includes(mountId)) { fail(p, 'No tienes ninguna montura'); return; }
+        p.riding = mountId;
+        send(ws, { type: 'mount_state', riding: mountId });
+        broadcast(p.realm, { type: 'player_mount', id, mount: mountId }, id);
+        break;
+      }
+
+      // ---- Casa de subastas ----
+      case 'auction_browse': {
+        if (!st) return;
+        send(ws, {
+          type: 'auction_data',
+          listings: listAuctions(100),
+          mine: auctionsBySeller(p.account.name.toLowerCase()),
+          auctionGold: st.auctionGold || 0,
+        });
+        break;
+      }
+      case 'auction_create': {
+        if (!st) return;
+        if (!nearSpot(p, NPC_SPOTS.subastas)) { fail(p, 'Estás demasiado lejos del Subastador'); return; }
+        const slot = st.inventory.slots[Number(msg.slot)];
+        const price = Math.round(Number(msg.price) || 0);
+        if (!slot || !ITEMS[slot.itemId]) { fail(p, 'Objeto no válido'); return; }
+        if (ITEMS[slot.itemId].type === 'Objeto de misión') { fail(p, 'No puedes subastar objetos de misión'); return; }
+        if (price < 1 || price > 1000000) { fail(p, 'Precio no válido'); return; }
+        if (countAuctionsBySeller(p.account.name.toLowerCase()) >= 10) { fail(p, 'Máximo 10 subastas activas'); return; }
+        if (!bagRemove(st, slot.itemId, 1)) { fail(p, 'No tienes ese objeto'); return; }
+        addAuction(p.account.name.toLowerCase(), p.name, slot.itemId, price);
+        sendSync(p);
+        send(ws, { type: 'rpc_ok', kind: 'auction_create', itemId: slot.itemId });
+        break;
+      }
+      case 'auction_buy': {
+        if (!st) return;
+        const a = getAuction(Number(msg.id));
+        if (!a) { fail(p, 'Esa subasta ya no existe'); return; }
+        if (a.seller === p.account.name.toLowerCase()) { fail(p, 'No puedes comprar tu propia subasta'); return; }
+        if (st.inventory.gold < a.price) { fail(p, 'No llevas suficiente oro'); return; }
+        if (!bagAdd(st, a.item, 1)) { fail(p, 'Bolsa llena'); return; }
+        st.inventory.gold -= a.price;
+        removeAuction(a.id);
+        // Pagar al vendedor (menos 5% de comisión); si está conectado, sincronizar
+        const cut = Math.floor(a.price * 0.05);
+        const earnings = a.price - cut;
+        const sellerRec = findCharacterByName(a.sellerName);
+        if (sellerRec) {
+          const ss = ensureState(sellerRec.character);
+          ss.auctionGold = (ss.auctionGold || 0) + earnings;
+          touch();
+          for (const [, sp] of players) {
+            if (sp.character === sellerRec.character) { sendSync(sp); sysTo(sp, `💰 Vendiste ${ITEMS[a.item]?.name || a.item} por ${earnings} de oro (recoge en el Subastador).`); }
+          }
+        }
+        sendSync(p);
+        send(ws, { type: 'rpc_ok', kind: 'auction_buy', itemId: a.item });
+        break;
+      }
+      case 'auction_cancel': {
+        if (!st) return;
+        const a = getAuction(Number(msg.id));
+        if (!a || a.seller !== p.account.name.toLowerCase()) return;
+        if (!bagAdd(st, a.item, 1)) { fail(p, 'Bolsa llena: haz sitio para recuperar el objeto'); return; }
+        removeAuction(a.id);
+        sendSync(p);
+        send(ws, { type: 'rpc_ok', kind: 'auction_cancel', itemId: a.item });
+        break;
+      }
+      case 'auction_collect': {
+        if (!st) return;
+        if (!nearSpot(p, NPC_SPOTS.subastas)) { fail(p, 'Estás demasiado lejos del Subastador'); return; }
+        const g = st.auctionGold || 0;
+        if (g <= 0) { fail(p, 'No tienes ganancias que recoger'); return; }
+        st.inventory.gold += g;
+        st.auctionGold = 0;
+        sendSync(p);
+        send(ws, { type: 'rpc_ok', kind: 'auction_collect', gold: g });
         break;
       }
     }

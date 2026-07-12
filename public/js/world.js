@@ -2,6 +2,7 @@
 // puerta sur, edificios, fuente, antorchas, Hierbas Lumina) y el bioma exterior
 // (llanuras al este, bosque al oeste y sur profundo, camino de tierra).
 import * as THREE from 'three';
+import { WAYSTONES } from './world-data.js';
 
 export const WORLD_RADIUS = 140;    // límite absoluto del mundo
 export const CITADEL_RADIUS = 38;   // radio interior de la plaza
@@ -456,7 +457,13 @@ export function buildWorld(scene) {
   // ---- Tablón de Encargos (junto a la fuente) ----
   const board = buildBountyBoard(scene, 8, 6);
 
-  return { torchLights, herbs, portals, fishingSpots, campfires, board, lights: { ambient, hemi, sun } };
+  // ---- Piedras rúnicas de viaje rápido ----
+  const waystones = [];
+  for (const w of WAYSTONES) {
+    waystones.push(buildWaystone(scene, w));
+  }
+
+  return { torchLights, herbs, portals, fishingSpots, campfires, board, waystones, lights: { ambient, hemi, sun } };
 }
 
 // Portal clicable: arco de piedra con vacío oscuro y resplandor.
@@ -805,6 +812,45 @@ function buildSwamp(scene, torchLights) {
   scene.fog && addRock(scene, cx + 24, cz + 10, 1.1);
 }
 
+// Piedra rúnica de viaje rápido: obelisco de piedra con runas brillantes.
+function buildWaystone(scene, w) {
+  const group = new THREE.Group();
+  const stoneMat = mat(0x4a4650, { roughness: 0.9 });
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, 0.5, 6), stoneMat);
+  base.position.y = 0.25;
+  base.receiveShadow = true;
+  group.add(base);
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 3.2, 6), stoneMat);
+  pillar.position.y = 1.9;
+  pillar.castShadow = true;
+  group.add(pillar);
+  // Cristal rúnico flotante
+  const crystal = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.45, 0),
+    new THREE.MeshStandardMaterial({ color: 0x9ad8ff, emissive: 0x4a90d0, emissiveIntensity: 1.4 })
+  );
+  crystal.position.y = 4.1;
+  crystal.name = 'wsCrystal';
+  group.add(crystal);
+  const glow = new THREE.PointLight(0x6ab8ff, 14, 14);
+  glow.position.y = 4.1;
+  group.add(glow);
+
+  // Zona de clic generosa
+  const hitbox = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.6, 1.6, 5, 8),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  hitbox.position.y = 2.5;
+  group.add(hitbox);
+
+  group.position.set(w.x, 0, w.z);
+  group.userData.waystoneId = w.id;
+  scene.add(group);
+  return group;
+}
+
 // Tablón de Encargos clicable: dos postes, tablero de madera y pergaminos.
 function buildBountyBoard(scene, x, z) {
   const group = new THREE.Group();
@@ -978,13 +1024,17 @@ function buildMiniCrypt(scene, portals, torchLights, cfg) {
 }
 
 // Animación por frame: parpadeo de antorchas, balanceo de hierbas y ondas de pesca.
-export function animateWorld({ torchLights, herbs, fishingSpots }, time) {
+export function animateWorld({ torchLights, herbs, fishingSpots, waystones }, time) {
   for (const f of fishingSpots) {
     f.children.forEach((c, i) => {
       if (c.isMesh && c.material.transparent) {
         c.scale.setScalar(1 + Math.sin(time * 2 + i * 1.7 + f.position.x) * 0.18);
       }
     });
+  }
+  if (waystones) for (const w of waystones) {
+    const crystal = w.getObjectByName('wsCrystal');
+    if (crystal) { crystal.rotation.y = time * 1.2; crystal.position.y = 4.1 + Math.sin(time * 2 + w.position.x) * 0.15; }
   }
   for (const t of torchLights) {
     const flicker = Math.sin(time * 9 + t.seed) * 0.5 + Math.sin(time * 23 + t.seed * 3) * 0.3;

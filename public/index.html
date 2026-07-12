@@ -123,6 +123,8 @@
     <button id="settings-btn" title="Ajustes (O)">⚙</button>
     <!-- Botón de JcJ -->
     <button id="pvp-btn" title="Combate entre jugadores">⚔ JcJ: No</button>
+    <!-- Botón de montura -->
+    <button id="mount-btn" title="Montar / desmontar">🐴 Montar</button>
   </div>
 
   <!-- Menú al hacer clic en otro jugador -->
@@ -206,6 +208,55 @@
       <button id="lb-tab-pvp" class="shop-tab">JcJ</button>
     </div>
     <div id="lb-list"></div>
+  </div>
+
+  <!-- Viaje rápido (piedras rúnicas) -->
+  <div id="travel-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>🗺️ Viaje rápido</h2>
+      <button class="close-btn" data-close="travel-panel">✕</button>
+    </div>
+    <p class="talents-info">Viaja a cualquier piedra rúnica que hayas descubierto.</p>
+    <div id="travel-list"></div>
+  </div>
+
+  <!-- Establo (monturas) -->
+  <div id="stable-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>🐴 Establo</h2>
+      <button class="close-btn" data-close="stable-panel">✕</button>
+    </div>
+    <p class="talents-info">Compra una montura para viajar más rápido. Usa el botón «Montar» para cabalgar (te desmontas al combatir).</p>
+    <div id="stable-list"></div>
+    <div class="panel-footer">🪙 <span id="stable-gold">0</span> de oro</div>
+  </div>
+
+  <!-- Casa de subastas -->
+  <div id="auction-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>🏛️ Casa de Subastas</h2>
+      <button class="close-btn" data-close="auction-panel">✕</button>
+    </div>
+    <div id="shop-tabs">
+      <button id="ah-tab-buy" class="shop-tab active">Comprar</button>
+      <button id="ah-tab-sell" class="shop-tab">Vender</button>
+      <button id="ah-tab-mine" class="shop-tab">Mis subastas</button>
+    </div>
+    <div id="ah-buy"></div>
+    <div id="ah-sell" class="hidden">
+      <h3 class="trade-baglabel">Elige un objeto de tu bolsa</h3>
+      <div id="ah-sell-bag"></div>
+      <div class="ah-sell-controls">
+        <span>Vender <b id="ah-sell-selected">ningún objeto</b> por</span>
+        <input id="ah-sell-price" type="number" min="1" value="100" /> 🪙
+        <button id="ah-sell-btn" class="shop-btn">Subastar</button>
+      </div>
+    </div>
+    <div id="ah-mine" class="hidden"></div>
+    <div class="panel-footer">
+      🪙 <span id="ah-gold">0</span> · Ganancias: <span id="ah-earnings">0</span>
+      <button id="ah-collect" class="shop-btn">Recoger</button>
+    </div>
   </div>
 
   <!-- Comercio entre jugadores -->

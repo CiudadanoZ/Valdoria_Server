@@ -140,6 +140,19 @@ y (si procede) **⚔ Atacar**.
   anula las confirmaciones. Cuando **ambos confirmáis**, el servidor ejecuta el
   intercambio de forma **atómica** (con reversión si una bolsa está llena).
 
+### Viaje rápido, monturas y casa de subastas
+- **Piedras rúnicas**: repartidas por el mundo (Ciudadela, Puerta Sur, Bosque,
+  Colina, Lago, Ruinas, Ciénaga). Haz clic en una para descubrirla; después
+  puedes **viajar** entre las descubiertas desde cualquier piedra. La Ciudadela
+  está descubierta desde el principio.
+- **Monturas** (Establero Cort, en la plaza): compra un **Corcel** (+55%),
+  **Lobo Huargo** (+75%) o **Corcel Espectral** (+95% de velocidad). El botón
+  `🐴 Montar` cabalga la montura seleccionada; te desmontas al entrar en combate.
+- **Casa de subastas** (Subastador Vell): vende objetos aunque no estés
+  conectado. Pon un objeto a la venta (queda en depósito), otros lo compran, y
+  recoges tus ganancias (menos un 5% de comisión) en el Subastador. Pestañas
+  Comprar / Vender / Mis subastas.
+
 ### Criaturas sincronizadas y grupos de caza
 La IA de las criaturas corre en el servidor (acechar, perseguir, atacar, volver
 a casa y curarse, reaparecer). El servidor valida los ataques y reparte el botín
@@ -274,6 +287,11 @@ public/js/leaderboard.js Panel de clasificaciones (nivel/oro/bajas).
 public/js/minimap.js   Minimapa y mapa grande (M): mundo, criptas, misiones.
 public/js/party.js     Grupos de caza: invitaciones y panel de miembros.
 public/js/trade.js     Comercio entre jugadores: panel de ofertas y bolsa.
+public/js/world-data.js Datos compartidos: piedras rúnicas y monturas.
+public/js/travel.js    Panel de viaje rápido (piedras rúnicas).
+public/js/stable.js    Establo: comprar/seleccionar monturas.
+public/js/auction.js   Casa de subastas (comprar/vender/mis subastas).
+public/js/pstate.js    Estado extra del cliente (monturas, ganancias, piedras).
 public/js/npcs.js      NPCs y marcadores de misión (!/?).
 public/js/quests.js    Tres cadenas de misiones, rastreador y servicios de Mira.
 public/js/inventory.js Inventario, equipo (6 casillas), oro, daño/armadura.
@@ -334,5 +352,5 @@ despliegue con túnel; define un `ADMIN_KEY` robusto.
 
 - Más pisos de la cripta principal, mazmorras instanciadas por grupo.
 - Concurso de pesca semanal; recetas de cocina con varios ingredientes.
-- Casa de subastas o mercado asíncrono entre jugadores.
-- Monturas y velocidad de viaje; puntos de teletransporte.
+- Gremios/clanes y chat por canales.
+- Eventos de mundo (jefes que aparecen a horas fijas para todo el reino).

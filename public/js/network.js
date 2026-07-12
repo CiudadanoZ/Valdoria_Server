@@ -112,6 +112,18 @@ export function sendLeaderboard() { send({ type: 'leaderboard' }); }
 export function sendPvpToggle() { send({ type: 'pvp_toggle' }); }
 export function sendPvpAttack(targetId, dmg) { send({ type: 'pvp_attack', targetId, dmg }); }
 
+// ---- Viaje rápido, monturas y subastas ----
+export function sendWaystoneActivate(id) { send({ type: 'waystone_activate', id }); }
+export function sendWaystoneTravel(id) { send({ type: 'waystone_travel', id }); }
+export function sendMountBuy(id) { send({ type: 'mount_buy', id }); }
+export function sendMountSelect(id) { send({ type: 'mount_select', id }); }
+export function sendMountToggle() { send({ type: 'mount_toggle' }); }
+export function sendAuctionBrowse() { send({ type: 'auction_browse' }); }
+export function sendAuctionCreate(slot, price) { send({ type: 'auction_create', slot, price }); }
+export function sendAuctionBuy(auctionId) { send({ type: 'auction_buy', id: auctionId }); }
+export function sendAuctionCancel(auctionId) { send({ type: 'auction_cancel', id: auctionId }); }
+export function sendAuctionCollect() { send({ type: 'auction_collect' }); }
+
 // ---- Comercio entre jugadores ----
 export function sendTradeRequest(targetId) { send({ type: 'trade_request', targetId }); }
 export function sendTradeAccept(fromId) { send({ type: 'trade_accept', fromId }); }

@@ -76,6 +76,24 @@ export const NPC_DATA = [
     bodyColor: 0x4a5a6a,
     dialog: '', // sus diálogos los gestiona quests.js
   },
+  {
+    id: 'establo',
+    name: 'Establero Cort',
+    title: 'Maestro de Cuadras',
+    pos: [24, 8],
+    rot: Math.PI * 1.1,
+    bodyColor: 0x6a5238,
+    dialog: '', // abre el establo (monturas) desde main.js
+  },
+  {
+    id: 'subastas',
+    name: 'Subastador Vell',
+    title: 'Casa de Subastas',
+    pos: [-24, 10],
+    rot: Math.PI * 0.9,
+    bodyColor: 0x4a4a6a,
+    dialog: '', // abre la casa de subastas desde main.js
+  },
 ];
 
 // Crea las mallas y devuelve la lista de NPCs con referencia a su mesh.
