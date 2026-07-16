@@ -8,9 +8,14 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
+// La ruta de la base de datos se puede fijar con DB_FILE. Las pruebas la
+// apuntan a un archivo temporal para no tocar jamás la partida real.
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
-const DB_FILE = join(DATA_DIR, 'valdoria.db');
+const DB_FILE = process.env.DB_FILE || join(DATA_DIR, 'valdoria.db');
 const OLD_JSON = join(DATA_DIR, 'accounts.json');
+// Copias de seguridad: se guardan junto a la base de datos en uso y se pueden
+// desactivar (las pruebas no las necesitan).
+const BACKUPS_ON = process.env.BACKUPS !== 'off';
 
 const VALID_RACES = ['humano', 'elfo', 'enano', 'orco'];
 const VALID_CLASSES = ['guerrero', 'explorador', 'sacerdote'];
@@ -47,7 +52,7 @@ let guilds = {}; // clave (nombre en minúsculas) -> { name, leader, members:[ch
 let db = null;
 
 export function loadDb() {
-  mkdirSync(DATA_DIR, { recursive: true });
+  mkdirSync(dirname(DB_FILE), { recursive: true });
   db = new Database(DB_FILE);
   db.pragma('journal_mode = WAL');
   db.exec(`
@@ -75,8 +80,9 @@ export function loadDb() {
     try { guilds[row.key] = JSON.parse(row.data); } catch { /* fila corrupta */ }
   }
 
-  // Migración desde el antiguo accounts.json (una sola vez)
-  if (Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
+  // Migración desde el antiguo accounts.json (una sola vez). Solo con la base
+  // de datos por defecto: una BD de pruebas nace vacía y no debe heredar nada.
+  if (!process.env.DB_FILE && Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
     try {
       const old = JSON.parse(readFileSync(OLD_JSON, 'utf8'));
       accounts = old.accounts || {};
@@ -127,10 +133,12 @@ function saveSoon() {
 }
 
 // ---- Copias de seguridad rotativas (se conservan las 20 últimas) ----
-const BACKUP_DIR = join(DATA_DIR, 'backups');
+// Se guardan junto a la base de datos en uso, no en una ruta fija.
+const BACKUP_DIR = join(dirname(DB_FILE), 'backups');
 const MAX_BACKUPS = 20;
 
 async function backupNow() {
+  if (!BACKUPS_ON) return;
   try {
     mkdirSync(BACKUP_DIR, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

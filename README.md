@@ -370,6 +370,37 @@ conexión en pleno juego, aparece un aviso de «Conexión perdida», el cliente
 sondea el servidor y, al volver, **reentra solo** con el mismo personaje
 (sesión por pestaña en `sessionStorage`).
 
+## Pruebas
+
+```bash
+npm test
+```
+
+33 pruebas de extremo a extremo (~2 min). No hacen falta dependencias nuevas:
+usan el runner que trae Node y bots que hablan el mismo protocolo WebSocket que
+el navegador, así que ejercitan el juego **de verdad**, no una imitación.
+
+Cada archivo levanta **su propio servidor** en un puerto libre y con una **base
+de datos temporal** (`DB_FILE`), que se borra al terminar: las pruebas **nunca
+tocan `data/valdoria.db`**, tu partida está a salvo.
+
+| Archivo | Qué protege |
+|---|---|
+| `test/anticheat.test.mjs` | Lo que un cliente manipulado NO debe lograr: teletransportarse, inflar el daño, spamear golpes, pegar de lejos, inventarse oro, matar a quien no tiene JcJ, luchar en la Ciudadela. |
+| `test/combat.test.mjs` | Recursos (furia/vigor/maná), coste de habilidades, y el precio de morir (EXP, Alma Debilitada, su persistencia y la purga de Mira). |
+| `test/guild.test.mjs` | Ciclo del gremio, permisos del líder y traspaso de mando. |
+| `test/economy.test.mjs` | Depósito de la subasta, comisión, y que el comercio sea atómico (ni oro ni objetos duplicados). |
+| `test/smoke.test.mjs` | Que el arnés y el arranque funcionan. |
+
+`test/helpers/` tiene el arnés reutilizable: `server.mjs` (servidor efímero),
+`bot.mjs` (cliente de pruebas: entrar, andar respetando el presupuesto de
+velocidad, perseguir criaturas, atacar) y `seed.mjs` (sembrar héroes ya ricos,
+para no farmear jefes durante minutos en cada prueba).
+
+> Las pruebas se escribieron rompiendo el servidor a propósito (quitar el cobro
+> de recurso, el castigo de la muerte, el tope de daño) y comprobando que
+> fallaban. Un test que no puede fallar no protege nada.
+
 ## Despliegue
 
 **Jugar por Internet gratis** (tu PC de servidor, WSS automático con Cloudflare
