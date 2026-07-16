@@ -64,6 +64,27 @@ export function setGold(amount) {
   $('inv-gold').textContent = amount;
 }
 
+// Orbe del recurso de clase. El color lo fija setResourceStyle al entrar.
+export function setResource(mp, max) {
+  $('mp-fill').style.height = `${Math.max(0, Math.min(100, (mp / max) * 100))}%`;
+  $('mp-text').textContent = Math.round(mp);
+}
+
+export function setResourceStyle({ name, color }) {
+  const orb = $('mp-orb');
+  orb.title = name;
+  orb.style.setProperty('--mp-color', color);
+  orb.style.setProperty('--mp-light', color);
+  orb.style.filter = 'brightness(1)';
+}
+
+// Indicador de «Alma Debilitada» (segundos restantes; 0 lo oculta)
+export function setWeakened(secondsLeft) {
+  const el = $('weak-hud');
+  el.classList.toggle('hidden', secondsLeft <= 0);
+  if (secondsLeft > 0) $('weak-left').textContent = `${secondsLeft}s`;
+}
+
 export function showInteractHint(text) {
   const el = $('interact-hint');
   el.textContent = text;

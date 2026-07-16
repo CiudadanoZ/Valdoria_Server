@@ -9,6 +9,7 @@
 import { countItem } from './inventory.js';
 import { sendQuestClaim } from './network.js';
 import { toast, showDialog, hideDialog } from './ui.js';
+import { MIRA_HEAL_PRICE, MIRA_CLEANSE_PRICE } from './recipes.js';
 
 // ---- Reclamación de recompensas (las otorga el servidor, una sola vez) ----
 // Se envía quest_claim y, si el servidor confirma, se ejecuta la continuación
@@ -280,14 +281,19 @@ export function getDialog(npc) {
   return { text: npc.dialog, actions };
 }
 
-const HEAL_PRICE = 15;
+// Precios reales de Mira (compartidos con el servidor, que es quien cobra)
+const HEAL_PRICE = MIRA_HEAL_PRICE;
+const CLEANSE_PRICE = MIRA_CLEANSE_PRICE;
 
 function miraDialog(npc) {
   const s = miraServices;
   const hurt = s.getHp() < s.getMaxHp();
-  const text = hurt
-    ? 'La Luz te acompañe, viajero. Veo sangre en tus ropas... acércate al altar, puedo cerrar esas heridas. Y si vas a volver a la espesura o a las criptas, deja que te bendiga antes.'
-    : 'La Luz te acompañe, viajero. Estás entero, me alegra verlo. Si buscas fuerzas para lo que acecha ahí fuera, mis bendiciones te acompañarán durante un tiempo.';
+  const weakened = s.isWeakened?.();
+  const text = weakened
+    ? 'La Luz te acompañe... aunque veo que la muerte te ha rozado el alma. Ese peso te resta fuerza en cada golpe. Arrodíllate ante el altar y lo apartaré de ti.'
+    : hurt
+      ? 'La Luz te acompañe, viajero. Veo sangre en tus ropas... acércate al altar, puedo cerrar esas heridas. Y si vas a volver a la espesura o a las criptas, deja que te bendiga antes.'
+      : 'La Luz te acompañe, viajero. Estás entero, me alegra verlo. Si buscas fuerzas para lo que acecha ahí fuera, mis bendiciones te acompañarán durante un tiempo.';
 
   const actions = [
     {
@@ -299,6 +305,12 @@ function miraDialog(npc) {
       },
     },
   ];
+  if (weakened) {
+    actions.push({
+      label: `💀 Purgar el Alma Debilitada (${CLEANSE_PRICE} oro)`,
+      fn: () => { s.requestCleanse(); hideDialog(); },
+    });
+  }
   for (const b of Object.values(s.blessings)) {
     actions.push({
       label: `${b.icon} ${b.name} — ${b.desc}, 10 min (${b.price} oro)`,

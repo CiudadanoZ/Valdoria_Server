@@ -6,6 +6,7 @@ import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from '../public/js/
 import { RACES, CLASSES } from '../public/js/races.js';
 import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
 import { dailyBounties, todayNumber } from '../public/js/bounties.js';
+import { resourceOf } from '../public/js/skills-data.js';
 
 const BAG_SLOTS = 24;
 const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio'];
@@ -36,6 +37,9 @@ export function ensureState(character) {
   st.auctionGold = st.auctionGold || 0;
   // Gremio al que pertenece (nombre) o null
   if (st.guild === undefined) st.guild = null;
+  // «Alma Debilitada» tras morir: instante de expiración (ms época). Persistido
+  // para que reconectar no borre el castigo.
+  if (typeof st.weakUntil !== 'number') st.weakUntil = 0;
   // Bendiciones de Mira: id -> instante de expiración (ms época). Del servidor.
   if (!st.blessings || typeof st.blessings !== 'object') st.blessings = {};
   // Encargos diarios: se regeneran cada día.
@@ -122,6 +126,22 @@ export function computeHealMul(character) {
 // Regeneración por segundo fuera de combate
 export function regenPerSec(character) {
   return 2.5 * raceOf(character).regenMul * classOf(character).regenMul;
+}
+
+// ---- Recurso de clase (furia / vigor / maná) ----
+// El servidor lo lleva igual que la vida: el cliente solo lo refleja.
+export function resourceDef(character) {
+  return resourceOf(character.class);
+}
+
+export function computeMaxResource(character) {
+  return resourceDef(character).max;
+}
+
+// Valor inicial al entrar al mundo: el guerrero arranca sin furia.
+export function startingResource(character) {
+  const def = resourceDef(character);
+  return def.startFull ? def.max : 0;
 }
 
 // Compra una bendición (el oro ya está comprobado por el llamador)

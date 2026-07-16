@@ -29,6 +29,8 @@ export const SHOP_BUY_LIST = ['pocion_vida', 'pocion_vida_mayor', 'pan_centeno',
 // Servicios de Mira
 export const MIRA_HEAL_PRICE = 15;
 export const MIRA_BLESSING_PRICES = { fuerza: 40, piedra: 40, vida: 50 };
+// Purgar el «Alma Debilitada» que deja la muerte
+export const MIRA_CLEANSE_PRICE = 30;
 
 // Recompensas de misiones (las otorga SIEMPRE el servidor, una sola vez).
 // kills: requisito de bajas acumuladas · removes: objetos que se entregan

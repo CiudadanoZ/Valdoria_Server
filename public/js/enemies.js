@@ -338,6 +338,50 @@ function updateFloatTexts(scene, dt) {
   }
 }
 
+// Duración del destello blanco-rojizo al recibir un golpe
+const FLASH_DUR = 0.14;
+
+// ---- Chispas de impacto ----
+// Geometría y material se comparten entre todas las chispas (se clona solo el
+// material para poder desvanecer cada tanda por separado).
+const SPARK_GEO = new THREE.SphereGeometry(0.09, 5, 4);
+const sparks = [];
+
+export function spawnImpact(scene, worldPos, color = 0xffd06a, count = 7) {
+  for (let i = 0; i < count; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+    const s = new THREE.Mesh(SPARK_GEO, mat);
+    s.position.copy(worldPos);
+    s.position.y += 1.1;
+    scene.add(s);
+    const ang = Math.random() * Math.PI * 2;
+    const speed = 2.2 + Math.random() * 2.6;
+    sparks.push({
+      mesh: s, life: 0.34, maxLife: 0.34,
+      vx: Math.cos(ang) * speed,
+      vy: 2.2 + Math.random() * 2.4,
+      vz: Math.sin(ang) * speed,
+    });
+  }
+}
+
+function updateSparks(scene, dt) {
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.life -= dt;
+    s.vy -= 11 * dt; // gravedad
+    s.mesh.position.x += s.vx * dt;
+    s.mesh.position.y += s.vy * dt;
+    s.mesh.position.z += s.vz * dt;
+    s.mesh.material.opacity = Math.max(0, s.life / s.maxLife);
+    if (s.life <= 0) {
+      scene.remove(s.mesh);
+      s.mesh.material.dispose(); // la geometría es compartida: no se libera
+      sparks.splice(i, 1);
+    }
+  }
+}
+
 // ---- Renderizador de mobs sincronizados ----
 export class Mobs {
   constructor(scene) {
@@ -368,12 +412,22 @@ export class Mobs {
     mesh.add(bar.sprite);
     this.scene.add(mesh);
 
+    // Materiales propios de esta criatura (el factory los crea por instancia):
+    // se usan para el destello al recibir un golpe.
+    const mats = [];
+    mesh.traverse((o) => { if (o.isMesh && o.material?.emissive) mats.push(o.material); });
+
     const mob = {
       id, type, info, mesh, bar,
       hp, target: { x, z, rot: 0 },
       chasing: false,
       dead: !!dead,
       walkPhase: Math.random() * 10,
+      mats,
+      flash: 0,    // destello al ser golpeada
+      punch: 0,    // achatado del impacto
+      deathT: 0,   // tiempo desde que cayó
+      deathDir: 1, // hacia qué lado se desploma
     };
     if (mob.dead) mesh.visible = false;
     this.map.set(id, mob);
@@ -412,17 +466,27 @@ export class Mobs {
   onHit({ id, hp, dmg }) {
     const m = this.map.get(id);
     if (!m || m.dead) return;
+    const big = dmg >= m.info.maxHp * 0.15; // golpe contundente
     m.hp = hp;
     drawHPBar(m.bar, hp / m.info.maxHp);
     m.bar.sprite.visible = true;
-    spawnFloatText(this.scene, `-${dmg}`, '#ffd97a', m.mesh.position);
+    spawnFloatText(this.scene, `-${dmg}`, big ? '#ffb03a' : '#ffd97a', m.mesh.position, big);
+    // Impacto: destello, achatado y chispas
+    m.flash = FLASH_DUR;
+    m.punch = 1;
+    spawnImpact(this.scene, m.mesh.position, big ? 0xffa030 : 0xffd06a, big ? 10 : 6);
+    return big;
   }
 
   onDead({ id }) {
     const m = this.map.get(id);
     if (!m) return;
     m.dead = true;
+    m.deathT = 0;
+    m.deathDir = Math.random() < 0.5 ? 1 : -1;
     m.bar.sprite.visible = false;
+    // Estallido final más generoso
+    spawnImpact(this.scene, m.mesh.position, 0xffc04a, 12);
   }
 
   onSpawn({ id, x, z, hp }) {
@@ -432,23 +496,49 @@ export class Mobs {
     m.hp = hp;
     m.target = { x, z, rot: 0 };
     m.mesh.position.set(x, 0, z);
+    m.mesh.rotation.z = 0; // deshacer el desplome de la muerte anterior
     m.mesh.scale.setScalar(m.info.scale);
     m.mesh.visible = true;
+    m.flash = 0;
+    m.punch = 0;
+    m.deathT = 0;
+    for (const mat of m.mats) mat.emissive.setRGB(0, 0, 0);
     m.bar.sprite.visible = false;
     drawHPBar(m.bar, 1);
   }
 
   update(dt) {
     updateFloatTexts(this.scene, dt);
+    updateSparks(this.scene, dt);
 
     for (const m of this.map.values()) {
       if (m.dead) {
-        // Animación de muerte: encoger hasta desaparecer
+        // Muerte: se desploma de lado y luego se encoge hasta desaparecer
         if (m.mesh.visible) {
-          m.mesh.scale.multiplyScalar(Math.max(0, 1 - dt * 4));
-          if (m.mesh.scale.x < 0.05 * m.info.scale) m.mesh.visible = false;
+          m.deathT += dt;
+          const t = Math.min(1, m.deathT / 0.45);
+          m.mesh.rotation.z = m.deathDir * t * Math.PI * 0.5;
+          m.mesh.position.y = -0.25 * t;
+          if (m.deathT > 0.65) {
+            m.mesh.scale.multiplyScalar(Math.max(0, 1 - dt * 5));
+            if (m.mesh.scale.x < 0.05 * m.info.scale) m.mesh.visible = false;
+          }
         }
         continue;
+      }
+
+      // Destello del golpe: se apaga en FLASH_DUR
+      if (m.flash > 0) {
+        m.flash = Math.max(0, m.flash - dt);
+        const k = m.flash / FLASH_DUR;
+        for (const mat of m.mats) mat.emissive.setRGB(k * 0.95, k * 0.3, k * 0.12);
+      }
+      // Achatado del impacto: se hincha a lo ancho y se recupera
+      if (m.punch > 0) {
+        m.punch = Math.max(0, m.punch - dt * 7);
+        const p = m.punch;
+        const s = m.info.scale;
+        m.mesh.scale.set(s * (1 + 0.22 * p), s * (1 - 0.18 * p), s * (1 + 0.22 * p));
       }
 
       const pos = m.mesh.position;

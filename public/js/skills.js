@@ -1,99 +1,13 @@
-// Habilidades por especialización: barra central estilo Diablo/WoW (teclas 1-3),
-// con enfriamientos, mejoras temporales y efectos visuales sencillos.
-// El daño lo valida el servidor a través del mensaje skill_hits.
+// Habilidades por especialización: barra central estilo Diablo/WoW (teclas 1-5),
+// con enfriamientos, coste de recurso, mejoras temporales y efectos visuales.
+// Los datos viven en skills-data.js (compartidos con el servidor); el daño, la
+// cura y el cobro del recurso los valida el servidor.
 import * as THREE from 'three';
 import { play } from './audio.js';
 import { toast, showTooltip, hideTooltip } from './ui.js';
+import { SKILLS, resourceOf } from './skills-data.js';
 
-export const SKILLS = {
-  guerrero: [
-    {
-      id: 'golpe', name: 'Golpe Poderoso', icon: '💥', cd: 6,
-      desc: '250% de daño al objetivo. Cuerpo a cuerpo (3,5 m).',
-      type: 'target', range: 3.5, dmgMul: 2.5, fx: 0xffaa33,
-    },
-    {
-      id: 'bastion', name: 'Bastión', icon: '🏰', cd: 16,
-      desc: '+10 de armadura durante 8 s.',
-      type: 'buff', buff: { armor: 10, dur: 8 }, fx: 0xffe0a0,
-      unlockable: true,
-    },
-    {
-      id: 'torbellino', name: 'Torbellino', icon: '🌀', cd: 10,
-      desc: 'Giras el acero: 150% de daño a los enemigos a 5 m.',
-      type: 'aoe', radius: 5, dmgMul: 1.5, fx: 0xffcc55,
-    },
-    {
-      id: 'grito', name: 'Grito de Guerra', icon: '🛡️', cd: 20,
-      desc: '+5 de armadura durante 8 s.',
-      type: 'buff', buff: { armor: 5, dur: 8 }, fx: 0xffd97a,
-    },
-    {
-      id: 'ejecucion', name: 'Ejecución', icon: '⚔️', cd: 12,
-      desc: '350% de daño al objetivo. Cuerpo a cuerpo (3,5 m).',
-      type: 'target', range: 3.5, dmgMul: 3.5, fx: 0xff5533,
-      unlockable: true,
-    },
-  ],
-  explorador: [
-    {
-      id: 'certero', name: 'Disparo Certero', icon: '🎯', cd: 5,
-      desc: 'Disparo a 15 m: 200% de daño.',
-      type: 'target', range: 15, dmgMul: 2, projectile: true, fx: 0x9ee85a,
-    },
-    {
-      id: 'dagas', name: 'Lluvia de Dagas', icon: '🔪', cd: 12,
-      desc: '100% de daño a todos los enemigos a 6 m.',
-      type: 'aoe', radius: 6, dmgMul: 1, fx: 0x9ee85a,
-    },
-    {
-      id: 'sprint', name: 'Sprint', icon: '💨', cd: 15,
-      desc: '+80% de velocidad durante 4 s.',
-      type: 'buff', buff: { speed: 0.8, dur: 4 }, fx: 0xaaffcc,
-    },
-    {
-      id: 'descarga', name: 'Descarga Múltiple', icon: '🌠', cd: 10,
-      desc: '3 disparos seguidos del 70% de daño cada uno (15 m).',
-      type: 'multi', range: 15, hits: 3, dmgMul: 0.7, projectile: true, fx: 0xc8ff8a,
-      unlockable: true,
-    },
-    {
-      id: 'andanada', name: 'Andanada', icon: '☄️', cd: 14,
-      desc: 'Lluvia de flechas: 160% de daño a los enemigos a 7 m.',
-      type: 'aoe', radius: 7, dmgMul: 1.6, fx: 0xc8ff8a,
-      unlockable: true,
-    },
-  ],
-  sacerdote: [
-    {
-      id: 'palabra', name: 'Palabra Sagrada', icon: '✨', cd: 8,
-      desc: 'Restaura 40 de vida, a ti y al aliado más cercano (12 m).',
-      type: 'heal', heal: 40, allyHeal: true, fx: 0x7fe8a8,
-    },
-    {
-      id: 'castigo', name: 'Castigo', icon: '🌟', cd: 6,
-      desc: 'Luz abrasadora a 12 m: 180% de daño.',
-      type: 'target', range: 12, dmgMul: 1.8, projectile: true, fx: 0xffe98a,
-    },
-    {
-      id: 'nova', name: 'Nova Sagrada', icon: '💫', cd: 14,
-      desc: '120% de daño a 5 m y +15 de vida.',
-      type: 'aoe', radius: 5, dmgMul: 1.2, heal: 15, fx: 0xd8c8ff,
-    },
-    {
-      id: 'escudo_fe', name: 'Escudo de Fe', icon: '🔆', cd: 18,
-      desc: '+6 de armadura durante 6 s.',
-      type: 'buff', buff: { armor: 6, dur: 6 }, fx: 0xfff0b0,
-      unlockable: true,
-    },
-    {
-      id: 'juicio', name: 'Juicio', icon: '⚡', cd: 12,
-      desc: 'Rayo de luz sagrada a 12 m: 300% de daño.',
-      type: 'target', range: 12, dmgMul: 3, projectile: true, fx: 0xfff0b0,
-      unlockable: true,
-    },
-  ],
-};
+export { SKILLS };
 
 let myClassId = 'guerrero';
 let mySkills = [];
@@ -115,6 +29,7 @@ export function initSkills(classId, dependencies) {
 // Reconstruye la barra: habilidades base + las desbloqueadas por talentos.
 export function refreshSkills() {
   const all = SKILLS[myClassId] || SKILLS.guerrero;
+  const res = resourceOf(myClassId);
   mySkills = all.filter((s) => !s.unlockable || deps.isUnlocked?.(s.id));
   cooldowns = mySkills.map(() => 0);
 
@@ -132,6 +47,7 @@ export function refreshSkills() {
     slot.addEventListener('mousemove', (e) => showTooltip(
       `<div class="t-name">${skill.icon} ${skill.name}</div>` +
       `<div class="t-type">Enfriamiento: ${effectiveCd(skill)} s · Tecla ${i + 1}</div>` +
+      `<div class="t-cost">${skill.cost} de ${res.name}</div>` +
       `<div class="t-desc">${skill.desc}</div>`,
       e.clientX, e.clientY
     ));
@@ -149,6 +65,11 @@ export function castSkill(i) {
   const skill = mySkills[i];
   if (!skill || !deps) return;
   if (cooldowns[i] > 0) return;
+  // Aviso local; el servidor es quien cobra de verdad y puede rechazar.
+  if ((skill.cost || 0) > (deps.getResource?.() ?? Infinity)) {
+    toast(resourceOf(myClassId).empty);
+    return;
+  }
 
   const playerPos = deps.getPlayerPos();
 
@@ -158,7 +79,7 @@ export function castSkill(i) {
     const d = playerPos.distanceTo(target.mesh.position);
     if (d > skill.range) { toast('Demasiado lejos'); return; }
     const dmg = Math.round(deps.getBaseDamage() * skill.dmgMul);
-    deps.sendSkillHits([{ mobId: target.id, dmg }]);
+    deps.sendSkillHits(skill.id, [{ mobId: target.id, dmg }]);
     if (skill.projectile) {
       spawnProjectile(playerPos, target.mesh.position, skill.fx);
     } else {
@@ -170,7 +91,7 @@ export function castSkill(i) {
     const d = playerPos.distanceTo(target.mesh.position);
     if (d > skill.range) { toast('Demasiado lejos'); return; }
     const dmg = Math.round(deps.getBaseDamage() * skill.dmgMul);
-    deps.sendSkillHits(Array.from({ length: skill.hits }, () => ({ mobId: target.id, dmg })));
+    deps.sendSkillHits(skill.id, Array.from({ length: skill.hits }, () => ({ mobId: target.id, dmg })));
     for (let n = 0; n < skill.hits; n++) {
       setTimeout(() => spawnProjectile(deps.getPlayerPos(), target.mesh.position, skill.fx), n * 110);
     }
@@ -178,22 +99,22 @@ export function castSkill(i) {
     const targets = deps.getMobsInRadius(skill.radius);
     if (targets.length === 0 && !skill.heal) { toast('No hay enemigos cerca'); return; }
     const dmg = Math.round(deps.getBaseDamage() * skill.dmgMul);
-    if (targets.length > 0) {
-      deps.sendSkillHits(targets.map((t) => ({ mobId: t.id, dmg })));
-    }
-    if (skill.heal) deps.castHeal(skill.id); // la cura la aplica el servidor
+    // Un único mensaje por lanzamiento: el servidor cobra una vez y aplica el
+    // daño y, si la habilidad cura (Nova), también la cura. Puede ir sin
+    // objetivos si cura.
+    deps.sendSkillHits(skill.id, targets.map((t) => ({ mobId: t.id, dmg })));
     spawnRing(playerPos, skill.fx, skill.radius);
   } else if (skill.type === 'heal') {
     deps.castHeal(skill.id); // la cura la aplica el servidor
     if (skill.allyHeal) deps.healAlly?.(skill.heal);
     spawnRing(playerPos, skill.fx, 2.2);
   } else if (skill.type === 'buff') {
-    // Estado local para el brillo de la casilla y la velocidad; la armadura
-    // la aplica también el servidor (skill_buff)
+    // El servidor cobra el recurso y aplica la armadura; aquí solo queda el
+    // estado local para el brillo de la casilla y la velocidad.
+    deps.castBuff?.(skill.id);
     if (skill.buff.armor) {
       buffs.armor = clockTime + skill.buff.dur;
       buffValues.armor = skill.buff.armor;
-      deps.castBuff?.(skill.id);
     }
     if (skill.buff.speed) { buffs.speed = clockTime + skill.buff.dur; buffValues.speed = skill.buff.speed; }
     toast(`${skill.icon} ${skill.name} — ${skill.desc}`);
@@ -282,5 +203,7 @@ function renderBar() {
     const buffed = skill.type === 'buff' &&
       ((skill.buff.armor && buffs.armor > clockTime) || (skill.buff.speed && buffs.speed > clockTime));
     slot.classList.toggle('buff-active', !!buffed);
+    // Atenuada si no llega el recurso para lanzarla
+    slot.classList.toggle('no-resource', (skill.cost || 0) > (deps.getResource?.() ?? Infinity));
   });
 }

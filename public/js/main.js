@@ -21,6 +21,7 @@ import { openStable, refreshStable } from './stable.js';
 import { initAuction, openAuction, applyAuctionData, refreshAuction } from './auction.js';
 import { MOUNTS } from './world-data.js';
 import { initSkills, refreshSkills, castSkill, updateSkills, skillSpeedMul } from './skills.js';
+import { resourceOf } from './skills-data.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
   initProgression, applyProgression, toggleTalents, setGoldForRespec,
@@ -48,6 +49,7 @@ const $ = (id) => document.getElementById(id);
 let scene, camera, renderer, clock;
 let worldRefs, player, remotes, npcs, mobs;
 let charName = '';
+let myId = null;       // id de red propio (para saber qué golpes son míos)
 let myRace = RACES.humano;
 let myClass = CLASSES.guerrero;
 let inWorld = false;
@@ -55,11 +57,23 @@ let inWorld = false;
 // se calculan allí; aquí solo se muestra)
 let hp = 100;
 let maxHpVal = 110;
+let mp = 0;            // recurso de clase (espejo del servidor)
+let maxMpVal = 100;
+let weakUntilMs = 0;   // fin de «Alma Debilitada» (reloj local, solo para el HUD)
 const maxHp = () => maxHpVal;
 function setVitals(msg) {
   if (typeof msg.hp === 'number') hp = msg.hp;
   if (typeof msg.maxHp === 'number') maxHpVal = msg.maxHp;
   ui.setHP(hp, maxHpVal);
+  // Recurso de clase (furia / vigor / maná): el servidor manda el valor
+  if (typeof msg.mp === 'number') mp = msg.mp;
+  if (typeof msg.maxMp === 'number') maxMpVal = msg.maxMp;
+  ui.setResource(mp, maxMpVal);
+  // «Alma Debilitada»: el servidor manda los segundos que quedan
+  if (typeof msg.weakLeft === 'number') {
+    weakUntilMs = msg.weakLeft > 0 ? performance.now() + msg.weakLeft * 1000 : 0;
+    ui.setWeakened(msg.weakLeft);
+  }
 }
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -126,7 +140,14 @@ connect({
     ui.toast(`⚠ ${msg.reason}`, 'quest');
   },
   mobs(msg) { mobs?.onSnapshot(msg.m); },
-  mob_hit(msg) { mobs?.onHit(msg); },
+  mob_hit(msg) {
+    const big = mobs?.onHit(msg);
+    // Solo sacude la cámara con TUS golpes; los de otros solo se ven.
+    if (msg.by === myId) {
+      addShake(big ? 0.3 : 0.11, big ? 0.2 : 0.09);
+      if (big) hitStopT = 0.05; // congela un instante: da peso al impacto
+    }
+  },
   mob_dead(msg) {
     mobs?.onDead(msg);
     if (combatTarget && combatTarget.id === msg.id) combatTarget = null;
@@ -193,13 +214,20 @@ connect({
     if (msg.heal > 0) spawnFloatText(scene, `+${msg.heal}`, '#7fe8a8', player.mesh.position);
     play('heal');
   },
+  // El servidor cobró el recurso de la habilidad y devuelve el valor resultante
+  skill_used(msg) { setVitals(msg); },
   you_died(msg) {
     ui.hideDialog();
     combatTarget = null;
+    pvpTarget = null;
     player.stop();
     player.mesh.position.set(msg.x, 0, msg.z);
     setVitals(msg);
     ui.toast(`☠ ${msg.by} te ha derribado. Despiertas junto a la fuente.`, 'quest');
+    if (msg.xpLost > 0) ui.toast(`💀 Has perdido ${msg.xpLost} de experiencia.`, 'quest');
+    if (msg.weak) {
+      ui.toast('💀 Alma Debilitada: haces menos daño durante un rato. Mira puede purgarla.', 'quest');
+    }
     play('death');
     saveGame();
   },
@@ -236,6 +264,11 @@ connect({
       const b = BLESSINGS[msg.id];
       if (b) ui.toast(`${b.icon} ${b.name} — ${b.desc} durante 10 minutos`, 'quest');
       play('buy');
+    } else if (msg.service === 'cleanse') {
+      weakUntilMs = 0;
+      ui.setWeakened(0);
+      ui.toast('✙ Mira restaura tu alma: vuelves a golpear con toda tu fuerza', 'quest');
+      play('heal');
     }
   },
   pos_correct(msg) {
@@ -244,7 +277,7 @@ connect({
     combatTarget = null;
     player.mesh.position.set(msg.x, 0, msg.z);
   },
-  player_hurt(msg) { onPlayerDamaged(msg); play('hit'); },
+  player_hurt(msg) { onPlayerDamaged(msg); addShake(0.36, 0.24); play('hit'); },
   healed(msg) {
     setVitals(msg);
     if (msg.amount > 0) {
@@ -338,6 +371,7 @@ window.addEventListener('beforeunload', () => { if (inWorld) flushSave(); });
 // ---------- Inicialización de la escena ----------
 function startGame({ id, spawn, realm, character, vitals: initialVitals, players, mobs: mobList }) {
   charName = character.name;
+  myId = id;
   myRace = RACES[character.race] || RACES.humano;
   myClass = CLASSES[character.class] || CLASSES.guerrero;
 
@@ -376,6 +410,9 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
     getMaxHp: maxHp,
     requestHeal: () => sendMira('heal'),
     requestBless: (id) => sendMira('bless', id),
+    // Purgar el «Alma Debilitada» que deja la muerte
+    isWeakened: () => weakUntilMs > 0,
+    requestCleanse: () => sendMira('cleanse'),
   });
 
   // Progresión: nivel, experiencia y talentos (autoritativos del servidor)
@@ -387,6 +424,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   });
 
   // Barra de habilidades de la especialización
+  ui.setResourceStyle(resourceOf(character.class)); // color del orbe por clase
   initSkills(character.class, {
     scene,
     getPlayerPos: () => player.mesh.position,
@@ -397,6 +435,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
         .filter((m) => !m.dead && m.mesh.position.distanceTo(player.mesh.position) <= radius)
         .slice(0, 8),
     sendSkillHits,
+    getResource: () => mp,
     isUnlocked: isSkillUnlocked,
     getCdr: talentCdr,
     // Curas y mejoras: las aplica el servidor y responde con la vida resultante
@@ -746,6 +785,18 @@ function onChatKey(e) {
   input.blur();
 }
 
+// Cuenta atrás local del «Alma Debilitada» (solo para el HUD; el castigo real
+// lo aplica el servidor a cada golpe).
+let lastWeakShown = -1;
+function updateWeakened() {
+  const left = weakUntilMs > 0 ? Math.ceil((weakUntilMs - performance.now()) / 1000) : 0;
+  const shown = Math.max(0, left);
+  if (shown === lastWeakShown) return;
+  lastWeakShown = shown;
+  ui.setWeakened(shown);
+  if (shown <= 0) weakUntilMs = 0;
+}
+
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -803,9 +854,27 @@ function updateCombat(dt) {
 
 // ---------- Cámara cenital estilo Diablo ----------
 const CAM_OFFSET = new THREE.Vector3(0, 26, 15);
-function updateCamera() {
+// ---------- Sacudida de cámara ----------
+// Se acumula con los impactos y decae sola. La cámara siempre mira al héroe:
+// solo se desplaza el punto de vista, así que no marea.
+let shakeT = 0, shakeDur = 0.2, shakeMag = 0;
+function addShake(mag, dur) {
+  shakeMag = Math.max(shakeMag, mag);
+  shakeDur = Math.max(shakeDur, dur);
+  shakeT = Math.max(shakeT, dur);
+}
+
+function updateCamera(dt) {
   const p = player.mesh.position;
-  camera.position.set(p.x + CAM_OFFSET.x, CAM_OFFSET.y, p.z + CAM_OFFSET.z);
+  let ox = 0, oz = 0;
+  if (shakeT > 0) {
+    shakeT = Math.max(0, shakeT - dt);
+    const k = shakeMag * (shakeT / shakeDur); // se apaga suavemente
+    ox = (Math.random() - 0.5) * 2 * k;
+    oz = (Math.random() - 0.5) * 2 * k;
+    if (shakeT === 0) shakeMag = 0;
+  }
+  camera.position.set(p.x + CAM_OFFSET.x + ox, CAM_OFFSET.y, p.z + CAM_OFFSET.z + oz);
   camera.lookAt(p.x, 0, p.z);
 }
 
@@ -847,10 +916,20 @@ function updateInteractHint() {
 }
 
 // ---------- Bucle principal ----------
+let hitStopT = 0; // congelación breve tras un golpe contundente
+
 function loop() {
   requestAnimationFrame(loop);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const realDt = Math.min(clock.getDelta(), 0.05);
   const time = clock.elapsedTime;
+
+  // Hit-stop: durante unos milisegundos la simulación se detiene (pero se sigue
+  // dibujando). Es lo que hace que un golpe fuerte se sienta contundente.
+  let dt = realDt;
+  if (hitStopT > 0) {
+    hitStopT = Math.max(0, hitStopT - realDt);
+    dt = 0;
+  }
 
   updateCombat(dt);
   const mountMul = pstate.riding ? (1 + (MOUNTS[pstate.riding]?.speed || 0)) : 1;
@@ -859,10 +938,12 @@ function loop() {
   remotes.update(dt);
   mobs.update(dt);
   updateSkills(dt, time);
+  updateWeakened();
   updateMinimap();
   animateWorld(worldRefs, time);
   updateQuestMarkers(npcs, time);
-  updateCamera();
+  // La sacudida usa el tiempo real: sigue viva durante el hit-stop y remata el golpe
+  updateCamera(realDt);
   updateCryptLighting(dt);
   updateInteractHint();
 

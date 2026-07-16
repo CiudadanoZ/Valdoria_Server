@@ -70,9 +70,10 @@ export function sendAttack(mobId, dmg) {
   send({ type: 'attack', mobId, dmg });
 }
 
-// Golpes de habilidad (uno o varios objetivos en un solo lanzamiento)
-export function sendSkillHits(hits) {
-  send({ type: 'skill_hits', hits });
+// Golpes de habilidad (uno o varios objetivos en un solo lanzamiento).
+// Va el id de la habilidad: el servidor cobra su coste una única vez.
+export function sendSkillHits(skillId, hits) {
+  send({ type: 'skill_hits', skillId, hits });
 }
 
 // Curación lanzada a un aliado

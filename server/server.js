@@ -27,13 +27,16 @@ import {
   maxPlausibleHit, addXp, spendTalent, syncPayload,
   computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
   onBountyKill, claimBounty, respecCost, respecTalents,
+  computeMaxResource, resourceDef, startingResource,
 } from './state.js';
+import { skillById } from '../public/js/skills-data.js';
+import { xpForLevel } from '../public/js/talents-data.js';
 import { ITEMS } from '../public/js/items.js';
 import { appendFileSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import {
   CRAFT_RECIPES, COOK_RECIPES, COOK_XP, FISHING_XP, FISHING_TABLE,
-  SHOP_BUY_LIST, MIRA_HEAL_PRICE, MIRA_BLESSING_PRICES, QUEST_REWARDS,
+  SHOP_BUY_LIST, MIRA_HEAL_PRICE, MIRA_BLESSING_PRICES, MIRA_CLEANSE_PRICE, QUEST_REWARDS,
 } from '../public/js/recipes.js';
 
 const PORT = process.env.PORT || 3000;
@@ -201,13 +204,58 @@ function fail(p, reason) {
   send(p.ws, { type: 'rpc_fail', reason });
 }
 
-// ---- Vida autoritativa ----
+// ---- Vida y recurso autoritativos ----
 function vitals(p) {
-  return { hp: Math.round(p.hp), maxHp: computeMaxHp(p.character) };
+  return {
+    hp: Math.round(p.hp), maxHp: computeMaxHp(p.character),
+    mp: Math.round(p.mp), maxMp: computeMaxResource(p.character),
+  };
+}
+
+// Suma (o resta) recurso acotando al pozo. Devuelve el valor final.
+function addResource(p, amount) {
+  p.mp = Math.max(0, Math.min(computeMaxResource(p.character), p.mp + amount));
+  return p.mp;
+}
+
+// Cobra el coste de una habilidad. Devuelve false (y avisa) si no alcanza.
+function spendResource(p, skill) {
+  const cost = skill.cost || 0;
+  if (p.mp < cost) { fail(p, resourceDef(p.character).empty); return false; }
+  p.mp -= cost;
+  return true;
 }
 
 function currentBuffArmor(p) {
   return p.buffUntil > Date.now() ? p.buffArmor : 0;
+}
+
+// ---- «Alma Debilitada»: penalización tras morir ----
+// El multiplicador lo aplica el SERVIDOR a todo el daño que reparte el jugador;
+// así un cliente manipulado no puede ignorar el castigo.
+const WEAK_DUR_S = 90;
+const WEAK_MUL = 0.7;
+const WEAK_XP_LOSS = 0.10; // 10% de la EXP que cuesta el nivel actual
+
+function weakMul(p) {
+  return (p.weakUntil || 0) > Date.now() ? WEAK_MUL : 1;
+}
+
+function weakPayload(p) {
+  const left = Math.max(0, (p.weakUntil || 0) - Date.now());
+  return { weak: left > 0, weakLeft: Math.round(left / 1000), weakMul: WEAK_MUL };
+}
+
+// Aplica el castigo de la muerte: pierde parte de la EXP del nivel actual (sin
+// bajar de nivel) y queda debilitado un rato. Devuelve la EXP perdida.
+function applyDeathPenalty(p) {
+  const st = p.character.state;
+  const prog = st.progression;
+  const lost = Math.min(prog.xp, Math.round(xpForLevel(prog.level) * WEAK_XP_LOSS));
+  prog.xp -= lost;
+  p.weakUntil = st.weakUntil = Date.now() + WEAK_DUR_S * 1000;
+  touch();
+  return lost;
 }
 
 // Aplica daño de una criatura: reduce por armadura, detecta la muerte y
@@ -217,15 +265,24 @@ function damagePlayer(p, id, rawDmg, mobName) {
   const reduced = Math.max(1, rawDmg - computeArmor(p.character, currentBuffArmor(p)));
   p.hp = Math.max(0, p.hp - reduced);
   p.lastCombatMs = Date.now();
+  // Recibir daño también alimenta la furia del guerrero
+  const gain = resourceDef(p.character).onHurt;
+  if (gain) { addResource(p, gain); p.lastRageMs = Date.now(); }
 
   if (p.hp <= 0) {
     const maxHp = computeMaxHp(p.character);
     p.hp = Math.round(maxHp * 0.6);
+    p.mp = startingResource(p.character); // la furia se pierde al caer
     p.x = (Math.random() - 0.5) * 4;
     p.z = FOUNTAIN[1];
     p.moveBudget = 4;
     stopFishing(p);
-    send(p.ws, { type: 'you_died', by: mobName, hp: Math.round(p.hp), maxHp, x: p.x, z: p.z });
+    const xpLost = applyDeathPenalty(p);
+    sendSync(p); // la EXP perdida viaja en la progresión
+    send(p.ws, {
+      type: 'you_died', by: mobName, x: p.x, z: p.z, xpLost,
+      ...vitals(p), ...weakPayload(p),
+    });
     broadcast(p.realm, { type: 'player_state', id, x: p.x, z: p.z, rot: p.rot }, id);
   } else {
     send(p.ws, { type: 'player_hurt', dmg: reduced, mobName, ...vitals(p) });
@@ -239,10 +296,13 @@ function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
   const reduced = Math.max(1, rawDmg - computeArmor(target.character, currentBuffArmor(target)));
   target.hp = Math.max(0, target.hp - reduced);
   target.lastCombatMs = Date.now();
+  const gain = resourceDef(target.character).onHurt;
+  if (gain) { addResource(target, gain); target.lastRageMs = Date.now(); }
 
   if (target.hp <= 0) {
     const maxHp = computeMaxHp(target.character);
     target.hp = Math.round(maxHp * 0.6);
+    target.mp = startingResource(target.character);
     target.x = (Math.random() - 0.5) * 4;
     target.z = FOUNTAIN[1];
     target.moveBudget = 4;
@@ -252,7 +312,12 @@ function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
       attacker.character.state.pvpKills = (attacker.character.state.pvpKills || 0) + 1;
       touch();
     }
-    send(target.ws, { type: 'you_died', by: attacker.name, hp: Math.round(target.hp), maxHp, x: target.x, z: target.z });
+    const xpLost = applyDeathPenalty(target);
+    sendSync(target);
+    send(target.ws, {
+      type: 'you_died', by: attacker.name, x: target.x, z: target.z, xpLost,
+      ...vitals(target), ...weakPayload(target),
+    });
     broadcast(target.realm, { type: 'player_state', id: targetId, x: target.x, z: target.z, rot: target.rot }, targetId);
     broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `⚔ ${attacker.name} ha derrotado a ${target.name} en combate.` });
   } else {
@@ -855,7 +920,7 @@ setInterval(() => {
     }
   }
 
-  // Regeneración de vida fuera de combate + sincronización acotada
+  // Regeneración de vida y recurso + sincronización acotada
   for (const [, p] of players) {
     if (!p.realm || !p.character) continue;
     const maxHp = computeMaxHp(p.character);
@@ -863,11 +928,26 @@ setInterval(() => {
     if (p.hp < maxHp && now - p.lastCombatMs > 5000) {
       p.hp = Math.min(maxHp, p.hp + regenPerSec(p.character) * TICK);
     }
-    // Avisar al cliente como mucho 2 veces por segundo y solo si cambió
-    if (Math.abs(p.hp - p.lastHpSent) >= 1 && now - p.lastHpSentMs > 500) {
+
+    // Recurso: vigor/maná se regeneran siempre; la furia decae si dejas de
+    // luchar (lastRageMs se refresca al golpear o al recibir daño).
+    const rdef = resourceDef(p.character);
+    const maxMp = computeMaxResource(p.character);
+    if (p.mp > maxMp) p.mp = maxMp;
+    if (rdef.regen > 0) {
+      p.mp = Math.min(maxMp, p.mp + rdef.regen * TICK);
+    } else if (now - (p.lastRageMs || 0) > 5000) {
+      p.mp = Math.max(0, p.mp + rdef.regen * TICK);
+    }
+
+    // Avisar al cliente como mucho 2 veces por segundo y solo si cambió algo
+    const hpMoved = Math.abs(p.hp - p.lastHpSent) >= 1;
+    const mpMoved = Math.abs(p.mp - p.lastMpSent) >= 1;
+    if ((hpMoved || mpMoved) && now - p.lastHpSentMs > 500) {
       p.lastHpSent = p.hp;
+      p.lastMpSent = p.mp;
       p.lastHpSentMs = now;
-      send(p.ws, { type: 'hp_sync', hp: Math.round(p.hp), maxHp });
+      send(p.ws, { type: 'hp_sync', ...vitals(p) });
     }
   }
 }, TICK * 1000);
@@ -1010,11 +1090,16 @@ wss.on('connection', (ws) => {
         // Vida autoritativa
         const maxHp0 = computeMaxHp(character);
         p.hp = Math.min(maxHp0, Math.max(1, Number(state.hp) || maxHp0));
+        // Recurso de clase (el guerrero acumula furia luchando; el resto entra lleno)
+        p.mp = startingResource(character);
         p.lastCombatMs = 0;
         p.buffArmor = 0;
         p.buffUntil = 0;
+        p.weakUntil = Number(state.weakUntil) || 0; // «Alma Debilitada» persistida
         p.lastHpSent = p.hp;
+        p.lastMpSent = p.mp;
         p.lastHpSentMs = 0;
+        p.lastRageMs = 0;    // último instante en que se ganó furia
         p.pvp = false;       // JcJ desactivado por defecto
         p.tradeWith = null;  // id del socio de comercio (o null)
         p.lastPvpMs = 0;
@@ -1031,7 +1116,7 @@ wss.on('connection', (ws) => {
           id, spawn,
           realm: { id: realm.id, name: realm.name },
           character: { name: character.name, race: character.race, class: character.class, state },
-          vitals: vitals(p),
+          vitals: { ...vitals(p), ...weakPayload(p) },
           players: others,
           mobs: mobSnapshotFull(realm.id),
         });
@@ -1100,7 +1185,10 @@ wss.on('connection', (ws) => {
         const m = realmMobs.get(p.realm).get(Number(msg.mobId));
         if (!m || m.state === 'dead') return;
         if (dist(p.x, p.z, m.x, m.z) > 6) return;
-        const dmg = Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1)));
+        const dmg = Math.round(Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1))) * weakMul(p));
+        // El golpe básico alimenta la furia del guerrero
+        const gain = resourceDef(p.character).onAttack;
+        if (gain) { addResource(p, gain); p.lastRageMs = now; }
         m.hp -= dmg;
         m.damagers.add(id);
         if (m.state !== 'chase' && m.state !== 'return') {
@@ -1115,6 +1203,10 @@ wss.on('connection', (ws) => {
         if (!p?.realm || !st) return;
         const now = Date.now();
         if (now - lastSkill < 1500) return;
+        // La habilidad debe existir y ser de tu clase (llega su id).
+        const skill = skillById(p.class, msg.skillId);
+        if (!skill || skill.type === 'buff' || skill.type === 'heal') return;
+        if (!spendResource(p, skill)) return;
         lastSkill = now;
         dismount(p, id);
         const hits = Array.isArray(msg.hits) ? msg.hits.slice(0, 8) : [];
@@ -1124,7 +1216,7 @@ wss.on('connection', (ws) => {
           const m = mobsHere.get(Number(h.mobId));
           if (!m || m.state === 'dead') continue;
           if (dist(p.x, p.z, m.x, m.z) > 18) continue;
-          const dmg = Math.min(maxSkillHit, Math.max(1, Math.round(Number(h.dmg) || 1)));
+          const dmg = Math.round(Math.min(maxSkillHit, Math.max(1, Math.round(Number(h.dmg) || 1))) * weakMul(p));
           m.hp -= dmg;
           m.damagers.add(id);
           if (m.state !== 'chase' && m.state !== 'return') {
@@ -1134,6 +1226,12 @@ wss.on('connection', (ws) => {
           if (m.hp <= 0) killMob(p.realm, m, id);
           else broadcast(p.realm, { type: 'mob_hit', id: m.id, hp: m.hp, by: id, dmg });
         }
+        // Habilidades de área que además curan (Nova Sagrada): la cura va aquí
+        // para cobrar el recurso una sola vez por lanzamiento.
+        if (skill.heal) {
+          healPlayer(p, Math.round(skill.heal * computeHealMul(p.character)));
+        }
+        send(ws, { type: 'skill_used', skillId: skill.id, ...vitals(p) });
         break;
       }
       case 'heal_ally': {
@@ -1153,32 +1251,34 @@ wss.on('connection', (ws) => {
       // Curación de habilidad propia (Palabra Sagrada, Nova Sagrada)
       case 'skill_heal': {
         if (!st) return;
-        const SKILL_HEALS = { palabra: 40, nova: 15 };
-        const base = SKILL_HEALS[msg.skillId];
-        if (!base || p.class !== 'sacerdote') return;
+        // Solo habilidades de cura pura (las de área curan dentro de skill_hits)
+        const skill = skillById(p.class, msg.skillId);
+        if (!skill || skill.type !== 'heal' || !skill.heal) return;
         const now = Date.now();
         if (now - lastHeal < 1200) return;
+        if (!spendResource(p, skill)) return;
         lastHeal = now;
-        const healed = healPlayer(p, Math.round(base * computeHealMul(p.character)));
-        send(ws, { type: 'skill_heal_ok', skillId: msg.skillId, heal: healed, ...vitals(p) });
+        const healed = healPlayer(p, Math.round(skill.heal * computeHealMul(p.character)));
+        send(ws, { type: 'skill_heal_ok', skillId: skill.id, heal: healed, ...vitals(p) });
         break;
       }
 
       // Mejora temporal de armadura (Grito de Guerra / Escudo de Fe)
       case 'skill_buff': {
         if (!st) return;
-        const BUFF_SKILLS = {
-          grito: { armor: 5, dur: 8, cls: 'guerrero' },
-          bastion: { armor: 10, dur: 8, cls: 'guerrero' },
-          escudo_fe: { armor: 6, dur: 6, cls: 'sacerdote' },
-        };
-        const buff = BUFF_SKILLS[msg.skillId];
-        if (!buff || p.class !== buff.cls) return;
+        // Cualquier mejora de tu clase: cobra el recurso. La armadura la aplica
+        // el servidor; la velocidad es del cliente (ya cabe en MAX_SPEED).
+        const skill = skillById(p.class, msg.skillId);
+        if (!skill || skill.type !== 'buff' || !skill.buff) return;
         const now = Date.now();
         if (now - (p.lastBuffMs || 0) < 5000) return;
+        if (!spendResource(p, skill)) return;
         p.lastBuffMs = now;
-        p.buffArmor = buff.armor;
-        p.buffUntil = now + buff.dur * 1000;
+        if (skill.buff.armor) {
+          p.buffArmor = skill.buff.armor;
+          p.buffUntil = now + skill.buff.dur * 1000;
+        }
+        send(ws, { type: 'skill_used', skillId: skill.id, ...vitals(p) });
         break;
       }
 
@@ -1316,6 +1416,14 @@ wss.on('connection', (ws) => {
           applyBlessing(st, msg.id);
           sendSync(p);
           send(ws, { type: 'mira_ok', service: 'bless', id: msg.id });
+        } else if (msg.service === 'cleanse') {
+          if (weakMul(p) === 1) { fail(p, 'Tu alma ya está entera'); return; }
+          if (st.inventory.gold < MIRA_CLEANSE_PRICE) { fail(p, 'No llevas suficiente oro'); return; }
+          st.inventory.gold -= MIRA_CLEANSE_PRICE;
+          p.weakUntil = st.weakUntil = 0;
+          touch();
+          sendSync(p);
+          send(ws, { type: 'mira_ok', service: 'cleanse', ...weakPayload(p) });
         }
         break;
       }
@@ -1600,7 +1708,10 @@ wss.on('connection', (ws) => {
         }
         if (dist(p.x, p.z, target.x, target.z) > 6) return;
         dismount(p, id);
-        const dmg = Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1)));
+        const dmg = Math.round(Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1))) * weakMul(p));
+        // El golpe también alimenta la furia del atacante
+        const gainPvp = resourceDef(p.character).onAttack;
+        if (gainPvp) { addResource(p, gainPvp); p.lastRageMs = now; }
         p.lastCombatMs = now;
         damagePlayerByPlayer(p, target, Number(msg.targetId), dmg);
         break;

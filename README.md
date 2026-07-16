@@ -76,7 +76,28 @@ hasta el círculo de piedras. **Lobos Grises**, **Jabalíes Salvajes** y el
   **Osos Pardos** (sueltan pieles de oso — Bramm cose capas con ellas).
 - **Campamentos** junto a las criptas menores, con sus vigías y sus hogueras.
 
-### Habilidades (teclas 1-4)
+### Recurso de clase (orbe derecho)
+Las habilidades cuestan recurso, no solo enfriamiento. Cada clase gestiona el suyo:
+- **Guerrero — Furia**: empieza a 0 y se **acumula luchando** (al golpear y al
+  recibir golpes). Decae si dejas de combatir. Entras a la pelea a espada y te
+  ganas las habilidades.
+- **Explorador — Vigor**: pozo lleno que se regenera rápido (10/s).
+- **Sacerdote — Maná**: pozo mayor y regeneración lenta (5/s): hay que dosificar.
+
+Las casillas se atenúan cuando no te llega el recurso. El servidor es quien cobra
+el coste: el cliente solo lo refleja.
+
+### Muerte: tiene precio
+Morir ya no es gratis. Al caer:
+- Pierdes el **10% de la experiencia** del nivel actual (nunca bajas de nivel).
+- Ganas **💀 Alma Debilitada** durante 90 s: **haces un 30% menos de daño**. El
+  castigo lo aplica el servidor a cada golpe, y **persiste si te desconectas**.
+- El guerrero pierde toda su furia.
+
+La **Sacerdotisa Mira** puede purgar el Alma Debilitada por 30 de oro, o esperas
+a que pase.
+
+### Habilidades (teclas 1-5)
 Barra central estilo Diablo/WoW con 3 habilidades base por especialización más
 una cuarta desbloqueable por talentos, con enfriamiento, efectos y validación
 en el servidor (multi-objetivo con límite de ritmo):
@@ -311,6 +332,7 @@ public/js/party.js     Grupos de caza: invitaciones y panel de miembros.
 public/js/guild.js     Gremios: fundar, invitar, miembros, lema y chat.
 public/js/trade.js     Comercio entre jugadores: panel de ofertas y bolsa.
 public/js/world-data.js Datos compartidos: piedras rúnicas y monturas.
+public/js/skills-data.js Datos compartidos: habilidades, costes y recursos.
 public/js/travel.js    Panel de viaje rápido (piedras rúnicas).
 public/js/stable.js    Establo: comprar/seleccionar monturas.
 public/js/auction.js   Casa de subastas (comprar/vender/mis subastas).
