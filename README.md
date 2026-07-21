@@ -76,6 +76,16 @@ hasta el círculo de piedras. **Lobos Grises**, **Jabalíes Salvajes** y el
   **Osos Pardos** (sueltan pieles de oso — Bramm cose capas con ellas).
 - **Campamentos** junto a las criptas menores, con sus vigías y sus hogueras.
 
+### El equipo importa (daño y armadura)
+El **arma es la fuente de poder**: desarmado pegas flojo (~3-7), y cada arma se
+nota — la mejor multiplica tu daño por unas seis veces. La progresión de armas
+es el eje del poder ofensivo.
+
+La **armadura** usa mitigación porcentual (`armadura/(armadura+50)`), no una
+resta: **siempre** reduce algo y **nunca** te hace invulnerable. Sin equipo eres
+frágil; con un juego completo evitas ~un tercio del daño; un jefe, aun así, pega
+fuerte. Cada punto de armadura cuenta.
+
 ### Recurso de clase (orbe derecho)
 Las habilidades cuestan recurso, no solo enfriamiento. Cada clase gestiona el suyo:
 - **Guerrero — Furia**: empieza a 0 y se **acumula luchando** (al golpear y al

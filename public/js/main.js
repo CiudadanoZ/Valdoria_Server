@@ -22,6 +22,7 @@ import { initAuction, openAuction, applyAuctionData, refreshAuction } from './au
 import { MOUNTS } from './world-data.js';
 import { initSkills, refreshSkills, castSkill, updateSkills, skillSpeedMul } from './skills.js';
 import { resourceOf } from './skills-data.js';
+import { MELEE } from './combat-data.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
   initProgression, applyProgression, toggleTalents, setGoldForRespec,
@@ -429,7 +430,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
     scene,
     getPlayerPos: () => player.mesh.position,
     getTarget: () => combatTarget,
-    getBaseDamage: () => 5 + getWeaponDamage() + blessingDamage() + myRace.dmg + myClass.dmg + talentDmg() + 2,
+    getBaseDamage: () => baseAttackDamage(),
     getMobsInRadius: (radius) =>
       [...mobs.map.values()]
         .filter((m) => !m.dead && m.mesh.position.distanceTo(player.mesh.position) <= radius)
@@ -804,6 +805,18 @@ function onResize() {
 }
 
 // ---------- Combate del jugador ----------
+// Daño de ataque del jugador (fórmula única, antes duplicada tres veces).
+// El arma es el término dominante; la base plana es pequeña a propósito.
+function attackBonus() {
+  return blessingDamage() + myRace.dmg + myClass.dmg + talentDmg();
+}
+function baseAttackDamage() {
+  return MELEE.flat + getWeaponDamage() + attackBonus();
+}
+function rollAttackDamage() {
+  return baseAttackDamage() + Math.floor(Math.random() * (MELEE.spread + 1));
+}
+
 function updateCombat(dt) {
   attackCooldown -= dt;
 
@@ -817,7 +830,7 @@ function updateCombat(dt) {
     player.mesh.rotation.y = Math.atan2(tp.x - player.mesh.position.x, tp.z - player.mesh.position.z);
     if (attackCooldown <= 0) {
       attackCooldown = myClass.attackInterval;
-      const dmg = 5 + getWeaponDamage() + blessingDamage() + myRace.dmg + myClass.dmg + talentDmg() + Math.floor(Math.random() * 5);
+      const dmg = rollAttackDamage();
       player.mesh.getObjectByName('armR').rotation.x = -1.7;
       play('attack');
       sendPvpAttack(pvpTarget.id, dmg);
@@ -845,7 +858,7 @@ function updateCombat(dt) {
 
   if (attackCooldown <= 0) {
     attackCooldown = myClass.attackInterval;
-    const dmg = 5 + getWeaponDamage() + blessingDamage() + myRace.dmg + myClass.dmg + talentDmg() + Math.floor(Math.random() * 5);
+    const dmg = rollAttackDamage();
     player.mesh.getObjectByName('armR').rotation.x = -1.7;
     play('attack');
     sendAttack(combatTarget.id, dmg);

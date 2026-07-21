@@ -193,6 +193,24 @@ export class Bot {
     return this;
   }
 
+  /** Equipa un objeto de la bolsa por su id y espera la sincronización. */
+  async equip(itemId) {
+    const inv = this.sync?.inventory ?? this.charState.inventory;
+    const idx = inv.slots.findIndex((s) => s?.itemId === itemId);
+    if (idx === -1) throw new Error(`[${this.name}] no lleva ${itemId} en la bolsa`);
+    this.clear();
+    this.send({ type: 'equip', bagIndex: idx });
+    await this.waitFor('state_sync');
+    return this;
+  }
+
+  /** Activa el JcJ y espera la confirmación. */
+  async enablePvp() {
+    this.send({ type: 'pvp_toggle' });
+    await this.waitFor('pvp_state');
+    return this;
+  }
+
   disconnect() { this.ws.close(); }
 }
 

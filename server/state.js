@@ -7,6 +7,7 @@ import { RACES, CLASSES } from '../public/js/races.js';
 import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
 import { dailyBounties, todayNumber } from '../public/js/bounties.js';
 import { resourceOf } from '../public/js/skills-data.js';
+import { maxMeleeHit } from '../public/js/combat-data.js';
 
 const BAG_SLOTS = 24;
 const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio'];
@@ -220,10 +221,10 @@ export function equippedWeaponDmg(st) {
   return itemId ? (ITEMS[itemId]?.dmg || 0) : 0;
 }
 
-// Daño máximo verosímil de un jugador (para acotar lo que declare el cliente):
-// base 5 + arma + raza/clase/talentos/bendición (≤ ~11) + aleatorio 4 + margen.
+// Daño máximo verosímil de un jugador (para acotar lo que declare el cliente).
+// La fórmula vive en combat-data.js para no desincronizarse del cliente.
 export function maxPlausibleHit(st) {
-  return 5 + equippedWeaponDmg(st) + 11 + 4 + 5;
+  return maxMeleeHit(equippedWeaponDmg(st));
 }
 
 // ---- Experiencia y talentos ----

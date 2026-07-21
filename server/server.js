@@ -31,6 +31,7 @@ import {
 } from './state.js';
 import { skillById } from '../public/js/skills-data.js';
 import { xpForLevel } from '../public/js/talents-data.js';
+import { applyArmor } from '../public/js/combat-data.js';
 import { ITEMS } from '../public/js/items.js';
 import { appendFileSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -262,7 +263,7 @@ function applyDeathPenalty(p) {
 // reaparece al jugador junto a la fuente con el 60% de la vida.
 function damagePlayer(p, id, rawDmg, mobName) {
   dismount(p, id);
-  const reduced = Math.max(1, rawDmg - computeArmor(p.character, currentBuffArmor(p)));
+  const reduced = applyArmor(rawDmg, computeArmor(p.character, currentBuffArmor(p)));
   p.hp = Math.max(0, p.hp - reduced);
   p.lastCombatMs = Date.now();
   // Recibir daño también alimenta la furia del guerrero
@@ -293,7 +294,7 @@ function damagePlayer(p, id, rawDmg, mobName) {
 // reaparece en la fuente y el atacante suma una baja de JcJ.
 function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
   dismount(target, targetId);
-  const reduced = Math.max(1, rawDmg - computeArmor(target.character, currentBuffArmor(target)));
+  const reduced = applyArmor(rawDmg, computeArmor(target.character, currentBuffArmor(target)));
   target.hp = Math.max(0, target.hp - reduced);
   target.lastCombatMs = Date.now();
   const gain = resourceDef(target.character).onHurt;
