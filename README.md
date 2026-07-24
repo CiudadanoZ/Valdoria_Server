@@ -314,6 +314,13 @@ server/server.js       Express + WebSocket. Autoritativo: cuentas y entrada al
                        mundo, dos reinos con simulación propia de 40 criaturas
                        a 10 Hz (IA, daño, muerte, reaparición), botín por
                        participación, grupos de caza, posiciones y chat.
+server/hub.js          Núcleo de red: registro de jugadores y primitivas de
+                       mensajería (send/broadcast/sendSync). Capa hoja de la que
+                       dependen los módulos de dominio.
+server/guild.js        Lógica compartida de gremios (difusión, panel, limpieza).
+server/mobs-data.js    Tablas de criaturas (estadísticas, spawns, el Coloso).
+server/world-map.js    Disposición del mundo: reinos, portales, puntos de NPC,
+                       hierbas, pesca, hogueras.
 server/db.js           Base de datos SQLite (data/valdoria.db): cuentas con
                        scrypt, personajes y su estado, baneos, filtro de nombres.
 server/admin.html      Panel de administración web (/admin).
