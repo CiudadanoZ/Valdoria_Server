@@ -39,6 +39,10 @@ Abre `http://localhost:3000`:
 Cada raza tiene su aspecto (orejas élficas, barba enana, colmillos orcos,
 proporciones propias) y cada clase su color de túnica.
 
+4. **Primeros pasos** — al entrar por primera vez con un héroe nuevo, una tarjeta
+   de bienvenida resume los cuatro gestos clave (mover, hablar con el Maestre
+   Aldric del **!**, luchar, orientarse) y no vuelve a molestar.
+
 ## Controles
 
 | Acción | Control |

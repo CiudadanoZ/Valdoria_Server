@@ -32,7 +32,7 @@ import { openCooking, refreshCooking } from './cooking.js';
 import { initLeaderboard, openLeaderboard, applyLeaderboard } from './leaderboard.js';
 import { ITEMS } from './items.js';
 import { initInventory, applyInventory, getWeaponDamage, getArmor, inventory } from './inventory.js';
-import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker } from './quests.js';
+import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker, questState } from './quests.js';
 import { initShop, openShop, refreshShop } from './shop.js';
 import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
 import { BLESSINGS, initBlessings, applyBlessings, blessingDamage } from './blessings.js';
@@ -76,6 +76,32 @@ function setVitals(msg) {
     ui.setWeakened(msg.weakLeft);
   }
 }
+// ---------- Bienvenida (primeros pasos) ----------
+// Se muestra una sola vez a héroes nuevos: los que aún no han empezado la
+// primera misión (q1 activa) y no la han cerrado antes en este navegador.
+// El nombre del personaje (estable y único por reino) es la clave del "una vez".
+function maybeShowWelcome() {
+  if (questState.q1 !== 'active' || localStorage.getItem(`valdoria_intro_${charName}`)) return;
+  $('welcome-overlay').classList.remove('hidden');
+}
+function closeWelcome() {
+  $('welcome-overlay').classList.add('hidden');
+  if (charName) localStorage.setItem(`valdoria_intro_${charName}`, '1');
+}
+// El botón se conecta una sola vez (no depende de que la tarjeta llegue a mostrarse).
+$('welcome-close').addEventListener('click', closeWelcome);
+
+// ---------- Momento de muerte ----------
+function showDeathOverlay(by) {
+  const overlay = $('death-overlay');
+  $('death-sub').textContent = `${by} te ha derribado. Despiertas junto a la fuente de la Ciudadela.`;
+  overlay.classList.remove('hidden');
+  // Reiniciar la animación aunque mueras dos veces seguidas
+  overlay.style.animation = 'none'; void overlay.offsetWidth; overlay.style.animation = '';
+  clearTimeout(showDeathOverlay._t);
+  showDeathOverlay._t = setTimeout(() => overlay.classList.add('hidden'), 2400);
+}
+
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -224,7 +250,7 @@ connect({
     player.stop();
     player.mesh.position.set(msg.x, 0, msg.z);
     setVitals(msg);
-    ui.toast(`☠ ${msg.by} te ha derribado. Despiertas junto a la fuente.`, 'quest');
+    showDeathOverlay(msg.by);
     if (msg.xpLost > 0) ui.toast(`💀 Has perdido ${msg.xpLost} de experiencia.`, 'quest');
     if (msg.weak) {
       ui.toast('💀 Alma Debilitada: haces menos daño durante un rato. Mira puede purgarla.', 'quest');
@@ -484,6 +510,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   inWorld = true;
 
   ui.addChatMessage({ system: true, text: `Bienvenido a ${realm.name}, ${charName} (${myRace.name} ${myClass.name}).` });
+  maybeShowWelcome();
 
   window.addEventListener('resize', onResize);
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -755,6 +782,7 @@ function onKeyDown(e) {
   else if (k === 'g') toggleGuild();
   else if (k === 'l') openLeaderboard();
   else if (k === 'escape') {
+    if (!$('welcome-overlay').classList.contains('hidden')) { closeWelcome(); return; }
     ui.hideDialog();
     $('inventory-panel').classList.add('hidden');
     $('shop-panel').classList.add('hidden');

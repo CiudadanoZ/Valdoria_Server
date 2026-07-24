@@ -786,6 +786,57 @@ canvas { display: block; }
   display: flex; align-items: center; justify-content: center;
   background: rgba(5, 3, 2, 0.88);
 }
+
+/* ===== Bienvenida (primeros pasos) ===== */
+#welcome-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 3, 2, 0.82);
+}
+#welcome-overlay.hidden { display: none; }
+#welcome-card {
+  max-width: 460px; width: calc(100% - 48px); padding: 28px 32px;
+  background: var(--panel-bg);
+  border: 2px solid var(--gold); border-radius: 8px;
+  box-shadow: 0 0 60px rgba(201, 165, 92, 0.25), inset 0 0 30px rgba(0,0,0,0.5);
+  animation: welcome-in 0.35s ease-out;
+}
+@keyframes welcome-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+#welcome-card h2 {
+  color: var(--gold-bright); font-size: 1.5em; text-align: center;
+  letter-spacing: 1px; margin-bottom: 10px;
+}
+.welcome-intro { color: var(--parchment, #d8c9a8); text-align: center; margin-bottom: 16px; font-size: 0.95em; }
+#welcome-steps { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-bottom: 22px; }
+#welcome-steps li {
+  display: flex; align-items: baseline; gap: 10px;
+  color: #e8dcc0; font-size: 0.96em; line-height: 1.35;
+}
+#welcome-steps b { color: var(--gold-bright); font-weight: 600; }
+.ws-ico { flex: 0 0 auto; font-size: 1.15em; }
+.welcome-btn {
+  display: block; width: 100%; padding: 11px; font-family: inherit; font-size: 1.05em;
+  cursor: pointer; color: #1a120a; font-weight: 700; letter-spacing: 0.5px;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+  border: none; border-radius: 5px;
+}
+.welcome-btn:hover { box-shadow: 0 0 16px rgba(255, 217, 122, 0.5); }
+
+/* ===== Momento de muerte ===== */
+#death-overlay {
+  position: fixed; inset: 0; z-index: 240; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle, rgba(60,6,6,0.35) 0%, rgba(20,2,2,0.6) 100%);
+  animation: death-fade 2.4s ease-out forwards;
+}
+#death-overlay.hidden { display: none; }
+#death-card { text-align: center; }
+.death-title {
+  font-size: 3.2em; color: #ff5a4a; font-family: Georgia, serif; letter-spacing: 2px;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.9), 0 0 30px rgba(200,40,30,0.6);
+}
+.death-sub { margin-top: 8px; color: #e8c0b0; font-size: 1.05em; text-shadow: 0 1px 6px #000; }
+@keyframes death-fade { 0% { opacity: 0; } 15% { opacity: 1; } 78% { opacity: 1; } 100% { opacity: 0; } }
 .reconnect-box {
   text-align: center; padding: 36px 48px;
   background: var(--panel-bg);

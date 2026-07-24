@@ -433,6 +433,29 @@
     </div>
   </div>
 
+  <!-- Bienvenida (una sola vez para héroes nuevos): primeros pasos -->
+  <div id="welcome-overlay" class="hidden">
+    <div id="welcome-card">
+      <h2>Bienvenida a Valdoria</h2>
+      <p class="welcome-intro">Un reino de fantasía oscura te espera. Cuatro cosas y estás lista para la aventura:</p>
+      <ul id="welcome-steps">
+        <li><span class="ws-ico">🖱️</span><span class="ws-txt"><b>Muévete</b> haciendo clic en el suelo.</span></li>
+        <li><span class="ws-ico">❗</span><span class="ws-txt"><b>Empieza aquí:</b> habla con el <b>Maestre Aldric</b> (el del <b>!</b> dorado) haciendo clic sobre él.</span></li>
+        <li><span class="ws-ico">⚔️</span><span class="ws-txt"><b>Lucha</b> con clic sobre un enemigo; usa las <b>teclas 1-5</b> para tus habilidades.</span></li>
+        <li><span class="ws-ico">🗺️</span><span class="ws-txt"><b>Oriéntate</b> con el minimapa (arriba a la izquierda) o el mapa grande (tecla <b>M</b>).</span></li>
+      </ul>
+      <button id="welcome-close" class="welcome-btn">¡A la aventura!</button>
+    </div>
+  </div>
+
+  <!-- Momento de muerte (breve, central) -->
+  <div id="death-overlay" class="hidden">
+    <div id="death-card">
+      <div class="death-title">☠ Has caído</div>
+      <div id="death-sub" class="death-sub"></div>
+    </div>
+  </div>
+
   <div id="tooltip" class="hidden"></div>
 
   <script type="module" src="js/main.js"></script>
