@@ -4,6 +4,9 @@
   "description": "MMORPG 3D con vista cenital estilo Diablo - Ciudadela de Valdoria",
   "type": "module",
   "main": "server/server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server/server.js",
     "test": "node --test --test-concurrency=1 test/",

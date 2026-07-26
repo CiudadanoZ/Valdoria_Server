@@ -1,0 +1,30 @@
+# Blueprint de despliegue para Render (https://render.com), plan gratuito.
+#
+# ⚠️  AVISO IMPORTANTE — DATOS EFÍMEROS
+# El plan gratuito de Render NO tiene disco persistente. La base de datos SQLite
+# (cuentas, personajes, gremios) se REINICIA en cada redespliegue y tras ~15 min
+# de inactividad (el servicio se duerme). Para cuentas que sobrevivan, hay que
+# migrar el almacenamiento a Turso (libSQL). Mientras tanto, esto es un enlace
+# de demo: perfecto para que alguien lo pruebe, no para guardar progreso.
+#
+# Uso: en Render → New → Blueprint → conecta este repositorio. Render lee este
+# fichero y crea el servicio con la configuración de abajo.
+services:
+  - type: web
+    name: ciudadela-valdoria
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # Node 20+ (better-sqlite3 lo requiere). También lo fija .node-version.
+      - key: NODE_VERSION
+        value: "20"
+      # Sin disco persistente las copias de seguridad no sirven de nada.
+      - key: BACKUPS
+        value: "off"
+      # Clave del panel de administración (/admin): Render genera una estable.
+      - key: ADMIN_KEY
+        generateValue: true

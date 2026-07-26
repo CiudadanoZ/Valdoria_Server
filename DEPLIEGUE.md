@@ -1,5 +1,52 @@
 # Publicar la Ciudadela de Valdoria en Internet (gratis)
 
+Hay dos formas, según si quieres que dependa de tu PC o no:
+
+- **Opción A — Render (nube):** el juego vive en un servidor gratuito de Render.
+  No necesitas tener el PC encendido. Ideal para un enlace que compartir.
+- **Opción B — Cloudflare Tunnel (tu PC):** tu propio ordenador hace de
+  servidor. Cero límites de tiempo, pero solo funciona con el PC encendido y el
+  juego arrancado.
+
+---
+
+# Opción A — Render (nube, gratis)
+
+Render clona tu repositorio de GitHub, instala y arranca el juego, y te da un
+enlace `https://…` con **WSS** automático. El `render.yaml` del repo ya lo deja
+todo configurado.
+
+> ⚠️ **Aviso de datos efímeros.** El plan gratuito **no guarda disco**: la base
+> de datos (cuentas, personajes, gremios) se **reinicia** en cada redespliegue y
+> tras **~15 min de inactividad** (el servicio se duerme y el primer visitante
+> espera ~50 s a que despierte). Es un **enlace de demo** perfecto para que
+> alguien lo pruebe, no para guardar progreso. Para cuentas persistentes hay que
+> migrar el almacenamiento a **Turso** (libSQL) — es el siguiente paso natural.
+
+## Pasos
+
+1. **Sube el repo a GitHub** (una sola vez). Crea un repositorio vacío en
+   github.com y, desde la carpeta del proyecto:
+   ```bash
+   git remote add origin https://github.com/TU_USUARIO/valdoria.git
+   git push -u origin master
+   ```
+2. **Crea el servicio en Render.** Entra en [render.com](https://render.com)
+   (puedes registrarte con tu cuenta de GitHub, sin tarjeta), pulsa
+   **New → Blueprint**, elige tu repositorio y confirma. Render lee `render.yaml`
+   y crea el servicio con todo configurado.
+3. **Espera al primer build** (~2-3 min: instala dependencias y arranca). Cuando
+   ponga *Live*, tu juego está en `https://ciudadela-valdoria.onrender.com`
+   (o el nombre que Render asigne).
+4. **Cada vez que hagas `git push`**, Render vuelve a desplegar solo.
+
+La clave del panel `/admin` la genera Render (la ves en el panel del servicio,
+en *Environment*).
+
+---
+
+# Opción B — Cloudflare Tunnel (tu PC)
+
 Con **Cloudflare Tunnel** tu propio PC hace de servidor y tus amigos entran
 desde cualquier sitio por un enlace `https://…` seguro. El **WSS** (WebSocket
 cifrado) es automático: no tienes que tocar certificados ni abrir puertos del
