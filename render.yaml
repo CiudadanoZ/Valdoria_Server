@@ -1,11 +1,10 @@
 # Blueprint de despliegue para Render (https://render.com), plan gratuito.
 #
-# ⚠️  AVISO IMPORTANTE — DATOS EFÍMEROS
-# El plan gratuito de Render NO tiene disco persistente. La base de datos SQLite
-# (cuentas, personajes, gremios) se REINICIA en cada redespliegue y tras ~15 min
-# de inactividad (el servicio se duerme). Para cuentas que sobrevivan, hay que
-# migrar el almacenamiento a Turso (libSQL). Mientras tanto, esto es un enlace
-# de demo: perfecto para que alguien lo pruebe, no para guardar progreso.
+# PERSISTENCIA — con Turso las cuentas sobreviven.
+# El juego guarda en Turso (libSQL) si defines DATABASE_URL y TURSO_AUTH_TOKEN
+# (abajo, marcadas como secretos: se rellenan en el panel de Render, no aquí).
+# Sin ellas, cae a un fichero local que el plan gratuito de Render borra al
+# redesplegar y tras ~15 min de inactividad — solo sirve para una demo suelta.
 #
 # Uso: en Render → New → Blueprint → conecta este repositorio. Render lee este
 # fichero y crea el servicio con la configuración de abajo.
@@ -19,12 +18,16 @@ services:
     healthCheckPath: /
     autoDeploy: true
     envVars:
-      # Node 20+ (better-sqlite3 lo requiere). También lo fija .node-version.
+      # Node 20+ (lo exige @libsql/client). También lo fija .node-version.
       - key: NODE_VERSION
         value: "20"
-      # Sin disco persistente las copias de seguridad no sirven de nada.
-      - key: BACKUPS
-        value: "off"
       # Clave del panel de administración (/admin): Render genera una estable.
       - key: ADMIN_KEY
         generateValue: true
+      # --- Turso (persistencia). Se rellenan a mano en el panel de Render. ---
+      # DATABASE_URL: la URL libsql:// de tu base de datos de Turso.
+      - key: DATABASE_URL
+        sync: false
+      # TURSO_AUTH_TOKEN: el token de acceso a esa base de datos.
+      - key: TURSO_AUTH_TOKEN
+        sync: false

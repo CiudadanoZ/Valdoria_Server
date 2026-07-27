@@ -24,7 +24,7 @@ let nextPort = 4100 + Math.floor(Math.random() * 400);
 export async function startServer({ env = {}, seed } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'valdoria-test-'));
   const dbFile = join(dir, 'test.db');
-  if (seed?.length) seedDb(dbFile, seed);
+  if (seed?.length) await seedDb(dbFile, seed);
   const port = nextPort++;
   const proc = spawn(process.execPath, [join(ROOT, 'server', 'server.js')], {
     cwd: ROOT,

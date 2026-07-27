@@ -1,34 +1,37 @@
-// Base de datos de cuentas y personajes sobre SQLite (data/valdoria.db, modo WAL)
-// con escritura diferida y copias de seguridad rotativas. Si existe el antiguo
-// accounts.json, se migra automáticamente la primera vez.
-// Las contraseñas se guardan con hash scrypt + sal.
-import Database from 'better-sqlite3';
-import { readFileSync, existsSync, mkdirSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
+// Base de datos de cuentas y personajes sobre libSQL (@libsql/client).
+// El mismo cliente sirve para un fichero local (desarrollo y pruebas, url
+// `file:…`) y para Turso en la nube (url `libsql://…` + token). Contraseñas con
+// hash scrypt + sal.
+//
+// Diseño: TODO el modelo vive en memoria y es la verdad en caliente. La base de
+// datos solo se toca al ARRANCAR (loadDb) y en el VOLCADO diferido (flush). Por
+// eso solo esas dos operaciones son asíncronas; el resto de funciones mutan
+// memoria y siguen siendo síncronas.
+import { createClient } from '@libsql/client';
+import { readFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
-// La ruta de la base de datos se puede fijar con DB_FILE. Las pruebas la
-// apuntan a un archivo temporal para no tocar jamás la partida real.
 const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
-const DB_FILE = process.env.DB_FILE || join(DATA_DIR, 'valdoria.db');
 const OLD_JSON = join(DATA_DIR, 'accounts.json');
-// Copias de seguridad: se guardan junto a la base de datos en uso y se pueden
-// desactivar (las pruebas no las necesitan).
-const BACKUPS_ON = process.env.BACKUPS !== 'off';
+
+// Fichero local por defecto (o el que fijen las pruebas con DB_FILE).
+const LOCAL_FILE = process.env.DB_FILE || join(DATA_DIR, 'valdoria.db');
+// URL de la base de datos: Turso (DATABASE_URL) o el fichero local.
+const DB_URL = process.env.DATABASE_URL || ('file:' + LOCAL_FILE.replace(/\\/g, '/'));
+const IS_LOCAL = DB_URL.startsWith('file:');
 
 const VALID_RACES = ['humano', 'elfo', 'enano', 'orco'];
 const VALID_CLASSES = ['guerrero', 'explorador', 'sacerdote'];
 const MAX_CHARACTERS = 5;
 
-// Cuentas administradoras (variable de entorno, en minúsculas). Por defecto,
-// la cuenta del creador del reino.
+// Cuentas administradoras (variable de entorno, en minúsculas).
 const ADMIN_ACCOUNTS = new Set(
   (process.env.ADMIN_ACCOUNTS || 'oscarchan').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean)
 );
 
-// Filtro básico de nombres ofensivos (subcadenas prohibidas, sin distinción de
-// mayúsculas). Ampliable por entorno con BANNED_WORDS.
+// Filtro básico de nombres ofensivos (subcadenas prohibidas). Ampliable por env.
 const BANNED_WORDS = [
   'puta', 'puto', 'mierda', 'cabron', 'gilipollas', 'joder', 'coño', 'polla',
   'nazi', 'hitler', 'admin', 'moderador', 'gm', 'fuck', 'shit', 'nigger', 'bitch',
@@ -44,118 +47,131 @@ export function isAdminAccount(name) {
   return ADMIN_ACCOUNTS.has(String(name || '').toLowerCase());
 }
 
-// Modelo en memoria: clave = nombre en minúsculas -> { name, salt, passHash, characters: [] }
-let accounts = {};
+// ---- Modelo en memoria (la verdad en caliente) ----
+let accounts = {};   // clave (nombre en minúsculas) -> { name, salt, passHash, characters:[] }
+let guilds = {};     // clave (nombre en minúsculas) -> { name, leader, members:[], motd, createdAt }
+let auctions = {};   // id -> { id, seller, sellerName, item, price, ts }
 let nextCharId = 1;
-let bannedAccounts = new Set(); // claves de cuenta baneadas
-let guilds = {}; // clave (nombre en minúsculas) -> { name, leader, members:[charName], motd, createdAt }
-let db = null;
+let nextAuctionId = 1;
+let bannedAccounts = new Set();
+let client = null;
 
-export function loadDb() {
-  mkdirSync(dirname(DB_FILE), { recursive: true });
-  db = new Database(DB_FILE);
-  db.pragma('journal_mode = WAL');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, data TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS auctions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      seller TEXT NOT NULL, sellerName TEXT NOT NULL,
-      item TEXT NOT NULL, price INTEGER NOT NULL, ts INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS guilds (key TEXT PRIMARY KEY, data TEXT NOT NULL);
-  `);
+export async function loadDb() {
+  if (IS_LOCAL) mkdirSync(dirname(LOCAL_FILE), { recursive: true });
+  client = createClient({ url: DB_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+
+  await client.batch([
+    'CREATE TABLE IF NOT EXISTS accounts (key TEXT PRIMARY KEY, data TEXT NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS guilds (key TEXT PRIMARY KEY, data TEXT NOT NULL)',
+    `CREATE TABLE IF NOT EXISTS auctions (
+       id INTEGER PRIMARY KEY, seller TEXT NOT NULL, sellerName TEXT NOT NULL,
+       item TEXT NOT NULL, price INTEGER NOT NULL, ts INTEGER NOT NULL
+     )`,
+  ], 'write');
 
   // Cargar el modelo en memoria
-  for (const row of db.prepare('SELECT key, data FROM accounts').all()) {
-    try { accounts[row.key] = JSON.parse(row.data); } catch { /* fila corrupta: se omite */ }
+  for (const row of (await client.execute('SELECT key, data FROM accounts')).rows) {
+    try { accounts[row.key] = JSON.parse(row.data); } catch { /* fila corrupta */ }
   }
-  const metaCharId = db.prepare('SELECT value FROM meta WHERE key = ?').get('nextCharId');
-  nextCharId = metaCharId ? Number(metaCharId.value) : 1;
-
-  const metaBans = db.prepare('SELECT value FROM meta WHERE key = ?').get('bans');
-  if (metaBans) { try { bannedAccounts = new Set(JSON.parse(metaBans.value)); } catch { /* nada */ } }
-
-  for (const row of db.prepare('SELECT key, data FROM guilds').all()) {
+  for (const row of (await client.execute('SELECT key, data FROM guilds')).rows) {
     try { guilds[row.key] = JSON.parse(row.data); } catch { /* fila corrupta */ }
   }
+  for (const r of (await client.execute('SELECT id, seller, sellerName, item, price, ts FROM auctions')).rows) {
+    auctions[Number(r.id)] = {
+      id: Number(r.id), seller: r.seller, sellerName: r.sellerName,
+      item: r.item, price: Number(r.price), ts: Number(r.ts),
+    };
+  }
+  const meta = {};
+  for (const row of (await client.execute('SELECT key, value FROM meta')).rows) meta[row.key] = row.value;
+  nextCharId = meta.nextCharId ? Number(meta.nextCharId) : 1;
+  const maxAuctionId = Object.keys(auctions).reduce((m, id) => Math.max(m, Number(id)), 0);
+  nextAuctionId = meta.nextAuctionId ? Number(meta.nextAuctionId) : maxAuctionId + 1;
+  if (meta.bans) { try { bannedAccounts = new Set(JSON.parse(meta.bans)); } catch { /* nada */ } }
 
-  // Migración desde el antiguo accounts.json (una sola vez). Solo con la base
-  // de datos por defecto: una BD de pruebas nace vacía y no debe heredar nada.
-  if (!process.env.DB_FILE && Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
+  // Migración desde el antiguo accounts.json (una sola vez), solo con el fichero
+  // local por defecto: una base de pruebas o Turso nacen vacías.
+  if (IS_LOCAL && !process.env.DB_FILE && Object.keys(accounts).length === 0 && existsSync(OLD_JSON)) {
     try {
       const old = JSON.parse(readFileSync(OLD_JSON, 'utf8'));
       accounts = old.accounts || {};
       nextCharId = old.nextCharId || 1;
-      flushNow();
+      await queueFlush();
       renameSync(OLD_JSON, OLD_JSON.replace('.json', '.migrated.json'));
-      console.log(`Migradas ${Object.keys(accounts).length} cuentas de accounts.json a SQLite`);
+      console.log(`Migradas ${Object.keys(accounts).length} cuentas de accounts.json a la base de datos`);
     } catch (err) {
       console.error('No se pudo migrar accounts.json:', err.message);
     }
   }
 
   const total = Object.values(accounts).reduce((n, a) => n + a.characters.length, 0);
-  console.log(`Base de datos SQLite cargada: ${Object.keys(accounts).length} cuentas, ${total} personajes`);
-
-  backupNow();
-  setInterval(backupNow, 15 * 60 * 1000);
+  const dest = IS_LOCAL ? 'fichero local' : 'Turso (nube)';
+  console.log(`Base de datos cargada (${dest}): ${Object.keys(accounts).length} cuentas, ${total} personajes`);
 }
 
-// ---- Escritura diferida (el modelo en memoria es la verdad en caliente) ----
+// ---- Volcado diferido ----
+// El modelo en memoria manda; se persiste en lotes, con las escrituras
+// SERIALIZADAS por una cadena de promesas (Turso es remoto: dos volcados no
+// deben solaparse). Cada volcado escribe el estado ACTUAL completo, así que
+// coalescer varios en uno es inocuo.
 let saveTimer = null;
+let flushChain = Promise.resolve();
 
-function flushNow() {
-  const upsert = db.prepare('INSERT INTO accounts (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data');
-  const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
-  const upsertGuild = db.prepare('INSERT INTO guilds (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data');
-  const knownGuilds = new Set(Object.keys(guilds));
-  db.transaction(() => {
-    for (const [key, account] of Object.entries(accounts)) {
-      upsert.run(key, JSON.stringify(account));
-    }
-    setMeta.run('nextCharId', String(nextCharId));
-    setMeta.run('bans', JSON.stringify([...bannedAccounts]));
-    for (const [key, g] of Object.entries(guilds)) upsertGuild.run(key, JSON.stringify(g));
-    // Borrar gremios disueltos
-    for (const row of db.prepare('SELECT key FROM guilds').all()) {
-      if (!knownGuilds.has(row.key)) db.prepare('DELETE FROM guilds WHERE key = ?').run(row.key);
-    }
-  })();
+function stmt(sql, args) { return { sql, args }; }
+
+// Borra las filas cuya clave ya no está en memoria (gremios disueltos, subastas
+// retiradas). En un solo statement, apto para el lote.
+function deleteOrphans(table, col, keys) {
+  if (keys.length === 0) return stmt(`DELETE FROM ${table}`, []);
+  const placeholders = keys.map(() => '?').join(',');
+  return stmt(`DELETE FROM ${table} WHERE ${col} NOT IN (${placeholders})`, keys);
+}
+
+async function doFlush() {
+  const batch = [];
+  const upAcc = 'INSERT INTO accounts (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data';
+  const upMeta = 'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
+  const upGuild = 'INSERT INTO guilds (key, data) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data';
+  const upAuction = `INSERT INTO auctions (id, seller, sellerName, item, price, ts) VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET seller=excluded.seller, sellerName=excluded.sellerName, item=excluded.item, price=excluded.price, ts=excluded.ts`;
+
+  for (const [key, account] of Object.entries(accounts)) batch.push(stmt(upAcc, [key, JSON.stringify(account)]));
+  batch.push(stmt(upMeta, ['nextCharId', String(nextCharId)]));
+  batch.push(stmt(upMeta, ['nextAuctionId', String(nextAuctionId)]));
+  batch.push(stmt(upMeta, ['bans', JSON.stringify([...bannedAccounts])]));
+
+  for (const [key, g] of Object.entries(guilds)) batch.push(stmt(upGuild, [key, JSON.stringify(g)]));
+  batch.push(deleteOrphans('guilds', 'key', Object.keys(guilds)));
+
+  for (const a of Object.values(auctions)) batch.push(stmt(upAuction, [a.id, a.seller, a.sellerName, a.item, a.price, a.ts]));
+  batch.push(deleteOrphans('auctions', 'id', Object.keys(auctions).map(Number)));
+
+  await client.batch(batch, 'write');
+}
+
+// Encola un volcado detrás del anterior y devuelve su promesa.
+function queueFlush() {
+  flushChain = flushChain.then(doFlush).catch((err) => console.error('Error volcando la base de datos:', err.message));
+  return flushChain;
 }
 
 function saveSoon() {
   if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    try { flushNow(); } catch (err) { console.error('Error guardando en SQLite:', err.message); }
-  }, 500);
+  saveTimer = setTimeout(() => { saveTimer = null; queueFlush(); }, 500);
 }
 
-// ---- Copias de seguridad rotativas (se conservan las 20 últimas) ----
-// Se guardan junto a la base de datos en uso, no en una ruta fija.
-const BACKUP_DIR = join(dirname(DB_FILE), 'backups');
-const MAX_BACKUPS = 20;
-
-async function backupNow() {
-  if (!BACKUPS_ON) return;
-  try {
-    mkdirSync(BACKUP_DIR, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    await db.backup(join(BACKUP_DIR, `valdoria-${stamp}.db`));
-    const backups = readdirSync(BACKUP_DIR).filter((f) => f.startsWith('valdoria-')).sort();
-    while (backups.length > MAX_BACKUPS) {
-      unlinkSync(join(BACKUP_DIR, backups.shift()));
-    }
-  } catch (err) {
-    console.error('Error creando copia de seguridad:', err.message);
-  }
-}
-
-// Marca la base de datos como modificada (el servidor muta character.state
-// directamente en las operaciones autoritativas).
+// Marca la base de datos como modificada (el servidor muta el estado en memoria).
 export function touch() {
   saveSoon();
+}
+
+// Vuelca lo pendiente y espera a que termine. Se llama al apagar el servidor
+// (SIGTERM en Render): sin esto, dormir o redesplegar perdería lo no guardado.
+export async function flushAndClose() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  await queueFlush();
+  try { client?.close(); } catch { /* da igual */ }
 }
 
 // ---- Cuentas ----
@@ -169,7 +185,6 @@ function passwordMatches(account, password) {
   return attempt.length === stored.length && timingSafeEqual(attempt, stored);
 }
 
-// Cambia la contraseña tras verificar la actual.
 export function changePassword(account, oldPassword, newPassword) {
   if (!passwordMatches(account, oldPassword)) return { ok: false, reason: 'La contraseña actual es incorrecta' };
   if (String(newPassword || '').length < 4) return { ok: false, reason: 'La nueva contraseña necesita al menos 4 caracteres' };
@@ -279,8 +294,6 @@ export function isBanned(accountName) {
 }
 
 // ---- Clasificaciones ----
-// Recorre todos los personajes de todas las cuentas y devuelve el top N por
-// nivel, oro y bajas totales. Excluye cuentas baneadas.
 export function getLeaderboards(topN = 10) {
   const chars = [];
   for (const [key, account] of Object.entries(accounts)) {
@@ -331,7 +344,7 @@ export function getAccountsSummary() {
 }
 
 // Busca un personaje por su nombre en cualquier cuenta (para pagar a vendedores
-// que estén desconectados). Devuelve { account, character } o null.
+// desconectados). Devuelve { account, character } o null.
 export function findCharacterByName(name) {
   const lower = String(name || '').toLowerCase();
   for (const account of Object.values(accounts)) {
@@ -387,7 +400,6 @@ export function setGuildLeader(name, charName) {
   saveSoon();
   return true;
 }
-// Ranking de gremios por número de miembros (para clasificaciones).
 export function topGuilds(n = 10) {
   return Object.values(guilds)
     .sort((a, b) => b.members.length - a.members.length)
@@ -395,31 +407,42 @@ export function topGuilds(n = 10) {
     .map((g) => ({ name: g.name, members: g.members.length, leader: g.leader }));
 }
 
-// ---- Casa de subastas ----
+// ---- Casa de subastas (en memoria; se persiste en el volcado) ----
 export function listAuctions(limit = 100) {
-  return db.prepare('SELECT id, seller, sellerName, item, price, ts FROM auctions ORDER BY ts DESC LIMIT ?').all(limit);
+  return Object.values(auctions)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, limit)
+    .map((a) => ({ id: a.id, seller: a.seller, sellerName: a.sellerName, item: a.item, price: a.price, ts: a.ts }));
 }
 export function auctionsBySeller(sellerKey) {
-  return db.prepare('SELECT id, sellerName, item, price, ts FROM auctions WHERE seller = ? ORDER BY ts DESC').all(sellerKey);
+  return Object.values(auctions)
+    .filter((a) => a.seller === sellerKey)
+    .sort((a, b) => b.ts - a.ts)
+    .map((a) => ({ id: a.id, sellerName: a.sellerName, item: a.item, price: a.price, ts: a.ts }));
 }
 export function getAuction(id) {
-  return db.prepare('SELECT id, seller, sellerName, item, price, ts FROM auctions WHERE id = ?').get(Number(id));
+  return auctions[Number(id)] || null;
 }
 export function addAuction(sellerKey, sellerName, item, price) {
-  const info = db.prepare('INSERT INTO auctions (seller, sellerName, item, price, ts) VALUES (?, ?, ?, ?, ?)')
-    .run(sellerKey, sellerName, item, Math.round(price), Date.now());
-  return info.lastInsertRowid;
+  const id = nextAuctionId++;
+  auctions[id] = { id, seller: sellerKey, sellerName, item, price: Math.round(price), ts: Date.now() };
+  saveSoon();
+  return id;
 }
 export function removeAuction(id) {
-  return db.prepare('DELETE FROM auctions WHERE id = ?').run(Number(id)).changes > 0;
+  const key = Number(id);
+  if (!auctions[key]) return false;
+  delete auctions[key];
+  saveSoon();
+  return true;
 }
 export function countAuctionsBySeller(sellerKey) {
-  return db.prepare('SELECT COUNT(*) AS n FROM auctions WHERE seller = ?').get(sellerKey).n;
+  return Object.values(auctions).filter((a) => a.seller === sellerKey).length;
 }
 
-// Fusiona SOLO las claves permitidas. Las banderas de misión vienen del
-// cliente; la vida y la posición las inyecta el propio servidor. El oro,
-// inventario, equipo, progresión y bendiciones se mutan solo por RPCs.
+// Fusiona SOLO las claves permitidas. Las banderas de misión vienen del cliente;
+// la vida y la posición las inyecta el servidor. Oro, inventario, equipo,
+// progresión y bendiciones se mutan solo por RPCs.
 const CLIENT_STATE_KEYS = ['hp', 'quests', 'x', 'z'];
 
 export function saveCharacterState(account, charId, state) {

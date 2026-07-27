@@ -13,7 +13,7 @@ import { WebSocketServer } from 'ws';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  loadDb, authenticate, publicCharacters, createCharacter,
+  loadDb, flushAndClose, authenticate, publicCharacters, createCharacter,
   deleteCharacter, getCharacter, saveCharacterState, touch,
   isAdminAccount, banAccount, unbanAccount, changePassword, getLeaderboards,
   getAccountsSummary, findCharacterByName,
@@ -133,7 +133,22 @@ const httpServer = useTls
   : createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
-loadDb();
+// Carga la base de datos antes de seguir (top-level await: el resto del módulo
+// asume el modelo ya en memoria).
+await loadDb();
+
+// Apagado ordenado: Render envía SIGTERM al dormir o redesplegar. Volcamos lo
+// pendiente antes de salir para no perder progreso.
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Recibido ${sig}: guardando y cerrando...`);
+    try { await flushAndClose(); } catch (err) { console.error('Error al cerrar:', err.message); }
+    process.exit(0);
+  });
+}
 
 // (disposición del mundo movida a ./world-map.js)
 
