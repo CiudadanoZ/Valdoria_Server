@@ -11,6 +11,7 @@ export const WAYSTONES = [
   { id: 'lago', name: 'Lago de los Ciervos', x: 52, z: -44 },
   { id: 'ruinas', name: 'Ruinas del Norte', x: 0, z: -70 },
   { id: 'cienaga', name: 'Ciénaga de los Ahogados', x: -78, z: -44 },
+  { id: 'cumbres', name: 'Cumbres Heladas', x: 66, z: 68 },
 ];
 
 export function waystoneById(id) {

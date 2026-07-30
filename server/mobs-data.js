@@ -3,7 +3,8 @@
 
 // Evento de mundo: cada cuánto reaparece el Coloso (segundos). Configurable.
 export const EVENT_INTERVAL_S = Math.max(60, Number(process.env.EVENT_INTERVAL_S) || 900);
-// Posición del jefe de mundo (claro al norte de la Ciudadela, lejos del refugio).
+// Posición del jefe de mundo (claro al sur de la Ciudadela, lejos del refugio;
+// recuerda que -z es el norte del mapa).
 export const COLOSO_SPOT = [0, 150];
 
 // Balance (alpha): la experiencia crece con la dificultad para que el contenido
@@ -24,6 +25,11 @@ export const MOB_TYPES = {
   ahogado: { name: 'Ahogado', hp: 90, dmgMin: 9, dmgMax: 15, speed: 4.2, aggro: 9, range: 2.0, cd: 1.5, respawn: 35, gold: [12, 22], xp: 34, drops: [['limo_curativo', 0.4], ['flor_cienaga', 0.3]] },
   chaman_cienaga: { name: 'Chamán de la Ciénaga', hp: 110, dmgMin: 11, dmgMax: 17, speed: 4.6, aggro: 11, range: 2.1, cd: 1.4, respawn: 45, gold: [18, 30], xp: 48, drops: [['flor_cienaga', 0.7], ['esencia_espectral', 0.3]] },
   rey_fango: { name: 'Rey del Fango', hp: 450, dmgMin: 15, dmgMax: 24, speed: 4.4, aggro: 14, range: 2.8, cd: 1.3, respawn: 130, gold: [170, 230], xp: 230, drops: [['flor_cienaga', 1], ['limo_curativo', 1], ['cetro_fango', 0.22], ['anillo_cienaga', 0.18]] },
+  // Cumbres Heladas (sureste): zona de alto nivel
+  lobo_escarcha: { name: 'Lobo de Escarcha', hp: 110, dmgMin: 12, dmgMax: 18, speed: 6.6, aggro: 12, range: 2.0, cd: 1.1, respawn: 40, gold: [22, 38], xp: 60, drops: [['piel_escarcha', 0.6], ['colmillo_lobo', 0.5]] },
+  aparecido_helado: { name: 'Aparecido Helado', hp: 140, dmgMin: 14, dmgMax: 20, speed: 4.4, aggro: 11, range: 2.1, cd: 1.4, respawn: 50, gold: [28, 44], xp: 72, drops: [['esquirla_helada', 0.6], ['esencia_espectral', 0.35]] },
+  troll_hielo: { name: 'Troll de Hielo', hp: 260, dmgMin: 16, dmgMax: 24, speed: 4.6, aggro: 12, range: 2.5, cd: 1.4, respawn: 95, gold: [70, 100], xp: 120, drops: [['piel_escarcha', 1], ['esquirla_helada', 0.5], ['corazon_helado', 0.15]] },
+  jarl_cumbres: { name: 'Jarl de las Cumbres', hp: 700, dmgMin: 18, dmgMax: 28, speed: 4.6, aggro: 15, range: 3.0, cd: 1.25, respawn: 160, gold: [260, 340], xp: 360, drops: [['corazon_helado', 1], ['esquirla_helada', 1], ['piel_escarcha', 1], ['filo_glacial', 0.22], ['egida_escarcha', 0.2], ['anillo_helado', 0.16], ['pocion_vida_mayor', 1]] },
   // Jefe de mundo (evento): aparece para todo el reino cada cierto tiempo.
   coloso: { name: 'Coloso de Valdoria', hp: 3000, dmgMin: 20, dmgMax: 32, speed: 3.6, aggro: 16, range: 3.2, cd: 1.4, respawn: EVENT_INTERVAL_S, gold: [300, 450], xp: 500, drops: [['corona_cripta', 0.5], ['guadana_espectral', 0.4], ['cetro_fango', 0.4], ['pocion_vida_mayor', 1], ['pocion_vida_mayor', 1]] },
 };
@@ -55,4 +61,9 @@ export const SPAWNS = [
   ['ahogado', -88, -50], ['ahogado', -98, -58], ['ahogado', -85, -64], ['ahogado', -104, -50], ['ahogado', -95, -68],
   ['chaman_cienaga', -100, -70], ['chaman_cienaga', -110, -55],
   ['rey_fango', -102, -78],
+  // Cumbres Heladas (sureste, centro ~82,82; dentro del mundo caminable r<140)
+  ['lobo_escarcha', 70, 72], ['lobo_escarcha', 92, 72], ['lobo_escarcha', 66, 86], ['lobo_escarcha', 94, 88], ['lobo_escarcha', 78, 94], ['lobo_escarcha', 60, 80],
+  ['aparecido_helado', 84, 82], ['aparecido_helado', 92, 78], ['aparecido_helado', 72, 90], ['aparecido_helado', 86, 94], ['aparecido_helado', 76, 70],
+  ['troll_hielo', 88, 100], ['troll_hielo', 66, 98],
+  ['jarl_cumbres', 80, 104],
 ];

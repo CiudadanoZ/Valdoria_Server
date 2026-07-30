@@ -164,6 +164,22 @@ vida, suelta el Cetro del Rey del Fango o el Anillo de la Ciénaga). En una isla
 vive la **Vidente Ysra**, que da una cadena de misiones: *Aguas turbias* (6
 Ahogados) → *El fango que susurra* (5 Flores de Ciénaga) → *El Rey del Fango*.
 
+### Las Cumbres Heladas (sureste) — zona de alto nivel
+Una meseta nevada de pilares de hielo, pinos escarchados y lagunas congeladas: el
+contenido **más duro del juego**, un escalón por encima de la Ciénaga. No subas
+sin equipo: las bestias cazan en manada y matan rápido.
+- **Criaturas**: **Lobos de Escarcha** (110 de vida, veloces y en manada),
+  **Aparecidos Helados** (140), **Trolls de Hielo** (260) y el jefe
+  **Jarl de las Cumbres** (700 de vida).
+- **Botín nuevo**: materiales (Piel de Escarcha, Esquirla Helada, Corazón Helado)
+  y tres legendarios del Jarl — **Filo Glacial** (28 de daño, **la mejor arma del
+  juego**), **Égida de Escarcha** (escudo, 7 de armadura) y **Anillo Helado**.
+- **Cazadora Skadi** vive en una cabaña de la meseta y da una cadena de misiones:
+  *La manada blanca* (6 Lobos de Escarcha) → *Corazón de hielo* (5 Esquirlas
+  Heladas) → *El Jarl de las Cumbres*, que premia con la Égida de Escarcha.
+- Tiene su propia **piedra rúnica** de viaje rápido, para volver sin cruzar el
+  mapa cada vez.
+
 ### JcJ y comercio entre jugadores
 Al hacer clic sobre otro jugador se abre un menú: **🤝 Grupo**, **💰 Comerciar**
 y (si procede) **⚔ Atacar**.
@@ -204,7 +220,7 @@ y (si procede) **⚔ Atacar**.
 
 ### Eventos de mundo: el Coloso de Valdoria
 Cada cierto tiempo (por defecto 15 min) un **jefe de mundo**, el Coloso de
-Valdoria, **despierta al norte de la Ciudadela** con un anuncio a todo el reino.
+Valdoria, **despierta al sur de la Ciudadela** con un anuncio a todo el reino.
 Tiene muchísima vida (3000 PS): hace falta **reunir a varios héroes** para
 derribarlo. Al caer, un segundo anuncio celebra la victoria y el **botín
 generoso** (oro, experiencia y objetos raros) se reparte entre todos los que

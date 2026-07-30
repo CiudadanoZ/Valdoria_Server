@@ -61,6 +61,12 @@ export const questState = {
   s3: 'inactive',
   ahogadoKills: 0,       // para s1
   reyFangoDead: false,   // para s3
+  // Cumbres Heladas: Cazadora Skadi
+  h1: 'inactive',
+  h2: 'inactive',
+  h3: 'inactive',
+  escarchaKills: 0,      // para h1
+  jarlDead: false,       // para h3
 };
 
 let onChanged = null;
@@ -78,6 +84,8 @@ const RATS_NEEDED = 4;
 const FANGS_NEEDED = 5;
 const DROWNED_NEEDED = 6;
 const FLOWERS_NEEDED = 5;
+const FROSTWOLVES_NEEDED = 6;
+const SHARDS_NEEDED = 5;
 const CITIZENS = ['bramm', 'lyra', 'toran'];
 const CITIZEN_NAMES = { bramm: 'Bramm el Herrero', lyra: 'Lyra la Mercader', toran: 'Guardia Toran' };
 
@@ -121,6 +129,16 @@ export function ysraMarker() {
   if (questState.s2 === 'active' && countItem('flor_cienaga') >= FLOWERS_NEEDED) return '?';
   if (questState.s2 === 'done' && questState.s3 === 'inactive') return '!';
   if (questState.s3 === 'active' && questState.reyFangoDead) return '?';
+  return null;
+}
+
+export function skadiMarker() {
+  if (questState.h1 === 'inactive') return '!';
+  if (questState.h1 === 'active' && questState.escarchaKills >= FROSTWOLVES_NEEDED) return '?';
+  if (questState.h1 === 'done' && questState.h2 === 'inactive') return '!';
+  if (questState.h2 === 'active' && countItem('esquirla_helada') >= SHARDS_NEEDED) return '?';
+  if (questState.h2 === 'done' && questState.h3 === 'inactive') return '!';
+  if (questState.h3 === 'active' && questState.jarlDead) return '?';
   return null;
 }
 
@@ -193,6 +211,19 @@ export function onEnemyKilled(type) {
     toast('¡El Rey del Fango ha caído! Vuelve con la Vidente Ysra', 'quest');
     save();
   }
+  if (type === 'lobo_escarcha' && questState.h1 === 'active' && questState.escarchaKills < FROSTWOLVES_NEEDED) {
+    questState.escarchaKills++;
+    toast(`Lobo de Escarcha abatido (${questState.escarchaKills}/${FROSTWOLVES_NEEDED})`);
+    if (questState.escarchaKills >= FROSTWOLVES_NEEDED) {
+      toast('Manada mermada — vuelve con la Cazadora Skadi', 'quest');
+    }
+    save();
+  }
+  if (type === 'jarl_cumbres' && questState.h3 === 'active' && !questState.jarlDead) {
+    questState.jarlDead = true;
+    toast('¡El Jarl de las Cumbres ha caído! Vuelve con la Cazadora Skadi', 'quest');
+    save();
+  }
   if (type === 'lobo' && questState.t1 === 'active' && questState.wolfKills < WOLVES_NEEDED) {
     questState.wolfKills++;
     toast(`Lobo Gris abatido (${questState.wolfKills}/${WOLVES_NEEDED})`);
@@ -235,6 +266,11 @@ export function onLootChanged() {
       toast('Flores reunidas — vuelve con la Vidente Ysra', 'quest');
     }
   }
+  if (questState.h2 === 'active') {
+    if (countItem('esquirla_helada') === SHARDS_NEEDED) {
+      toast('Esquirlas reunidas — vuelve con la Cazadora Skadi', 'quest');
+    }
+  }
   renderTracker();
 }
 
@@ -268,6 +304,7 @@ export function getDialog(npc) {
   if (npc.id === 'baldur') return baldurDialog();
   if (npc.id === 'nyra') return nyraDialog();
   if (npc.id === 'ysra') return ysraDialog();
+  if (npc.id === 'skadi') return skadiDialog();
   meetCitizen(npc.id);
   if (npc.id === 'mira' && miraServices) return miraDialog(npc);
   const actions = [];
@@ -908,6 +945,117 @@ function ysraDialog() {
   };
 }
 
+function skadiDialog() {
+  const close = { label: 'Que el hielo no te alcance', fn: hideDialog };
+
+  if (questState.h1 === 'inactive') {
+    return {
+      text: 'Alto ahí, forastero. Pocos llegan tan lejos al sureste y menos aún vuelven con vida. Soy Skadi, cazadora de estas cumbres desde antes de que el frío las reclamara. Los Lobos de Escarcha bajan en manada y ya no temen a nada. Si tienes acero y agallas, ayúdame a recordarles el miedo.',
+      actions: [
+        {
+          label: '⚔ Aceptar: La manada blanca (abatir 6 Lobos de Escarcha)',
+          fn: () => {
+            questState.h1 = 'active';
+            questState.escarchaKills = 0;
+            toast('Nueva misión: La manada blanca', 'quest');
+            save(); renderTracker();
+            showDialog('Cazadora Skadi',
+              'Rondan la meseta en busca de calor que arrebatar. Seis bastarán para que la manada aprenda a rodear estas cumbres. No dejes que te acorralen: cazan como el viento.',
+              [close]);
+          },
+        },
+        close,
+      ],
+    };
+  }
+
+  if (questState.h1 === 'active') {
+    if (questState.escarchaKills >= FROSTWOLVES_NEEDED) {
+      return {
+        text: 'Seis pieles menos aullando al viento. Cazas bien, forastero. Toma, para el frío que viene: nada calienta como saber que el acero responde.',
+        actions: [
+          {
+            label: '⚔ Cobrar recompensa (90 oro, 2 Pociones Mayores)',
+            fn: () => requestClaim('h1', () => {
+              questState.h1 = 'done';
+              questState.h2 = 'active';
+              toast('Misión completada: La manada blanca', 'quest');
+              toast('Nueva misión: Corazón de hielo', 'quest');
+              save(); renderTracker();
+              showDialog('Cazadora Skadi',
+                'Ahora lo difícil. Los Aparecidos Helados guardan Esquirlas Heladas en el pecho, hielo eterno que ni el sol funde. Tráeme cinco: las necesito para lo que voy a pedirte después.',
+                [close]);
+            }),
+          },
+          close,
+        ],
+      };
+    }
+    return {
+      text: `¿Cuántos lobos quedan en la manada? (${questState.escarchaKills}/${FROSTWOLVES_NEEDED}) Recórrete la meseta, no se esconden.`,
+      actions: [close],
+    };
+  }
+
+  if (questState.h2 === 'active') {
+    if (countItem('esquirla_helada') >= SHARDS_NEEDED) {
+      return {
+        text: 'Cinco esquirlas... perfectas. Ahora escucha, porque esto es a lo que temo de verdad: hay un Jarl en lo alto, un gigante de escarcha que fue rey de un pueblo helado hace mil inviernos. Se alza sobre los muertos y el hielo le obedece. Mientras respire, estas cumbres nunca serán seguras.',
+        actions: [
+          {
+            label: '⚔ Entregar 5 Esquirlas Heladas (130 oro, 3 Pieles de Escarcha)',
+            fn: () => requestClaim('h2', () => {
+              questState.h2 = 'done';
+              questState.h3 = 'active';
+              toast('Misión completada: Corazón de hielo', 'quest');
+              toast('Nueva misión: El Jarl de las Cumbres', 'quest');
+              save(); renderTracker();
+              showDialog('Cazadora Skadi',
+                'El Jarl aguarda en el corazón de la meseta, entre los pilares de hielo. Es enorme y su filo congela la sangre a quien roza. Ve con la vida al máximo y el mejor acero que tengas... y no luches solo si puedes evitarlo.',
+                [close]);
+            }),
+          },
+          close,
+        ],
+      };
+    }
+    return {
+      text: `Necesito 5 Esquirlas Heladas y llevas ${countItem('esquirla_helada')}. Los Aparecidos las sueltan al caer.`,
+      actions: [close],
+    };
+  }
+
+  if (questState.h3 === 'active') {
+    if (questState.jarlDead) {
+      return {
+        text: '¡El Jarl ha caído! Lo siento en el aire: el hielo se aquieta, los muertos vuelven a dormir bajo la nieve. Nadie lo había logrado en mil inviernos, forastero. Toma su égida: que te guarde como estas cumbres no supieron guardarse a sí mismas.',
+        actions: [
+          {
+            label: '✦ Recompensa final (280 oro, Égida de Escarcha, 3 Pociones Mayores)',
+            fn: () => requestClaim('h3', () => {
+              questState.h3 = 'done';
+              toast('Misión completada: El Jarl de las Cumbres', 'quest');
+              toast('✦ ¡Has conquistado las Cumbres Heladas! ✦', 'quest');
+              save(); renderTracker();
+              hideDialog();
+            }),
+          },
+          close,
+        ],
+      };
+    }
+    return {
+      text: 'El Jarl sigue en pie, en el corazón de la meseta. Mientras su corazón de hielo lata, las cumbres jamás descansarán.',
+      actions: [close],
+    };
+  }
+
+  return {
+    text: 'Las cumbres descansan gracias a ti, forastero. Cazaste lo que nadie se atrevía. Vuelve cuando quieras: siempre hay algo que acechar entre la nieve.',
+    actions: [close],
+  };
+}
+
 // ---- Rastreador en pantalla ----
 export function renderTracker() {
   const list = document.getElementById('quest-list');
@@ -1017,6 +1165,23 @@ export function renderTracker() {
     if (questState.reyFangoDead) objs.push({ text: 'Vuelve con la Vidente Ysra', done: false });
     entries.push({ title: 'El Rey del Fango', objs });
   }
+  if (questState.h1 === 'active') {
+    const done = questState.escarchaKills >= FROSTWOLVES_NEEDED;
+    const objs = [{ text: `Abate Lobos de Escarcha (${questState.escarchaKills}/${FROSTWOLVES_NEEDED})`, done }];
+    if (done) objs.push({ text: 'Vuelve con la Cazadora Skadi', done: false });
+    entries.push({ title: 'La manada blanca', objs });
+  }
+  if (questState.h2 === 'active') {
+    const n = Math.min(SHARDS_NEEDED, countItem('esquirla_helada'));
+    const objs = [{ text: `Reúne Esquirlas Heladas (${n}/${SHARDS_NEEDED})`, done: n >= SHARDS_NEEDED }];
+    if (n >= SHARDS_NEEDED) objs.push({ text: 'Vuelve con la Cazadora Skadi', done: false });
+    entries.push({ title: 'Corazón de hielo', objs });
+  }
+  if (questState.h3 === 'active') {
+    const objs = [{ text: 'Abate al Jarl de las Cumbres (corazón de la meseta)', done: questState.jarlDead }];
+    if (questState.jarlDead) objs.push({ text: 'Vuelve con la Cazadora Skadi', done: false });
+    entries.push({ title: 'El Jarl de las Cumbres', objs });
+  }
 
   list.innerHTML = entries.map((e) =>
     `<div class="quest-entry"><div class="q-title">✦ ${e.title}</div>` +
@@ -1031,10 +1196,12 @@ function save() { onChanged?.(); }
 export function serializeQuests() {
   const { q1, q2, q3, herbs, met, t1, t2, t3, wolfKills, alfaDead, a1, a2, a3, skeletonKills,
     b1, b2, c1, c2, rataKills, guardianDead, centinelaDead,
-    s1, s2, s3, ahogadoKills, reyFangoDead } = questState;
+    s1, s2, s3, ahogadoKills, reyFangoDead,
+    h1, h2, h3, escarchaKills, jarlDead } = questState;
   return { q1, q2, q3, herbs, met, t1, t2, t3, wolfKills, alfaDead, a1, a2, a3, skeletonKills,
     b1, b2, c1, c2, rataKills, guardianDead, centinelaDead,
-    s1, s2, s3, ahogadoKills, reyFangoDead };
+    s1, s2, s3, ahogadoKills, reyFangoDead,
+    h1, h2, h3, escarchaKills, jarlDead };
 }
 
 export function loadQuests(data) {

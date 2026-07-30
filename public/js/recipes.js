@@ -52,6 +52,10 @@ export const QUEST_REWARDS = {
   s1: { gold: 60, items: { limo_curativo: 3 }, xp: 100, kills: { ahogado: 6 } },
   s2: { gold: 80, items: { pocion_vida_mayor: 1 }, xp: 150, removes: { flor_cienaga: 5 } },
   s3: { gold: 150, items: { anillo_cienaga: 1, pocion_vida_mayor: 2 }, xp: 260, kills: { rey_fango: 1 } },
+  // Cumbres Heladas: Cazadora Skadi
+  h1: { gold: 90, items: { pocion_vida_mayor: 2 }, xp: 200, kills: { lobo_escarcha: 6 } },
+  h2: { gold: 130, items: { piel_escarcha: 3 }, xp: 260, removes: { esquirla_helada: 5 } },
+  h3: { gold: 280, items: { egida_escarcha: 1, pocion_vida_mayor: 3 }, xp: 500, kills: { jarl_cumbres: 1 } },
 };
 
 // Pesca: capturas y probabilidades acumuladas

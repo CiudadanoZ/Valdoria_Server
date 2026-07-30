@@ -696,7 +696,7 @@ setInterval(() => {
           m.idleTime = 2;
           broadcast(realm.id, { type: 'mob_spawn', id: m.id, x: m.x, z: m.z, hp: m.hp });
           if (m.isEvent) {
-            broadcast(realm.id, { type: 'announce', text: `⚔️ ¡El ${m.def.name} ha despertado al norte de la Ciudadela! ¡Reunid a los héroes!` });
+            broadcast(realm.id, { type: 'announce', text: `⚔️ ¡El ${m.def.name} ha despertado al sur de la Ciudadela! ¡Reunid a los héroes!` });
           }
         }
         continue;

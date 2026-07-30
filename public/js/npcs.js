@@ -1,7 +1,7 @@
 // NPCs de la Ciudadela. El Maestre Aldric entrega las misiones de Bienvenida;
 // el resto son ciudadanos con los que hay que hablar en la misión 3.
 import { makeCharacter, makeNameSprite, makeQuestMarker } from './entities.js';
-import { aldricMarker, toranMarker, baldurMarker, nyraMarker, ysraMarker } from './quests.js';
+import { aldricMarker, toranMarker, baldurMarker, nyraMarker, ysraMarker, skadiMarker } from './quests.js';
 
 export const NPC_DATA = [
   {
@@ -77,6 +77,15 @@ export const NPC_DATA = [
     dialog: '', // sus diálogos los gestiona quests.js
   },
   {
+    id: 'skadi',
+    name: 'Cazadora Skadi',
+    title: 'Cazadora de las Cumbres',
+    pos: [64, 96],
+    rot: Math.PI * 0.1,
+    bodyColor: 0x8a9aa8,
+    dialog: '', // sus diálogos los gestiona quests.js
+  },
+  {
     id: 'establo',
     name: 'Establero Cort',
     title: 'Maestro de Cuadras',
@@ -112,7 +121,7 @@ export function spawnNPCs(scene) {
 }
 
 // Actualiza los marcadores (!/?) sobre los NPC de misiones y los hace flotar.
-const MARKER_SOURCES = { aldric: aldricMarker, toran: toranMarker, baldur: baldurMarker, nyra: nyraMarker, ysra: ysraMarker };
+const MARKER_SOURCES = { aldric: aldricMarker, toran: toranMarker, baldur: baldurMarker, nyra: nyraMarker, ysra: ysraMarker, skadi: skadiMarker };
 
 export function updateQuestMarkers(npcs, time) {
   for (const [npcId, markerFn] of Object.entries(MARKER_SOURCES)) {

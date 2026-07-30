@@ -429,6 +429,7 @@ export function buildWorld(scene) {
   buildLake(scene, fishingSpots);
   buildRuins(scene);
   buildSwamp(scene, torchLights);                          // Ciénaga de los Ahogados (noroeste)
+  buildFrostPeaks(scene, torchLights);                     // Cumbres Heladas (sureste)
   buildCamp(scene, torchLights, campfires, -67, 55, 0.6);   // campamento del Ermitaño Baldur (bosque)
   buildCamp(scene, torchLights, campfires, 70, 21, -2.2);   // campamento de la Cazadora Nyra (colina)
   // Hoguera de la posada, dentro de la Ciudadela
@@ -810,6 +811,90 @@ function buildSwamp(scene, torchLights) {
   scene.add(hutRoof);
 
   scene.fog && addRock(scene, cx + 24, cz + 10, 1.1);
+}
+
+// Cumbres Heladas (sureste): una meseta nevada de alto nivel con pilares de
+// hielo, pinos escarchados y la cabaña de la Cazadora Skadi.
+function buildFrostPeaks(scene, torchLights) {
+  const cx = 82, cz = 82;
+
+  // Suelo nevado (círculo pálido sobre el terreno)
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(32, 40), mat(0xdfe8f0, { roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(cx, 0.02, cz);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Placas de hielo azulado (charcas congeladas)
+  const iceMat = new THREE.MeshStandardMaterial({ color: 0x9fc8e6, transparent: true, opacity: 0.85, metalness: 0.4, roughness: 0.15 });
+  for (const [dx, dz, r] of [[-9, -5, 7], [11, 5, 6], [-3, 12, 5], [13, -9, 4.5], [4, -2, 5.5]]) {
+    const ice = new THREE.Mesh(new THREE.CircleGeometry(r, 22), iceMat);
+    ice.rotation.x = -Math.PI / 2;
+    ice.position.set(cx + dx, 0.04, cz + dz);
+    scene.add(ice);
+  }
+
+  // Pilares/estalagmitas de hielo
+  const shardMat = new THREE.MeshStandardMaterial({ color: 0xbfe0f4, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.2 });
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = 6 + Math.random() * 26;
+    const h = 2.5 + Math.random() * 4;
+    const shard = new THREE.Mesh(new THREE.ConeGeometry(0.5 + Math.random() * 0.4, h, 6), shardMat);
+    shard.position.set(cx + Math.cos(a) * d, h / 2, cz + Math.sin(a) * d);
+    shard.rotation.z = (Math.random() - 0.5) * 0.2;
+    shard.castShadow = true;
+    scene.add(shard);
+  }
+
+  // Pinos escarchados (troncos oscuros, copa blanca)
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = 10 + Math.random() * 22;
+    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 2.4, 6), mat(0x3a3630));
+    trunk.position.set(x, 1.2, z);
+    trunk.castShadow = true;
+    scene.add(trunk);
+    for (let c = 0; c < 3; c++) {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5 - c * 0.35, 1.4, 7), mat(0xeaf2f8));
+      cone.position.set(x, 2.4 + c * 0.9, z);
+      cone.castShadow = true;
+      scene.add(cone);
+    }
+  }
+
+  // Rocas nevadas
+  for (const [dx, dz, s] of [[-18, 6, 1.4], [16, -14, 1.2], [-12, -16, 1.1], [20, 8, 1.3]]) {
+    addRock(scene, cx + dx, cz + dz, s);
+  }
+
+  // Luces frías flotantes (auroras/hielo brillante), animadas como antorchas
+  for (const [dx, dz] of [[-9, -5], [11, 5], [-3, 12], [13, -9], [0, 0], [6, -2]]) {
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshBasicMaterial({ color: 0xcfeaff }));
+    glow.position.set(cx + dx, 1.6, cz + dz);
+    scene.add(glow);
+    const light = new THREE.PointLight(0x8fc4ff, 7, 12, 2);
+    light.position.set(cx + dx, 1.8, cz + dz);
+    scene.add(light);
+    torchLights.push({ light, flame: glow, base: 7, seed: Math.random() * 10 });
+  }
+
+  // Cabaña de la Cazadora Skadi (refugio de troncos con techo nevado)
+  const platform = new THREE.Mesh(new THREE.CircleGeometry(6, 16), mat(0xcdd8e2));
+  platform.rotation.x = -Math.PI / 2;
+  platform.position.set(cx - 18, 0.05, cz + 16);
+  platform.receiveShadow = true;
+  scene.add(platform);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), mat(0x4a3f30));
+  cabin.position.set(cx - 18, 1.5, cz + 16);
+  cabin.castShadow = true;
+  scene.add(cabin);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 2, 4), mat(0xeaf2f8));
+  roof.rotation.y = Math.PI / 4;
+  roof.position.set(cx - 18, 4, cz + 16);
+  roof.castShadow = true;
+  scene.add(roof);
 }
 
 // Piedra rúnica de viaje rápido: obelisco de piedra con runas brillantes.

@@ -59,6 +59,7 @@ function questPOIs() {
   if (q.c1 === 'active') pois.push({ x: 25, z: 72, label: 'Colmillos de lobo' });
   if (q.c2 === 'active' && !q.centinelaDead) pois.push({ x: 74, z: 28, label: 'Centinela Óseo' });
   if (q.s1 === 'active' || q.s2 === 'active') pois.push({ x: -95, z: -55, label: 'Ciénaga (Ahogados)' });
+  if (q.h1 === 'active' || q.h2 === 'active' || q.h3 === 'active') pois.push({ x: 82, z: 82, label: 'Cumbres Heladas' });
   if (q.s3 === 'active' && !q.reyFangoDead) pois.push({ x: -102, z: -78, label: 'Rey del Fango' });
   return pois;
 }
@@ -147,6 +148,11 @@ function drawOverworld(ctx, px, py, s, big) {
   for (const [dx, dz, r] of [[-8, -6, 7], [10, 4, 6], [14, -10, 4.5]]) {
     circle(ctx, px(-95 + dx), py(-55 + dz), r * s, '#2d3a2a');
   }
+  // Cumbres Heladas (noreste)
+  circle(ctx, px(82), py(82), 30 * s, '#d2dde8');
+  for (const [dx, dz, r] of [[-9, -5, 7], [11, 5, 6], [13, -9, 4.5]]) {
+    circle(ctx, px(82 + dx), py(82 + dz), r * s, '#9fc8e6');
+  }
   // Camino exterior e interior
   ctx.fillStyle = COLORS.camino;
   ctx.fillRect(px(-3), py(43), 6 * s, 70 * s);
@@ -177,6 +183,7 @@ function drawOverworld(ctx, px, py, s, big) {
     label(ctx, px(0), py(-98), 'Ruinas del norte', '#7a756a', 11);
     label(ctx, px(0), py(128), 'Círculo de piedras', '#7a6a4d', 11);
     label(ctx, px(-95), py(-90), 'Ciénaga de los Ahogados', '#6a8a5a', 11);
+    label(ctx, px(82), py(48), 'Cumbres Heladas', '#a8cbe8', 11);
   }
 }
 
