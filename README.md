@@ -70,10 +70,26 @@ proporciones propias) y cada clase su color de túnica.
 Plaza circular amurallada con torres, puerta sur, fuente central, posada, forja,
 mercado, capilla y antorchas. Zona segura: las criaturas no entran.
 
-### El exterior
-Llanuras con hierba alta al este, bosque denso al oeste y sur, camino de tierra
-hasta el círculo de piedras. **Lobos Grises**, **Jabalíes Salvajes** y el
-**Alfa Sombrío** (jefe de la llanura). Al norte, el mundo sigue vivo:
+### El exterior: seis comarcas con relieve
+El mundo no es un prado plano: cada dirección es una **comarca** que ocupa su
+porción del reino, con su color, su fauna y su relieve propio.
+
+| Comarca | Dónde | Cómo es |
+|---|---|---|
+| **Praderas del Sur** | sur | Llana. La ruta de inicio: camino de la puerta, **Alfa Sombrío** y el círculo de piedras. |
+| **Llanura de Valdoria** | este | Llana y abierta, con la colina y la cripta de Nyra. |
+| **Cumbres Heladas** | sureste | **Meseta elevada** y nevada. Lo más duro del juego. |
+| **Bosque del Oeste** | suroeste | Arbolado, territorio de jabalíes y la Cripta del Bosque. |
+| **Ciénaga de los Ahogados** | noroeste | **Hondonada** encharcada y sombría. |
+| **Colinas del Norte** | norte y noreste | Ondulada, con el Lago de los Ciervos y las Ruinas. |
+
+El terreno tiene **altura real**: se sube a las Cumbres y se baja a la Ciénaga.
+La Ciudadela y su entorno se mantienen llanos, y el relieve entra poco a poco al
+salir de la muralla. Las criaturas están repartidas por toda su comarca, y
+cuanto más te alejas del centro, más peligroso es lo que encuentras.
+
+**Lobos Grises**, **Jabalíes Salvajes** y el **Alfa Sombrío** (jefe de la
+llanura) rondan las zonas de inicio. Al norte, el mundo sigue vivo:
 - **Lago de los Ciervos** (noreste): ciervos pacíficos que solo se defienden si
   los cazas (sueltan carne de venado).
 - **Ruinas del norte**: columnas de un templo olvidado, territorio de

@@ -1,5 +1,6 @@
-// Datos de las criaturas del juego (tablas puras, sin lógica de servidor).
+// Datos de las criaturas del juego y su reparto por el mundo.
 // La simulación (IA, muerte, botín) vive en server/server.js.
+import { biomeAt } from '../public/js/terrain.js';
 
 // Evento de mundo: cada cuánto reaparece el Coloso (segundos). Configurable.
 export const EVENT_INTERVAL_S = Math.max(60, Number(process.env.EVENT_INTERVAL_S) || 900);
@@ -34,11 +35,61 @@ export const MOB_TYPES = {
   coloso: { name: 'Coloso de Valdoria', hp: 3000, dmgMin: 20, dmgMax: 32, speed: 3.6, aggro: 16, range: 3.2, cd: 1.4, respawn: EVENT_INTERVAL_S, gold: [300, 450], xp: 500, drops: [['corona_cripta', 0.5], ['guadana_espectral', 0.4], ['cetro_fango', 0.4], ['pocion_vida_mayor', 1], ['pocion_vida_mayor', 1]] },
 };
 
+// ---- Reparto de criaturas por comarcas ----
+// Antes eran coordenadas escritas a mano y apiñadas en manchas de ~30 unidades.
+// Ahora cada especie se siembra por TODA su comarca, así el mundo se siente
+// poblado de punta a punta. Es determinista (semilla fija): el reino sale
+// idéntico en cada arranque y es igual en Valdoria y Penumbra.
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+// Siembra n criaturas de un tipo dentro de una comarca, entre rMin y rMax.
+function scatter(type, n, biomeId, { rMin, rMax, seed }) {
+  const rand = rng(seed);
+  const out = [];
+  for (let i = 0; out.length < n && i < n * 400; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = rMin + rand() * (rMax - rMin);
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (biomeAt(x, z).id !== biomeId) continue;
+    out.push([type, +x.toFixed(1), +z.toFixed(1)]);
+  }
+  return out;
+}
+
 export const SPAWNS = [
-  ['lobo', 20, 62], ['lobo', 36, 55], ['lobo', -16, 68], ['lobo', 12, 84],
-  ['lobo', 46, 76], ['lobo', -30, 58], ['lobo', 26, 100], ['lobo', 60, 45],
-  ['jabali', -55, 42], ['jabali', -66, 22], ['jabali', -50, 66], ['jabali', -70, 52], ['jabali', -44, 88],
-  ['alfa', 0, 113],
+  // --- Jefes de zona: sitio fijo, al fondo de su comarca ---
+  ['alfa', 0, 113],             // Praderas del Sur, al final del camino
+  ['rey_fango', -118, -92],     // corazón de la Ciénaga
+  ['jarl_cumbres', 92, 122],    // lo alto de las Cumbres Heladas
+
+  // --- Praderas del Sur (zona de inicio: la ruta de la puerta sur) ---
+  ...scatter('lobo', 9, 'praderas', { rMin: 56, rMax: 128, seed: 11 }),
+
+  // --- Llanura de Valdoria (este) ---
+  ...scatter('lobo', 5, 'llanura', { rMin: 56, rMax: 140, seed: 22 }),
+  ...scatter('jabali', 3, 'llanura', { rMin: 60, rMax: 140, seed: 23 }),
+
+  // --- Bosque del Oeste ---
+  ...scatter('jabali', 9, 'bosque', { rMin: 58, rMax: 152, seed: 33 }),
+
+  // --- Colinas del Norte (lago y ruinas) ---
+  ...scatter('ciervo', 6, 'colinas', { rMin: 58, rMax: 150, seed: 44 }),
+  ...scatter('oso', 5, 'colinas', { rMin: 70, rMax: 155, seed: 45 }),
+
+  // --- Ciénaga de los Ahogados (nivel medio-alto: empieza lejos) ---
+  ...scatter('sanguijuela', 6, 'cienaga', { rMin: 82, rMax: 180, seed: 55 }),
+  ...scatter('ahogado', 7, 'cienaga', { rMin: 88, rMax: 182, seed: 56 }),
+  ...scatter('chaman_cienaga', 3, 'cienaga', { rMin: 95, rMax: 182, seed: 57 }),
+
+  // --- Cumbres Heladas (alto nivel: lo más lejano y duro) ---
+  ...scatter('lobo_escarcha', 8, 'cumbres', { rMin: 85, rMax: 180, seed: 66 }),
+  ...scatter('aparecido_helado', 6, 'cumbres', { rMin: 92, rMax: 182, seed: 67 }),
+  ...scatter('troll_hielo', 3, 'cumbres', { rMin: 105, rMax: 182, seed: 68 }),
+
+  // --- Criptas: interiores de coordenadas fijas (x+500/700/900) ---
   ['rata', 500, -10], ['rata', 501, -18], ['rata', 510, -30], ['rata', 490, -42],
   ['esqueleto', 492, -28], ['esqueleto', 508, -35], ['esqueleto', 496, -42],
   ['esqueleto', 512, -28], ['esqueleto', 500, -33], ['esqueleto', 488, -36],
@@ -51,19 +102,4 @@ export const SPAWNS = [
   ['rata', 900, -6], ['rata', 898, -10],
   ['esqueleto', 905, -19], ['esqueleto', 895, -23],
   ['centinela_oseo', 900, -24],
-  ['ciervo', 60, -50], ['ciervo', 72, -38], ['ciervo', 52, -68],
-  ['ciervo', -58, -45], ['ciervo', -45, -62],
-  ['oso', 0, -82], ['oso', -24, -94], ['oso', 28, -90],
-  ['lobo', 88, 8], ['lobo', 82, -12],
-  ['jabali', -85, 62],
-  // Ciénaga de los Ahogados (noroeste, centro ~-95,-55)
-  ['sanguijuela', -82, -42], ['sanguijuela', -90, -38], ['sanguijuela', -100, -48], ['sanguijuela', -78, -55], ['sanguijuela', -108, -62],
-  ['ahogado', -88, -50], ['ahogado', -98, -58], ['ahogado', -85, -64], ['ahogado', -104, -50], ['ahogado', -95, -68],
-  ['chaman_cienaga', -100, -70], ['chaman_cienaga', -110, -55],
-  ['rey_fango', -102, -78],
-  // Cumbres Heladas (sureste, centro ~82,82; dentro del mundo caminable r<140)
-  ['lobo_escarcha', 70, 72], ['lobo_escarcha', 92, 72], ['lobo_escarcha', 66, 86], ['lobo_escarcha', 94, 88], ['lobo_escarcha', 78, 94], ['lobo_escarcha', 60, 80],
-  ['aparecido_helado', 84, 82], ['aparecido_helado', 92, 78], ['aparecido_helado', 72, 90], ['aparecido_helado', 86, 94], ['aparecido_helado', 76, 70],
-  ['troll_hielo', 88, 100], ['troll_hielo', 66, 98],
-  ['jarl_cumbres', 80, 104],
 ];

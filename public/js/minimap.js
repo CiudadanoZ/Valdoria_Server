@@ -61,7 +61,7 @@ function questPOIs() {
   if (q.c2 === 'active' && !q.centinelaDead) pois.push({ x: 74, z: 28, label: 'Centinela Óseo' });
   if (q.s1 === 'active' || q.s2 === 'active') pois.push({ x: -95, z: -55, label: 'Ciénaga (Ahogados)' });
   if (q.h1 === 'active' || q.h2 === 'active' || q.h3 === 'active') pois.push({ x: 82, z: 82, label: 'Cumbres Heladas' });
-  if (q.s3 === 'active' && !q.reyFangoDead) pois.push({ x: -102, z: -78, label: 'Rey del Fango' });
+  if (q.s3 === 'active' && !q.reyFangoDead) pois.push({ x: -118, z: -92, label: 'Rey del Fango' });
   return pois;
 }
 
