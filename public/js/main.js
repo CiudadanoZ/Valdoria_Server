@@ -4,6 +4,7 @@
 // servidor y se sincroniza continuamente.
 import * as THREE from 'three';
 import { buildWorld, animateWorld, isInCrypt } from './world.js';
+import { heightAt } from './terrain.js';
 import { LocalPlayer, RemotePlayers } from './entities.js';
 import { RACES, CLASSES } from './races.js';
 import { spawnNPCs, updateQuestMarkers } from './npcs.js';
@@ -915,8 +916,11 @@ function updateCamera(dt) {
     oz = (Math.random() - 0.5) * 2 * k;
     if (shakeT === 0) shakeMag = 0;
   }
-  camera.position.set(p.x + CAM_OFFSET.x + ox, CAM_OFFSET.y, p.z + CAM_OFFSET.z + oz);
-  camera.lookAt(p.x, 0, p.z);
+  // El mundo tiene relieve: la cámara sube y baja con el héroe para que la
+  // vista no se hunda en una ladera ni se aleje en una hondonada.
+  const suelo = heightAt(p.x, p.z);
+  camera.position.set(p.x + CAM_OFFSET.x + ox, suelo + CAM_OFFSET.y, p.z + CAM_OFFSET.z + oz);
+  camera.lookAt(p.x, suelo, p.z);
 }
 
 // ---------- Transición de luz al entrar/salir de las criptas ----------

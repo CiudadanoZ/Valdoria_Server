@@ -3,8 +3,9 @@
 // (llanuras al este, bosque al oeste y sur profundo, camino de tierra).
 import * as THREE from 'three';
 import { WAYSTONES } from './world-data.js';
+import { heightAt, colorAt, biomeAt, WORLD_RADIUS } from './terrain.js';
 
-export const WORLD_RADIUS = 140;    // límite absoluto del mundo
+export { WORLD_RADIUS };            // el límite del mundo lo define terrain.js
 export const CITADEL_RADIUS = 38;   // radio interior de la plaza
 export const FOUNTAIN_RADIUS = 4.5; // zona bloqueada de la fuente
 
@@ -98,13 +99,92 @@ export function isBlocked(x, z) {
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, ...opts });
 
+// Malla del terreno: una rejilla cuyos vértices siguen la altura de terrain.js y
+// se tiñen del color de su comarca. Es lo que convierte el mundo de un disco
+// verde plano en regiones con laderas.
+function buildTerrainMesh() {
+  const SIZE = (WORLD_RADIUS + 30) * 2;   // cubre el mundo con algo de margen
+  const SEGS = 190;                       // ~2,4 unidades por celda: relieve suave
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGS, SEGS);
+  geo.rotateX(-Math.PI / 2);              // tumbarla al plano XZ del mundo
+
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const h = heightAt(x, z);
+    pos.setY(i, h);
+
+    const [r, g, b] = colorAt(x, z);
+    // Sombreado por altura: las cimas se aclaran y las hondonadas se oscurecen,
+    // lo que da volumen incluso con luz plana.
+    const tint = 1 + Math.max(-0.32, Math.min(0.30, h * 0.022));
+    colors[i * 3] = Math.min(1, r * tint);
+    colors[i * 3 + 1] = Math.min(1, g * tint);
+    colors[i * 3 + 2] = Math.min(1, b * tint);
+  }
+  pos.needsUpdate = true;
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  mesh.position.y = -0.05;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+// Extiende una superficie (camino, claro, charca…) AMOLDADA al relieve: en vez
+// de un plano rígido que el terreno entierra, sus vértices siguen la altura del
+// suelo. `geo` debe venir subdividida para que pueda curvarse.
+function addGroundPatch(scene, geo, x, z, color, opts = {}) {
+  const { yOffset = 0.07, ...matOpts } = opts;
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(x, 0, z);            // llevarla a coordenadas del mundo
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)) + yOffset);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, mat(color, { roughness: 1, ...matOpts }));
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+// Reparte n elementos por TODA la comarca indicada (no en un disco pequeño):
+// es lo que hace que una región se lea como un bioma grande y no como un parche.
+// Llama a fn(x, z, alturaDelSuelo) en cada punto aceptado.
+function scatterInBiome(biomeId, n, fn, { rMin = 62, rMax = WORLD_RADIUS - 12 } = {}) {
+  let puestos = 0;
+  for (let intentos = 0; puestos < n && intentos < n * 50; intentos++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = rMin + Math.random() * (rMax - rMin);
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (biomeAt(x, z).id !== biomeId) continue;
+    fn(x, z, heightAt(x, z));
+    puestos++;
+  }
+}
+
+// Devuelve un contenedor elevado a la altura del suelo en (cx, cz). Las
+// funciones de zona lo reciben en lugar de la escena —un Group tiene el mismo
+// .add()— y así todos sus props se apoyan en el relieve sin tocar su código.
+function zoneAt(scene, cx, cz) {
+  const g = new THREE.Group();
+  g.position.y = heightAt(cx, cz);
+  scene.add(g);
+  return g;
+}
+
 function addTree(scene, x, z, scale = 1, dark = false) {
+  const g = heightAt(x, z);   // apoyar el árbol en el suelo, tenga la altura que tenga
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4 * scale, 0.6 * scale, 3 * scale, 8), mat(0x4a3628));
-  trunk.position.set(x, 1.5 * scale, z);
+  trunk.position.set(x, g + 1.5 * scale, z);
   trunk.castShadow = true;
   scene.add(trunk);
   const crown = new THREE.Mesh(new THREE.SphereGeometry(2.4 * scale, 10, 8), mat(dark ? 0x2a4020 : 0x3d5a2e));
-  crown.position.set(x, 4.4 * scale, z);
+  crown.position.set(x, g + 4.4 * scale, z);
   crown.scale.y = 1.2;
   crown.castShadow = true;
   scene.add(crown);
@@ -112,7 +192,7 @@ function addTree(scene, x, z, scale = 1, dark = false) {
 
 function addRock(scene, x, z, scale = 1) {
   const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(scale, 0), mat(0x5a5650, { roughness: 1 }));
-  rock.position.set(x, scale * 0.5, z);
+  rock.position.set(x, heightAt(x, z) + scale * 0.5, z);
   rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
   rock.castShadow = rock.receiveShadow = true;
   scene.add(rock);
@@ -142,33 +222,17 @@ export function buildWorld(scene) {
   scene.fog = new THREE.FogExp2(0x1a1220, 0.008);
   scene.background = new THREE.Color(0x1a1220);
 
-  // ---- Terreno exterior: llanuras ----
-  const terrain = new THREE.Mesh(new THREE.CircleGeometry(WORLD_RADIUS + 25, 48), mat(0x2e3d24));
-  terrain.rotation.x = -Math.PI / 2;
-  terrain.position.y = -0.05;
-  terrain.receiveShadow = true;
-  scene.add(terrain);
-
-  // Suelo del bosque (parches más oscuros al oeste y sur profundo)
-  for (const [x, z, r] of [[-70, 45, 40], [-45, 90, 35], [15, 115, 38], [-90, -10, 30]]) {
-    const patch = new THREE.Mesh(new THREE.CircleGeometry(r, 24), mat(0x24301c));
-    patch.rotation.x = -Math.PI / 2;
-    patch.position.set(x, -0.02, z);
-    patch.receiveShadow = true;
-    scene.add(patch);
-  }
+  // ---- Terreno exterior: comarcas con relieve ----
+  // Una malla subdividida cuyos vértices siguen heightAt() y se tiñen del color
+  // de su comarca. Sustituye al antiguo disco plano de un solo verde: ahora el
+  // mundo tiene laderas y regiones que se distinguen a simple vista.
+  scene.add(buildTerrainMesh());
 
   // Camino de tierra: de la puerta sur hacia el sur, con claro final
-  const outerRoad = new THREE.Mesh(new THREE.PlaneGeometry(6, 70), mat(0x4d4034));
-  outerRoad.rotation.x = -Math.PI / 2;
-  outerRoad.position.set(0, 0.01, 78);
-  outerRoad.receiveShadow = true;
-  scene.add(outerRoad);
-  const clearing = new THREE.Mesh(new THREE.CircleGeometry(12, 24), mat(0x4d4034));
-  clearing.rotation.x = -Math.PI / 2;
-  clearing.position.set(0, 0.012, 113);
-  clearing.receiveShadow = true;
-  scene.add(clearing);
+  // Camino y claro del exterior: amoldados al relieve (antes eran planos rígidos
+  // que las lomas nuevas dejaban enterrados, cortando la ruta al Alfa Sombrío).
+  addGroundPatch(scene, new THREE.PlaneGeometry(6, 70, 3, 48), 0, 78, 0x4d4034);
+  addGroundPatch(scene, new THREE.CircleGeometry(12, 28), 0, 113, 0x4d4034);
 
   // ---- Plaza de piedra ----
   const plaza = new THREE.Mesh(new THREE.CircleGeometry(42, 48), mat(0x5c5650, { roughness: 0.95 }));
@@ -419,19 +483,23 @@ export function buildWorld(scene) {
     );
     hitbox.position.y = 1;
     group.add(hitbox);
-    group.position.set(x, 0, z);
+    group.position.set(x, heightAt(x, z), z);
     group.userData.isHerb = true;
     scene.add(group);
     herbs.push(group);
   }
 
-  // ---- El norte y el este: lago de los ciervos, ruinas, campamentos ----
-  buildLake(scene, fishingSpots);
-  buildRuins(scene);
-  buildSwamp(scene, torchLights);                          // Ciénaga de los Ahogados (noroeste)
-  buildFrostPeaks(scene, torchLights);                     // Cumbres Heladas (sureste)
-  buildCamp(scene, torchLights, campfires, -67, 55, 0.6);   // campamento del Ermitaño Baldur (bosque)
-  buildCamp(scene, torchLights, campfires, 70, 21, -2.2);   // campamento de la Cazadora Nyra (colina)
+  // ---- Zonas del exterior ----
+  // Cada una va en un contenedor apoyado en el relieve de su centro (zoneAt),
+  // así el lago no queda flotando ni la ciénaga enterrada.
+  buildLake(zoneAt(scene, 62, -52), fishingSpots);
+  buildRuins(zoneAt(scene, 0, -85));
+  // Estas dos se reparten por TODA su comarca y colocan cada prop a la altura
+  // real del suelo, así que reciben la escena directamente.
+  buildSwamp(scene, torchLights);                           // Ciénaga de los Ahogados (noroeste)
+  buildFrostPeaks(scene, torchLights);                      // Cumbres Heladas (sureste)
+  buildCamp(zoneAt(scene, -67, 55), torchLights, campfires, -67, 55, 0.6);   // campamento del Ermitaño Baldur
+  buildCamp(zoneAt(scene, 70, 21), torchLights, campfires, 70, 21, -2.2);    // campamento de la Cazadora Nyra
   // Hoguera de la posada, dentro de la Ciudadela
   addCampfire(scene, torchLights, campfires, -14, -12);
 
@@ -502,7 +570,7 @@ function makePortal(scene, x, z, rotY, glowColor, label, to) {
   hitbox.position.y = 3;
   group.add(hitbox);
 
-  group.position.set(x, 0, z);
+  group.position.set(x, heightAt(x, z), z);
   group.rotation.y = rotY;
   scene.add(group);
   return { mesh: group, label, to, glow };
@@ -729,170 +797,128 @@ function buildRuins(scene) {
   addRock(scene, cx + 5, cz - 2, 0.7);
 }
 
-// Ciénaga de los Ahogados (noroeste): charcas de agua turbia, árboles muertos,
-// juncos, fuegos fatuos y una isla con la choza de la Vidente Ysra.
+// Ciénaga de los Ahogados (noroeste): ya no es un disco pintado —el color y la
+// hondonada los da la comarca del terreno— sino charcas, árboles muertos y
+// juncos repartidos por TODA la región, con la choza de la Vidente Ysra.
 function buildSwamp(scene, torchLights) {
-  const cx = -95, cz = -55;
-
-  // Suelo cenagoso oscuro
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(34, 32), mat(0x2a3320, { roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(cx, 0.01, cz);
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Charcas de agua turbia
-  const waterMat = new THREE.MeshStandardMaterial({ color: 0x2d3a2a, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.3 });
-  for (const [dx, dz, r] of [[-8, -6, 7], [10, 4, 6], [-4, 12, 5], [14, -10, 4.5], [-16, 2, 4]]) {
-    const pool = new THREE.Mesh(new THREE.CircleGeometry(r, 20), waterMat);
-    pool.rotation.x = -Math.PI / 2;
-    pool.position.set(cx + dx, 0.03, cz + dz);
-    scene.add(pool);
-  }
+  // Charcas de agua turbia amoldadas al relieve, repartidas por la comarca
+  scatterInBiome('cienaga', 14, (x, z) => {
+    const r = 4 + Math.random() * 7;
+    addGroundPatch(scene, new THREE.CircleGeometry(r, 18), x, z, 0x2d3a2a,
+      { yOffset: 0.10, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.3 });
+  });
 
   // Árboles muertos retorcidos
   const deadMat = mat(0x2e2820);
-  for (let i = 0; i < 16; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const d = Math.random() * 30;
-    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+  scatterInBiome('cienaga', 46, (x, z, g) => {
     const h = 3 + Math.random() * 3;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.32, h, 6), deadMat);
-    trunk.position.set(x, h / 2, z);
+    trunk.position.set(x, g + h / 2, z);
     trunk.rotation.z = (Math.random() - 0.5) * 0.3;
     trunk.castShadow = true;
     scene.add(trunk);
-    // Un par de ramas desnudas
     for (let b = 0; b < 2; b++) {
       const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 5), deadMat);
-      branch.position.set(x + (Math.random() - 0.5), h * 0.7, z + (Math.random() - 0.5));
+      branch.position.set(x + (Math.random() - 0.5), g + h * 0.7, z + (Math.random() - 0.5));
       branch.rotation.z = (Math.random() - 0.5) * 2;
       scene.add(branch);
     }
-  }
+  });
 
   // Juncos
   const reedMat = mat(0x3a4a28);
-  for (let i = 0; i < 40; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const d = Math.random() * 32;
+  scatterInBiome('cienaga', 120, (x, z, g) => {
     const reed = new THREE.Mesh(new THREE.ConeGeometry(0.08, 1 + Math.random(), 4), reedMat);
-    reed.position.set(cx + Math.cos(a) * d, 0.5, cz + Math.sin(a) * d);
+    reed.position.set(x, g + 0.5, z);
     scene.add(reed);
-  }
+  });
 
-  // Fuegos fatuos: pequeñas luces flotantes verdosas (animadas como antorchas)
-  for (const [dx, dz] of [[-8, -6], [10, 4], [-4, 12], [14, -10], [0, 0], [-16, 2], [6, -14]]) {
-    const wisp = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0x9affce })
-    );
-    wisp.position.set(cx + dx, 1.6, cz + dz);
+  // Fuegos fatuos: luces verdosas flotantes (animadas como antorchas)
+  scatterInBiome('cienaga', 12, (x, z, g) => {
+    const wisp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x9affce }));
+    wisp.position.set(x, g + 1.6, z);
     scene.add(wisp);
     const light = new THREE.PointLight(0x66ffaa, 8, 12, 2);
-    light.position.set(cx + dx, 1.8, cz + dz);
+    light.position.set(x, g + 1.8, z);
     scene.add(light);
     torchLights.push({ light, flame: wisp, base: 8, seed: Math.random() * 10 });
-  }
+  });
 
-  // Choza de la Vidente Ysra en una isla seca al borde
-  const island = new THREE.Mesh(new THREE.CircleGeometry(6, 16), mat(0x4a4530));
-  island.rotation.x = -Math.PI / 2;
-  island.position.set(cx + 20, 0.04, cz + 14);
-  island.receiveShadow = true;
-  scene.add(island);
+  // Choza de la Vidente Ysra, en una isla seca junto a ella
+  const hx = -75, hz = -37, hg = heightAt(hx, hz);
+  addGroundPatch(scene, new THREE.CircleGeometry(7, 18), hx, hz, 0x4a4530, { yOffset: 0.12 });
   const hut = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.4, 3, 7), mat(0x5c4a32));
-  hut.position.set(cx + 20, 1.5, cz + 14);
+  hut.position.set(hx, hg + 1.5, hz);
   hut.castShadow = true;
   scene.add(hut);
   const hutRoof = new THREE.Mesh(new THREE.ConeGeometry(3, 2.2, 7), mat(0x3a2d1f));
-  hutRoof.position.set(cx + 20, 4, cz + 14);
+  hutRoof.position.set(hx, hg + 4, hz);
   hutRoof.castShadow = true;
   scene.add(hutRoof);
-
-  scene.fog && addRock(scene, cx + 24, cz + 10, 1.1);
+  addRock(scene, hx + 5, hz - 4, 1.1);
 }
 
-// Cumbres Heladas (sureste): una meseta nevada de alto nivel con pilares de
-// hielo, pinos escarchados y la cabaña de la Cazadora Skadi.
+// Cumbres Heladas (sureste): la nieve y la meseta elevada las da la comarca del
+// terreno; aquí van los pilares de hielo, los pinos escarchados y las lagunas
+// heladas, repartidos por TODA la región, más la cabaña de la Cazadora Skadi.
 function buildFrostPeaks(scene, torchLights) {
-  const cx = 82, cz = 82;
+  // Lagunas congeladas amoldadas al relieve
+  scatterInBiome('cumbres', 12, (x, z) => {
+    const r = 4 + Math.random() * 7;
+    addGroundPatch(scene, new THREE.CircleGeometry(r, 18), x, z, 0x9fc8e6,
+      { yOffset: 0.10, transparent: true, opacity: 0.85, metalness: 0.4, roughness: 0.15 });
+  });
 
-  // Suelo nevado (círculo pálido sobre el terreno)
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(32, 40), mat(0xdfe8f0, { roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(cx, 0.02, cz);
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Placas de hielo azulado (charcas congeladas)
-  const iceMat = new THREE.MeshStandardMaterial({ color: 0x9fc8e6, transparent: true, opacity: 0.85, metalness: 0.4, roughness: 0.15 });
-  for (const [dx, dz, r] of [[-9, -5, 7], [11, 5, 6], [-3, 12, 5], [13, -9, 4.5], [4, -2, 5.5]]) {
-    const ice = new THREE.Mesh(new THREE.CircleGeometry(r, 22), iceMat);
-    ice.rotation.x = -Math.PI / 2;
-    ice.position.set(cx + dx, 0.04, cz + dz);
-    scene.add(ice);
-  }
-
-  // Pilares/estalagmitas de hielo
+  // Pilares y estalagmitas de hielo
   const shardMat = new THREE.MeshStandardMaterial({ color: 0xbfe0f4, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.2 });
-  for (let i = 0; i < 14; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const d = 6 + Math.random() * 26;
-    const h = 2.5 + Math.random() * 4;
-    const shard = new THREE.Mesh(new THREE.ConeGeometry(0.5 + Math.random() * 0.4, h, 6), shardMat);
-    shard.position.set(cx + Math.cos(a) * d, h / 2, cz + Math.sin(a) * d);
+  scatterInBiome('cumbres', 40, (x, z, g) => {
+    const h = 2.5 + Math.random() * 4.5;
+    const shard = new THREE.Mesh(new THREE.ConeGeometry(0.5 + Math.random() * 0.5, h, 6), shardMat);
+    shard.position.set(x, g + h / 2, z);
     shard.rotation.z = (Math.random() - 0.5) * 0.2;
     shard.castShadow = true;
     scene.add(shard);
-  }
+  });
 
-  // Pinos escarchados (troncos oscuros, copa blanca)
-  for (let i = 0; i < 12; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const d = 10 + Math.random() * 22;
-    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+  // Pinos escarchados (tronco oscuro, copa nevada)
+  scatterInBiome('cumbres', 34, (x, z, g) => {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 2.4, 6), mat(0x3a3630));
-    trunk.position.set(x, 1.2, z);
+    trunk.position.set(x, g + 1.2, z);
     trunk.castShadow = true;
     scene.add(trunk);
     for (let c = 0; c < 3; c++) {
       const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5 - c * 0.35, 1.4, 7), mat(0xeaf2f8));
-      cone.position.set(x, 2.4 + c * 0.9, z);
+      cone.position.set(x, g + 2.4 + c * 0.9, z);
       cone.castShadow = true;
       scene.add(cone);
     }
-  }
+  });
 
   // Rocas nevadas
-  for (const [dx, dz, s] of [[-18, 6, 1.4], [16, -14, 1.2], [-12, -16, 1.1], [20, 8, 1.3]]) {
-    addRock(scene, cx + dx, cz + dz, s);
-  }
+  scatterInBiome('cumbres', 16, (x, z) => addRock(scene, x, z, 1 + Math.random() * 0.6));
 
-  // Luces frías flotantes (auroras/hielo brillante), animadas como antorchas
-  for (const [dx, dz] of [[-9, -5], [11, 5], [-3, 12], [13, -9], [0, 0], [6, -2]]) {
+  // Luces frías flotantes (auroras de hielo), animadas como antorchas
+  scatterInBiome('cumbres', 10, (x, z, g) => {
     const glow = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshBasicMaterial({ color: 0xcfeaff }));
-    glow.position.set(cx + dx, 1.6, cz + dz);
+    glow.position.set(x, g + 1.6, z);
     scene.add(glow);
     const light = new THREE.PointLight(0x8fc4ff, 7, 12, 2);
-    light.position.set(cx + dx, 1.8, cz + dz);
+    light.position.set(x, g + 1.8, z);
     scene.add(light);
     torchLights.push({ light, flame: glow, base: 7, seed: Math.random() * 10 });
-  }
+  });
 
   // Cabaña de la Cazadora Skadi (refugio de troncos con techo nevado)
-  const platform = new THREE.Mesh(new THREE.CircleGeometry(6, 16), mat(0xcdd8e2));
-  platform.rotation.x = -Math.PI / 2;
-  platform.position.set(cx - 18, 0.05, cz + 16);
-  platform.receiveShadow = true;
-  scene.add(platform);
+  const sx = 64, sz = 96, sg = heightAt(sx, sz);
+  addGroundPatch(scene, new THREE.CircleGeometry(7, 18), sx, sz, 0xcdd8e2, { yOffset: 0.12 });
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), mat(0x4a3f30));
-  cabin.position.set(cx - 18, 1.5, cz + 16);
+  cabin.position.set(sx, sg + 1.5, sz);
   cabin.castShadow = true;
   scene.add(cabin);
   const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 2, 4), mat(0xeaf2f8));
   roof.rotation.y = Math.PI / 4;
-  roof.position.set(cx - 18, 4, cz + 16);
+  roof.position.set(sx, sg + 4, sz);
   roof.castShadow = true;
   scene.add(roof);
 }
@@ -930,7 +956,7 @@ function buildWaystone(scene, w) {
   hitbox.position.y = 2.5;
   group.add(hitbox);
 
-  group.position.set(w.x, 0, w.z);
+  group.position.set(w.x, heightAt(w.x, w.z), w.z);
   group.userData.waystoneId = w.id;
   scene.add(group);
   return group;
@@ -973,7 +999,7 @@ function buildBountyBoard(scene, x, z) {
   hitbox.position.y = 1.5;
   group.add(hitbox);
 
-  group.position.set(x, 0, z);
+  group.position.set(x, heightAt(x, z), z);
   group.rotation.y = -Math.PI / 4;
   group.userData.isBoard = true;
   scene.add(group);

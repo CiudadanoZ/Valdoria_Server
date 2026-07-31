@@ -1,6 +1,7 @@
 // NPCs de la Ciudadela. El Maestre Aldric entrega las misiones de Bienvenida;
 // el resto son ciudadanos con los que hay que hablar en la misión 3.
 import { makeCharacter, makeNameSprite, makeQuestMarker } from './entities.js';
+import { heightAt } from './terrain.js';
 import { aldricMarker, toranMarker, baldurMarker, nyraMarker, ysraMarker, skadiMarker } from './quests.js';
 
 export const NPC_DATA = [
@@ -110,7 +111,7 @@ export function spawnNPCs(scene) {
   const npcs = [];
   for (const data of NPC_DATA) {
     const mesh = makeCharacter({ bodyColor: data.bodyColor });
-    mesh.position.set(data.pos[0], 0, data.pos[1]);
+    mesh.position.set(data.pos[0], heightAt(data.pos[0], data.pos[1]), data.pos[1]);
     mesh.rotation.y = data.rot;
     mesh.add(makeNameSprite(data.name));
     mesh.traverse((o) => { o.userData.npcId = data.id; });

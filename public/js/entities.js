@@ -2,6 +2,7 @@
 // (movimiento por clic estilo Diablo) y jugadores remotos interpolados.
 import * as THREE from 'three';
 import { isBlocked } from './world.js';
+import { heightAt } from './terrain.js';
 import { MOUNTS } from './world-data.js';
 
 const MOUNT_LIFT = 0.75; // cuánto se eleva el héroe al ir montado
@@ -241,7 +242,9 @@ export class LocalPlayer {
   }
 
   animate(dt, walking) {
-    const lift = this.mountLift || 0;
+    // El suelo tiene relieve: la base es la altura del terreno bajo los pies,
+    // más la elevación de la montura si va montado.
+    const base = heightAt(this.mesh.position.x, this.mesh.position.z) + (this.mountLift || 0);
     if (walking) {
       this.walkTime += dt * 10;
       const swing = Math.sin(this.walkTime) * 0.5;
@@ -249,12 +252,12 @@ export class LocalPlayer {
       this.mesh.getObjectByName('legR').rotation.x = -swing;
       this.mesh.getObjectByName('armL').rotation.x = -swing * 0.7;
       this.mesh.getObjectByName('armR').rotation.x = swing * 0.7;
-      this.mesh.position.y = lift + Math.abs(Math.sin(this.walkTime)) * 0.06;
+      this.mesh.position.y = base + Math.abs(Math.sin(this.walkTime)) * 0.06;
     } else {
       for (const n of ['legL', 'legR', 'armL', 'armR']) {
         this.mesh.getObjectByName(n).rotation.x *= 0.8;
       }
-      this.mesh.position.y += (lift - this.mesh.position.y) * 0.3;
+      this.mesh.position.y += (base - this.mesh.position.y) * 0.3;
       this.moving = false;
     }
   }
@@ -369,8 +372,9 @@ export class RemotePlayers {
         p.mesh.getObjectByName('legL').rotation.x *= 0.8;
         p.mesh.getObjectByName('legR').rotation.x *= 0.8;
       }
-      // Elevación por montura
-      p.mesh.position.y += ((p.mountLift || 0) - p.mesh.position.y) * 0.3;
+      // Suelo bajo sus pies (el mundo tiene relieve) + elevación por montura
+      const base = heightAt(p.mesh.position.x, p.mesh.position.z) + (p.mountLift || 0);
+      p.mesh.position.y += (base - p.mesh.position.y) * 0.3;
       // Interpolación suave de rotación
       let dr = p.target.rot - p.mesh.rotation.y;
       while (dr > Math.PI) dr -= Math.PI * 2;

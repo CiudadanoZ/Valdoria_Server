@@ -3,6 +3,7 @@
 // ven y cazan las mismas criaturas.
 import * as THREE from 'three';
 import { makeNameSprite } from './entities.js';
+import { heightAt } from './terrain.js';
 
 // Datos visuales y de interfaz por tipo (las estadísticas reales están en el servidor)
 export const MOB_INFO = {
@@ -407,7 +408,7 @@ export class Mobs {
       : info.kind === 'drowned' ? makeDrowned(info)
       : makeBeast(info);
     mesh.scale.setScalar(info.scale);
-    mesh.position.set(x, 0, z);
+    mesh.position.set(x, heightAt(x, z), z);
     if (info.label) {
       const label = makeNameSprite(info.name, '#ff8866');
       label.position.y = 3.2;
@@ -500,7 +501,7 @@ export class Mobs {
     m.dead = false;
     m.hp = hp;
     m.target = { x, z, rot: 0 };
-    m.mesh.position.set(x, 0, z);
+    m.mesh.position.set(x, heightAt(x, z), z);
     m.mesh.rotation.z = 0; // deshacer el desplome de la muerte anterior
     m.mesh.scale.setScalar(m.info.scale);
     m.mesh.visible = true;
@@ -523,7 +524,7 @@ export class Mobs {
           m.deathT += dt;
           const t = Math.min(1, m.deathT / 0.45);
           m.mesh.rotation.z = m.deathDir * t * Math.PI * 0.5;
-          m.mesh.position.y = -0.25 * t;
+          m.mesh.position.y = heightAt(m.mesh.position.x, m.mesh.position.z) - 0.25 * t;
           if (m.deathT > 0.65) {
             m.mesh.scale.multiplyScalar(Math.max(0, 1 - dt * 5));
             if (m.mesh.scale.x < 0.05 * m.info.scale) m.mesh.visible = false;
@@ -553,11 +554,12 @@ export class Mobs {
 
       if (distSq > 25) {
         // Teletransporte (reaparición o corrección grande)
-        pos.set(m.target.x, 0, m.target.z);
+        pos.set(m.target.x, heightAt(m.target.x, m.target.z), m.target.z);
       } else if (distSq > 0.002) {
         const k = Math.min(1, dt * 10);
         pos.x += dx * k;
         pos.z += dz * k;
+        pos.y = heightAt(pos.x, pos.z);   // pisar el relieve al desplazarse
         // Trote de patas
         m.walkPhase += dt * (m.chasing ? 14 : 8);
         const swing = Math.sin(m.walkPhase) * 0.5;

@@ -3,6 +3,7 @@
 // NPCs con sus marcadores de misión, objetivos de misiones activas, criaturas
 // y jugadores. Dentro de una cripta muestra el plano de sus salas.
 import { WORLD_RADIUS, CRYPT_REGIONS, isInCrypt } from './world.js';
+import { COMARCAS } from './terrain.js';
 import { questState } from './quests.js';
 
 let deps = null; // { getPlayerPos, getPlayerRot, npcs, remotes, mobs, portals }
@@ -132,27 +133,30 @@ function drawMap(ctx, W, H, s, cx, cz, big) {
 }
 
 function drawOverworld(ctx, px, py, s, big) {
-  // Terreno
-  circle(ctx, px(0), py(0), (WORLD_RADIUS + 25) * s, COLORS.hierba);
-  // Bosques
-  for (const [x, z, r] of [[-70, 45, 40], [-45, 90, 35], [15, 115, 38], [-90, -10, 30], [0, -85, 30]]) {
-    circle(ctx, px(x), py(z), r * s, COLORS.bosque);
+  // ---- Comarcas: sectores grandes, no manchas ----
+  // Cada región ocupa su porción del anillo, igual que en el mundo 3D, así que
+  // el mapa se lee como un reino con comarcas que se tocan.
+  const cx = px(0), cy = py(0);
+  const R = (WORLD_RADIUS + 12) * s;
+  for (const c of COMARCAS) {
+    // El canvas mide los ángulos igual que atan2(z, x): se puede usar tal cual.
+    let from = c.from, to = c.to;
+    if (from > to) to += Math.PI * 2;     // sector que cruza ±π
+    ctx.fillStyle = '#' + c.color.toString(16).padStart(6, '0');
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, from, to);
+    ctx.closePath();
+    ctx.fill();
   }
+  // El entorno de la Ciudadela es llano y verde: suaviza el centro de la tarta
+  circle(ctx, cx, cy, 62 * s, COLORS.hierba);
+
   // Lago y claro del Alfa
   circle(ctx, px(62), py(-52), 16 * s, COLORS.agua);
   circle(ctx, px(0), py(113), 12 * s, COLORS.camino);
   // Ruinas
   circle(ctx, px(0), py(-85), 10 * s, COLORS.ruinas);
-  // Ciénaga de los Ahogados (noroeste)
-  circle(ctx, px(-95), py(-55), 32 * s, '#2a3320');
-  for (const [dx, dz, r] of [[-8, -6, 7], [10, 4, 6], [14, -10, 4.5]]) {
-    circle(ctx, px(-95 + dx), py(-55 + dz), r * s, '#2d3a2a');
-  }
-  // Cumbres Heladas (noreste)
-  circle(ctx, px(82), py(82), 30 * s, '#d2dde8');
-  for (const [dx, dz, r] of [[-9, -5, 7], [11, 5, 6], [13, -9, 4.5]]) {
-    circle(ctx, px(82 + dx), py(82 + dz), r * s, '#9fc8e6');
-  }
   // Camino exterior e interior
   ctx.fillStyle = COLORS.camino;
   ctx.fillRect(px(-3), py(43), 6 * s, 70 * s);
@@ -182,8 +186,13 @@ function drawOverworld(ctx, px, py, s, big) {
     label(ctx, px(62), py(-72), 'Lago de los Ciervos', '#5a8aa8', 11);
     label(ctx, px(0), py(-98), 'Ruinas del norte', '#7a756a', 11);
     label(ctx, px(0), py(128), 'Círculo de piedras', '#7a6a4d', 11);
-    label(ctx, px(-95), py(-90), 'Ciénaga de los Ahogados', '#6a8a5a', 11);
-    label(ctx, px(82), py(48), 'Cumbres Heladas', '#a8cbe8', 11);
+    // Nombre de cada comarca, colocado en el centro de su sector
+    for (const c of COMARCAS) {
+      let mid = c.from + (c.to - c.from) / 2;
+      if (c.from > c.to) mid = c.from + ((c.to + Math.PI * 2) - c.from) / 2;
+      const rr = 148;
+      label(ctx, px(Math.cos(mid) * rr), py(Math.sin(mid) * rr), c.name.toUpperCase(), '#9a9482', 11);
+    }
   }
 }
 
