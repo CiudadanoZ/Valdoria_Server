@@ -26,7 +26,7 @@ import {
   ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
   maxPlausibleHit, addXp, spendTalent, syncPayload,
   computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
-  onBountyKill, claimBounty, respecCost, respecTalents,
+  onBountyKill, claimBounty, acceptBounty, respecCost, respecTalents,
   computeMaxResource, resourceDef, startingResource,
 } from './state.js';
 import { skillById } from '../public/js/skills-data.js';
@@ -35,7 +35,7 @@ import { applyArmor } from '../public/js/combat-data.js';
 import { EVENT_INTERVAL_S, COLOSO_SPOT, MOB_TYPES, SPAWNS } from './mobs-data.js';
 import {
   REALMS, PORTAL_JUMPS, FOUNTAIN, MAX_SPEED, HERB_SPOTS, HERB_COOLDOWN_MS,
-  LAKE, FISHING_SPOTS, NPC_SPOTS, CAMPFIRE_SPOTS, CITADEL_SAFE_RADIUS,
+  LAKE, FISHING_SPOTS, NPC_SPOTS, CAMPFIRE_SPOTS, BOARD_SPOT, CITADEL_SAFE_RADIUS,
 } from './world-map.js';
 import { players, send, sendTo, broadcast, broadcastAll, sendSync, fail } from './hub.js';
 import { broadcastGuild, guildInfoPayload, pushGuildInfo, clearMemberGuild } from './guild.js';
@@ -1286,6 +1286,15 @@ wss.on('connection', (ws) => {
       }
 
       // ---- Cobrar un encargo diario del Tablón ----
+      case 'bounty_accept': {
+        if (!st) return;
+        if (!nearSpot(p, BOARD_SPOT, 10)) { fail(p, 'Estás demasiado lejos del Tablón'); return; }
+        const b = acceptBounty(st, String(msg.bountyId));
+        if (!b) { fail(p, 'Ese encargo no se puede aceptar'); return; }
+        sendSync(p);
+        send(ws, { type: 'bounty_accepted', bountyId: b.id, title: b.title });
+        break;
+      }
       case 'bounty_claim': {
         if (!st) return;
         const reward = claimBounty(st, String(msg.bountyId));

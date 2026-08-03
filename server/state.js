@@ -5,7 +5,7 @@ import { ITEMS } from '../public/js/items.js';
 import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from '../public/js/talents-data.js';
 import { RACES, CLASSES } from '../public/js/races.js';
 import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
-import { dailyBounties, todayNumber } from '../public/js/bounties.js';
+import { dailyBounties, weeklyBounties, todayNumber, thisWeekNumber } from '../public/js/bounties.js';
 import { resourceOf } from '../public/js/skills-data.js';
 import { maxMeleeHit } from '../public/js/combat-data.js';
 
@@ -48,25 +48,46 @@ export function ensureState(character) {
   return st;
 }
 
-// ---- Encargos diarios (Tablón de la Ciudadela) ----
-// st.bounties = { day, list: [{ id, mob, need, gold, xp, title, desc, count, claimed }] }
+// ---- Encargos del Tablón (diarios y semanales) ----
+// st.bounties = { day,  list: [{ …datos, count, claimed, accepted }] }
+// st.weeklies = { week, list: [ídem] }
+// Un encargo solo avanza si el héroe lo ha ACEPTADO en el tablón: así el
+// jugador elige a qué se compromete y el rastreador solo muestra lo suyo.
 export function refreshBounties(st) {
   const day = todayNumber();
   if (!st.bounties || st.bounties.day !== day) {
     st.bounties = {
       day,
-      list: dailyBounties(day).map((b) => ({ ...b, count: 0, claimed: false })),
+      list: dailyBounties(day).map((b) => ({ ...b, count: 0, claimed: false, accepted: false })),
     };
+  }
+  const week = thisWeekNumber();
+  if (!st.weeklies || st.weeklies.week !== week) {
+    st.weeklies = {
+      week,
+      list: weeklyBounties(week).map((b) => ({ ...b, count: 0, claimed: false, accepted: false })),
+    };
+  }
+  // Estados antiguos (de antes de que hubiera que aceptar): se dan por aceptados
+  // SOLO si ya llevaban progreso, para no invalidar lo que el jugador tuviera a
+  // medias. Los que estaban a cero se quedan sin aceptar, como los nuevos.
+  for (const b of [...st.bounties.list, ...st.weeklies.list]) {
+    if (b.accepted === undefined) b.accepted = b.count > 0;
   }
   return st.bounties;
 }
 
-// Al matar una criatura: avanza los encargos activos de ese tipo.
+// Todos los encargos vigentes (diarios + semanales), para buscarlos por id.
+function allBounties(st) {
+  return [...st.bounties.list, ...st.weeklies.list];
+}
+
+// Al matar una criatura: avanza los encargos ACEPTADOS de ese tipo.
 export function onBountyKill(st, mobType) {
   refreshBounties(st);
   let changed = false;
-  for (const b of st.bounties.list) {
-    if (b.mob === mobType && !b.claimed && b.count < b.need) {
+  for (const b of allBounties(st)) {
+    if (b.accepted && b.mob === mobType && !b.claimed && b.count < b.need) {
       b.count++;
       changed = true;
     }
@@ -74,11 +95,20 @@ export function onBountyKill(st, mobType) {
   return changed;
 }
 
+// Acepta un encargo del tablón. Devuelve el encargo o null si no procede.
+export function acceptBounty(st, bountyId) {
+  refreshBounties(st);
+  const b = allBounties(st).find((x) => x.id === bountyId);
+  if (!b || b.accepted || b.claimed) return null;
+  b.accepted = true;
+  return b;
+}
+
 // Cobra un encargo completado. Devuelve la recompensa o null si no procede.
 export function claimBounty(st, bountyId) {
   refreshBounties(st);
-  const b = st.bounties.list.find((x) => x.id === bountyId);
-  if (!b || b.claimed || b.count < b.need) return null;
+  const b = allBounties(st).find((x) => x.id === bountyId);
+  if (!b || !b.accepted || b.claimed || b.count < b.need) return null;
   b.claimed = true;
   return { gold: b.gold, xp: b.xp };
 }
@@ -281,6 +311,7 @@ export function syncPayload(st) {
     progression: st.progression,
     blessings: st.blessings,
     bounties: st.bounties,
+    weeklies: st.weeklies,
     waystones: st.waystones,
     mounts: st.mounts,
     mount: st.mount,

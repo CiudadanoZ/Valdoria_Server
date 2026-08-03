@@ -211,15 +211,21 @@ connect({
     refreshAuction();
     applyProgression(msg.progression);
     applyBlessings(msg.blessings);
-    applyBounties(msg.bounties);
+    applyBounties(msg.bounties, msg.weeklies);
     refreshShop();
     refreshCrafting();
     refreshCooking();
     renderTracker();
   },
+  bounty_accepted(msg) {
+    ui.toast(`📜 Encargo aceptado: ${msg.title}`, 'quest');
+    play('quest');
+    renderTracker();   // aparece ya en el rastreador de la pantalla
+  },
   bounty_ok(msg) {
     ui.toast(`📜 Encargo cobrado: +${msg.gold} oro, +${msg.xp} EXP`, 'quest');
     play('quest');
+    renderTracker();   // desaparece del rastreador al cobrarlo
   },
   respec_ok(msg) {
     ui.toast(`🔄 Talentos reasignados (−${msg.cost} oro). Vuelve a repartir tus puntos.`, 'quest');
@@ -506,7 +512,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   loadQuests(st.quests);
   applyBlessings(st.blessings);
   applyProgression(st.progression);
-  applyBounties(st.bounties);
+  applyBounties(st.bounties, st.weeklies);
   refreshSkills(); // por si hay habilidades desbloqueadas por talentos
   setVitals(initialVitals || {});
   renderTracker();

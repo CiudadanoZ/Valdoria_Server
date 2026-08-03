@@ -39,6 +39,9 @@ export const NPC_SPOTS = {
   establo: [24, 8],   // Establero (monturas)
   subastas: [-24, 10], // Subastador (casa de subastas)
 };
+// Tablón de Encargos de la plaza (aceptar y cobrar encargos)
+export const BOARD_SPOT = [8, 6];
+
 export const CAMPFIRE_SPOTS = [
   [-67 + Math.sin(0.6) * 4, 55 + Math.cos(0.6) * 4],   // campamento de Baldur
   [70 + Math.sin(-2.2) * 4, 21 + Math.cos(-2.2) * 4],  // campamento de Nyra

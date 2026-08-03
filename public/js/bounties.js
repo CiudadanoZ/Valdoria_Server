@@ -1,6 +1,7 @@
-// Encargos diarios repetibles del Tablón de la Ciudadela (datos compartidos
-// cliente/servidor). Cada día se sortean 3 encargos de esta lista; al
-// completarlos se cobra en el Tablón y se pueden volver a hacer al día siguiente.
+// Encargos del Tablón de la Ciudadela (datos compartidos cliente/servidor).
+// Hay dos tandas: 3 encargos DIARIOS que se renuevan cada día y 2 contratos
+// SEMANALES, más largos y mejor pagados. Ambos hay que ACEPTARLOS en el tablón
+// para que empiecen a contar, y luego se cobran allí mismo.
 
 // pool: [id, tipoDeCriatura, cantidad, oro, exp, título]
 export const BOUNTY_POOL = [
@@ -17,19 +18,51 @@ export const BOUNTY_POOL = [
   { id: 'chamanes',   mob: 'chaman_cienaga', need: 2, gold: 70,  xp: 105, title: 'Brujos del limo', desc: 'Los chamanes alimentan la podredumbre de la ciénaga.' },
 ];
 
-export const BOUNTY_COUNT = 3; // encargos activos por día
+export const BOUNTY_COUNT = 3; // encargos diarios activos
 
-// Sorteo determinista del día: mismos 3 encargos para todo el reino ese día.
+// ---- Contratos semanales ----
+// Objetivos mucho más ambiciosos (jefes y cacerías largas) que duran toda la
+// semana y pagan en consecuencia. Dan una meta a medio plazo entre lo diario y
+// las cadenas de misiones.
+export const WEEKLY_POOL = [
+  { id: 'w_cripta',   mob: 'senor_cripta',   need: 2,  gold: 420, xp: 620, title: 'Silencio en las criptas', desc: 'El Señor de la Cripta debe caer dos veces esta semana.' },
+  { id: 'w_fango',    mob: 'rey_fango',      need: 1,  gold: 380, xp: 540, title: 'La corona de limo', desc: 'Acaba con el Rey del Fango en el corazón de la ciénaga.' },
+  { id: 'w_jarl',     mob: 'jarl_cumbres',   need: 1,  gold: 480, xp: 720, title: 'El señor del hielo', desc: 'Derriba al Jarl en lo alto de las Cumbres Heladas.' },
+  { id: 'w_coloso',   mob: 'coloso',         need: 1,  gold: 650, xp: 950, title: 'Gesta contra el Coloso', desc: 'Participa en la caída del jefe de mundo.' },
+  { id: 'w_escarcha', mob: 'lobo_escarcha',  need: 20, gold: 320, xp: 460, title: 'Cacería blanca', desc: 'Merma la manada de las Cumbres: 20 Lobos de Escarcha.' },
+  { id: 'w_ahogados', mob: 'ahogado',        need: 20, gold: 300, xp: 430, title: 'Purga del pantano', desc: 'Devuelve la paz a la ciénaga: 20 Ahogados.' },
+  { id: 'w_esquel',   mob: 'esqueleto',      need: 25, gold: 310, xp: 450, title: 'Guardia eterna', desc: 'Reduce a polvo 25 Esqueletos Guardianes.' },
+  { id: 'w_trolls',   mob: 'troll_hielo',    need: 6,  gold: 400, xp: 580, title: 'Gigantes de escarcha', desc: 'Abate 6 Trolls de Hielo en las Cumbres.' },
+  { id: 'w_osos',     mob: 'oso',            need: 12, gold: 260, xp: 390, title: 'Los amos del norte', desc: 'Doce Osos Pardos rondan las ruinas.' },
+];
+
+export const WEEKLY_COUNT = 2; // contratos semanales activos
+
+// Sorteo determinista del día: mismos encargos para todo el reino ese día.
 // dayNumber = días transcurridos desde época (UTC).
 export function todayNumber() {
   return Math.floor(Date.now() / 86400000);
 }
 
-// Baraja determinista por semilla (día) y toma los primeros BOUNTY_COUNT.
+// Número de semana (lunes como día de reinicio: la época cayó en jueves).
+export function thisWeekNumber() {
+  return Math.floor((todayNumber() + 3) / 7);
+}
+
+// Baraja determinista por semilla y toma los primeros n.
+function pick(pool, seed, n) {
+  const mezcla = pool.map((b, i) => ({ b, sort: hash(seed * 100 + i) }));
+  mezcla.sort((a, z) => a.sort - z.sort);
+  return mezcla.slice(0, n).map((x) => x.b);
+}
+
 export function dailyBounties(day = todayNumber()) {
-  const pool = BOUNTY_POOL.map((b, i) => ({ b, sort: hash(day * 100 + i) }));
-  pool.sort((a, z) => a.sort - z.sort);
-  return pool.slice(0, BOUNTY_COUNT).map((x) => x.b);
+  return pick(BOUNTY_POOL, day, BOUNTY_COUNT);
+}
+
+export function weeklyBounties(week = thisWeekNumber()) {
+  // Semilla desplazada para que no coincida con el sorteo diario
+  return pick(WEEKLY_POOL, week + 7777, WEEKLY_COUNT);
 }
 
 function hash(n) {

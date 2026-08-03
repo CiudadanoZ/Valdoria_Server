@@ -10,6 +10,7 @@ import { countItem } from './inventory.js';
 import { sendQuestClaim } from './network.js';
 import { toast, showDialog, hideDialog } from './ui.js';
 import { MIRA_HEAL_PRICE, MIRA_CLEANSE_PRICE } from './recipes.js';
+import { activeBounties } from './bountyboard.js';
 
 // ---- Reclamación de recompensas (las otorga el servidor, una sola vez) ----
 // Se envía quest_claim y, si el servidor confirma, se ejecuta la continuación
@@ -1181,6 +1182,15 @@ export function renderTracker() {
     const objs = [{ text: 'Abate al Jarl de las Cumbres (corazón de la meseta)', done: questState.jarlDead }];
     if (questState.jarlDead) objs.push({ text: 'Vuelve con la Cazadora Skadi', done: false });
     entries.push({ title: 'El Jarl de las Cumbres', objs });
+  }
+
+  // Encargos del Tablón que el héroe ha aceptado: se siguen aquí para saber de
+  // un vistazo cuánto falta y cuándo toca volver a cobrarlos.
+  for (const b of activeBounties()) {
+    const hecho = b.count >= b.need;
+    const objs = [{ text: `${b.desc} (${Math.min(b.count, b.need)}/${b.need})`, done: hecho }];
+    if (hecho) objs.push({ text: 'Cobra en el Tablón de la Ciudadela', done: false });
+    entries.push({ title: `${b.tanda === 'semanal' ? '🗓️' : '📅'} ${b.title}`, objs });
   }
 
   list.innerHTML = entries.map((e) =>

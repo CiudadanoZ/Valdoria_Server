@@ -1042,11 +1042,36 @@ function buildBountyBoard(scene, x, z) {
   hitbox.position.y = 1.5;
   group.add(hitbox);
 
+  // Icono flotante: avisa de que el Tablón es interactuable, igual que el '!'
+  // de los NPC. Se mueve arriba y abajo en animateWorld.
+  const marker = makeBoardMarker();
+  marker.position.y = 3.6;
+  group.add(marker);
+  group.userData.marker = marker;
+
   group.position.set(x, heightAt(x, z), z);
   group.rotation.y = -Math.PI / 4;
   group.userData.isBoard = true;
   scene.add(group);
   return group;
+}
+
+// Pergamino dorado flotante sobre el Tablón de Encargos.
+function makeBoardMarker() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 96; canvas.height = 96;
+  const ctx = canvas.getContext('2d');
+  ctx.font = '72px Georgia';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#ffb400';
+  ctx.shadowBlur = 16;
+  ctx.fillText('📜', 48, 50);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(canvas), depthTest: false, transparent: true,
+  }));
+  sprite.scale.set(1.5, 1.5, 1);
+  return sprite;
 }
 
 // Hoguera clicable (para cocinar): piedras, llama, luz y zona de clic.
@@ -1178,7 +1203,10 @@ function buildMiniCrypt(scene, portals, torchLights, cfg) {
 }
 
 // Animación por frame: parpadeo de antorchas, balanceo de hierbas y ondas de pesca.
-export function animateWorld({ torchLights, herbs, fishingSpots, waystones }, time) {
+export function animateWorld({ torchLights, herbs, fishingSpots, waystones, board }, time) {
+  // El pergamino del Tablón flota para llamar la atención
+  const bm = board?.userData?.marker;
+  if (bm) bm.position.y = 3.6 + Math.sin(time * 2.2) * 0.16;
   for (const f of fishingSpots) {
     f.children.forEach((c, i) => {
       if (c.isMesh && c.material.transparent) {
