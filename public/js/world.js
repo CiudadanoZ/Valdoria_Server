@@ -97,14 +97,46 @@ export function isBlocked(x, z) {
   return false;
 }
 
-const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, ...opts });
+// Facetas planas por defecto: el low-poly con sombreado suave parece plástico;
+// con facetas se ve estilizado e intencionado. Es la seña del estilo del juego.
+const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, ...opts });
+
+// Cúpula de cielo: degradado de brasa en el horizonte a violeta nocturno en el
+// cénit. Sustituye al fondo de color sólido, que hacía flotar el mundo en un
+// vacío. Sigue al jugador (se recoloca cada frame desde main.js).
+function buildSky(scene) {
+  const R = 260; // dentro del plano lejano de la cámara (300)
+  const geo = new THREE.SphereGeometry(R, 24, 14);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const horizon = new THREE.Color(0x6e3a2e);  // brasa del ocaso
+  const mid = new THREE.Color(0x2b1f33);      // malva crepuscular
+  const zenith = new THREE.Color(0x110d1c);   // noche violácea
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.max(0, Math.min(1, (pos.getY(i) / R + 0.12) / 0.7));
+    if (t < 0.30) c.lerpColors(horizon, mid, t / 0.30);
+    else c.lerpColors(mid, zenith, (t - 0.30) / 0.70);
+    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const sky = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false,
+  }));
+  sky.renderOrder = -1;
+  scene.add(sky);
+  return sky;
+}
 
 // Malla del terreno: una rejilla cuyos vértices siguen la altura de terrain.js y
 // se tiñen del color de su comarca. Es lo que convierte el mundo de un disco
 // verde plano en regiones con laderas.
 function buildTerrainMesh() {
   const SIZE = (WORLD_RADIUS + 30) * 2;   // cubre el mundo con algo de margen
-  const SEGS = 190;                       // ~2,4 unidades por celda: relieve suave
+  // Malla deliberadamente basta (~5,4 unidades por celda): con facetas planas,
+  // los triángulos grandes son los que dan el aspecto esculpido del low-poly.
+  // Con una malla fina las facetas eran tan pequeñas que el suelo parecía liso.
+  const SEGS = 86;
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGS, SEGS);
   geo.rotateX(-Math.PI / 2);              // tumbarla al plano XZ del mundo
 
@@ -127,7 +159,9 @@ function buildTerrainMesh() {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  // Facetas planas también en el terreno: cada triángulo capta la luz por su
+  // cara y el relieve se lee como esculpido (el look low-poly clásico).
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
   mesh.position.y = -0.05;
   mesh.receiveShadow = true;
   return mesh;
@@ -205,22 +239,31 @@ export function buildWorld(scene) {
   const fishingSpots = [];
   const campfires = [];
 
-  // ---- Iluminación: atardecer dorado ----
-  const ambient = new THREE.AmbientLight(0x6b5d8a, 0.55);
+  // ---- Iluminación: ocaso dramático ----
+  // La clave del look cinematográfico es el CONTRASTE DE TEMPERATURA: luz
+  // cálida del sol contra relleno frío del cielo. Con relleno cálido (naranja)
+  // todo se volvía mostaza y las comarcas perdían su color.
+  const ambient = new THREE.AmbientLight(0x4a4668, 0.42);
   scene.add(ambient);
-  const hemi = new THREE.HemisphereLight(0xbfa77a, 0x2a1f2e, 0.5);
+  const hemi = new THREE.HemisphereLight(0x8fa8cc, 0x241c2e, 0.55);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight(0xffd9a0, 1.15);
+  const sun = new THREE.DirectionalLight(0xffe0bb, 1.0);
   sun.position.set(40, 60, -30);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
+  // Con facetas planas, el sesgo evita el acné de sombra en las caras
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.5;
   const sc = 60;
   Object.assign(sun.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc, near: 10, far: 160 });
   scene.add(sun);
 
-  scene.fog = new THREE.FogExp2(0x1a1220, 0.008);
-  scene.background = new THREE.Color(0x1a1220);
+  // La niebla casa con el tono medio del cielo: el terreno se funde con el
+  // horizonte en vez de cortarse contra un fondo plano.
+  scene.fog = new THREE.FogExp2(0x241a2b, 0.0085);
+  scene.background = new THREE.Color(0x110d1c);
+  const sky = buildSky(scene);
 
   // ---- Terreno exterior: comarcas con relieve ----
   // Una malla subdividida cuyos vértices siguen heightAt() y se tiñen del color
@@ -532,7 +575,7 @@ export function buildWorld(scene) {
     waystones.push(buildWaystone(scene, w));
   }
 
-  return { torchLights, herbs, portals, fishingSpots, campfires, board, waystones, lights: { ambient, hemi, sun } };
+  return { torchLights, herbs, portals, fishingSpots, campfires, board, waystones, sky, lights: { ambient, hemi, sun } };
 }
 
 // Portal clicable: arco de piedra con vacío oscuro y resplandor.

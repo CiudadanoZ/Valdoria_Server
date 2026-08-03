@@ -34,7 +34,7 @@ export const MOB_INFO = {
 // ---- Malla cuadrúpeda (lobo / jabalí / rata) ----
 function makeBeast(info) {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: info.color });
+  const bodyMat = new THREE.MeshStandardMaterial({ flatShading: true, color: info.color });
 
   const isBoar = info.kind === 'boar';
   const isRat = info.kind === 'rat';
@@ -61,7 +61,7 @@ function makeBeast(info) {
     neck.position.set(0, 1.1, 0.8);
     neck.rotation.x = 0.4;
     g.add(neck);
-    const antlerMat = new THREE.MeshStandardMaterial({ color: 0xd8c8a8 });
+    const antlerMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0xd8c8a8 });
     for (const side of [-1, 1]) {
       const antler = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 0.5, 5), antlerMat);
       antler.position.set(side * 0.15, 1.7, 0.85);
@@ -80,15 +80,15 @@ function makeBeast(info) {
       g.add(ear);
     }
     const snout = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.3),
-      new THREE.MeshStandardMaterial({ color: 0x3d2f22 }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: 0x3d2f22 }));
     snout.position.set(0, 0.88, 1.32);
     g.add(snout);
   } else if (isBoar) {
     const snout = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.22, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0x8a6a55 }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: 0x8a6a55 }));
     snout.position.set(0, 0.85, 1.3);
     g.add(snout);
-    const tuskMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
+    const tuskMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0xe8e0d0 });
     for (const side of [-1, 1]) {
       const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 5), tuskMat);
       tusk.position.set(side * 0.18, 0.78, 1.28);
@@ -108,7 +108,7 @@ function makeBeast(info) {
       isRat
         ? new THREE.CylinderGeometry(0.03, 0.06, 1.2, 5)
         : new THREE.ConeGeometry(0.12, 0.55, 5),
-      isRat ? new THREE.MeshStandardMaterial({ color: 0x8a7a70 }) : bodyMat
+      isRat ? new THREE.MeshStandardMaterial({ flatShading: true, color: 0x8a7a70 }) : bodyMat
     );
     tail.position.set(0, isRat ? 0.7 : 0.95, isRat ? -1.2 : -0.85);
     tail.rotation.x = isRat ? 1.4 : 1.1;
@@ -116,7 +116,7 @@ function makeBeast(info) {
   }
 
   if (info.redEyes) {
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff2222, emissiveIntensity: 2 });
+    const eyeMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0xff2222, emissive: 0xff2222, emissiveIntensity: 2 });
     for (const side of [-1, 1]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
       eye.position.set(side * 0.13, 1.02, 1.24);
@@ -138,8 +138,8 @@ function makeBeast(info) {
 // ---- Malla de esqueleto (guardián / Señor de la Cripta) ----
 function makeSkeleton(info) {
   const g = new THREE.Group();
-  const boneMat = new THREE.MeshStandardMaterial({ color: info.color });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2a2530 });
+  const boneMat = new THREE.MeshStandardMaterial({ flatShading: true, color: info.color });
+  const darkMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0x2a2530 });
 
   // Caja torácica
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.3, 0.9, 8), boneMat);
@@ -164,7 +164,7 @@ function makeSkeleton(info) {
 
   // Ojos
   const eyeColor = info.redEyes ? 0xff2222 : 0x66ffbb;
-  const eyeMat = new THREE.MeshStandardMaterial({ color: eyeColor, emissive: eyeColor, emissiveIntensity: 2.2 });
+  const eyeMat = new THREE.MeshStandardMaterial({ flatShading: true, color: eyeColor, emissive: eyeColor, emissiveIntensity: 2.2 });
   for (const side of [-1, 1]) {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
     eye.position.set(side * 0.11, 1.98, 0.26);
@@ -173,7 +173,7 @@ function makeSkeleton(info) {
 
   if (info.crown) {
     const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.25, 8, 1, true),
-      new THREE.MeshStandardMaterial({ color: 0x8a7020, metalness: 0.7, roughness: 0.3 }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: 0x8a7020, metalness: 0.7, roughness: 0.3 }));
     crown.position.y = 2.24;
     g.add(crown);
   }
@@ -204,7 +204,7 @@ function makeSkeleton(info) {
 // ---- Masa gelatinosa (sanguijuela pequeña / Rey del Fango grande) ----
 function makeBlob(info) {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: info.color, roughness: 0.4, metalness: 0.1 });
+  const bodyMat = new THREE.MeshStandardMaterial({ flatShading: true, color: info.color, roughness: 0.4, metalness: 0.1 });
 
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 10), bodyMat);
   body.position.y = 0.6;
@@ -222,12 +222,12 @@ function makeBlob(info) {
 
   if (info.crown) {
     const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.4, 8, 1, true),
-      new THREE.MeshStandardMaterial({ color: 0x8a7020, metalness: 0.7, roughness: 0.3 }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: 0x8a7020, metalness: 0.7, roughness: 0.3 }));
     crown.position.y = 1.4;
     g.add(crown);
   }
   if (info.redEyes) {
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffe000, emissive: 0xffb000, emissiveIntensity: 2 });
+    const eyeMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0xffe000, emissive: 0xffb000, emissiveIntensity: 2 });
     for (const side of [-1, 1]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), eyeMat);
       eye.position.set(side * 0.22, 0.75, 0.95);
@@ -240,7 +240,7 @@ function makeBlob(info) {
 // ---- Ahogado / Chamán: humanoide encorvado de la ciénaga ----
 function makeDrowned(info) {
   const g = new THREE.Group();
-  const skinMat = new THREE.MeshStandardMaterial({ color: info.color, roughness: 0.8 });
+  const skinMat = new THREE.MeshStandardMaterial({ flatShading: true, color: info.color, roughness: 0.8 });
 
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 1.0, 8), skinMat);
   torso.position.y = 1.0;
@@ -252,7 +252,7 @@ function makeDrowned(info) {
   head.castShadow = true;
   g.add(head);
   // Ojos vacíos
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x9affd0, emissive: 0x3aaa70, emissiveIntensity: 1.5 });
+  const eyeMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0x9affd0, emissive: 0x3aaa70, emissiveIntensity: 1.5 });
   for (const side of [-1, 1]) {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
     eye.position.set(side * 0.11, 1.72, 0.38);
@@ -275,11 +275,11 @@ function makeDrowned(info) {
   // Bastón del chamán con una luz
   if (info.staff) {
     const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.8, 6),
-      new THREE.MeshStandardMaterial({ color: 0x3a2d1f }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: 0x3a2d1f }));
     staff.position.set(0.55, 0.9, 0.2);
     g.add(staff);
     const orb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xb090e0, emissive: 0x7050b0, emissiveIntensity: 1.5 }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: 0xb090e0, emissive: 0x7050b0, emissiveIntensity: 1.5 }));
     orb.position.set(0.55, 1.85, 0.2);
     g.add(orb);
   }

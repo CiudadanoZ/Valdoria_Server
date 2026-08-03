@@ -11,7 +11,7 @@ const MOUNT_LIFT = 0.75; // cuánto se eleva el héroe al ir montado
 export function makeMount(mountId) {
   const def = MOUNTS[mountId] || MOUNTS.corcel;
   const g = new THREE.Group();
-  const m = new THREE.MeshStandardMaterial({ color: def.color });
+  const m = new THREE.MeshStandardMaterial({ flatShading: true, color: def.color });
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 1.7), m);
   body.position.y = 0.7; body.castShadow = true; g.add(body);
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.7, 6), m);
@@ -23,7 +23,7 @@ export function makeMount(mountId) {
     leg.position.set(lx, 0.35, lz); g.add(leg);
   }
   // Cola / melena
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 5), new THREE.MeshStandardMaterial({ color: 0x2a2320 }));
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 5), new THREE.MeshStandardMaterial({ flatShading: true, color: 0x2a2320 }));
   tail.position.set(0, 0.8, -1.0); tail.rotation.x = 1.2; g.add(tail);
   if (mountId === 'espectro') {
     g.traverse((o) => { if (o.material) { o.material.transparent = true; o.material.opacity = 0.75; o.material.emissive = new THREE.Color(0x3a7a6a); o.material.emissiveIntensity = 0.6; } });
@@ -53,7 +53,7 @@ export function makeCharacter({ bodyColor = 0x8a1a12, trimColor = 0x2c2c34, skin
 
   const torso = new THREE.Mesh(
     new THREE.CylinderGeometry(0.42, 0.55, 1.1, 8),
-    new THREE.MeshStandardMaterial({ color: bodyColor })
+    new THREE.MeshStandardMaterial({ flatShading: true, color: bodyColor })
   );
   torso.position.y = 1.05;
   torso.castShadow = true;
@@ -61,7 +61,7 @@ export function makeCharacter({ bodyColor = 0x8a1a12, trimColor = 0x2c2c34, skin
 
   const head = new THREE.Mesh(
     new THREE.SphereGeometry(0.32, 12, 10),
-    new THREE.MeshStandardMaterial({ color: skinColor })
+    new THREE.MeshStandardMaterial({ flatShading: true, color: skinColor })
   );
   head.position.y = 1.95;
   head.castShadow = true;
@@ -69,13 +69,13 @@ export function makeCharacter({ bodyColor = 0x8a1a12, trimColor = 0x2c2c34, skin
 
   const hood = new THREE.Mesh(
     new THREE.ConeGeometry(0.38, 0.5, 8),
-    new THREE.MeshStandardMaterial({ color: trimColor })
+    new THREE.MeshStandardMaterial({ flatShading: true, color: trimColor })
   );
   hood.position.y = 2.25;
   hood.castShadow = true;
   g.add(hood);
 
-  const legMat = new THREE.MeshStandardMaterial({ color: trimColor });
+  const legMat = new THREE.MeshStandardMaterial({ flatShading: true, color: trimColor });
   for (const side of [-1, 1]) {
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.6, 6), legMat);
     leg.position.set(side * 0.2, 0.3, 0);
@@ -84,7 +84,7 @@ export function makeCharacter({ bodyColor = 0x8a1a12, trimColor = 0x2c2c34, skin
     g.add(leg);
 
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.85, 6),
-      new THREE.MeshStandardMaterial({ color: bodyColor }));
+      new THREE.MeshStandardMaterial({ flatShading: true, color: bodyColor }));
     arm.position.set(side * 0.58, 1.15, 0);
     arm.rotation.z = side * 0.15;
     arm.castShadow = true;
@@ -94,7 +94,7 @@ export function makeCharacter({ bodyColor = 0x8a1a12, trimColor = 0x2c2c34, skin
 
   // Rasgos raciales
   if (race) {
-    const skinMat = new THREE.MeshStandardMaterial({ color: skinColor });
+    const skinMat = new THREE.MeshStandardMaterial({ flatShading: true, color: skinColor });
     if (race.ears) { // orejas puntiagudas de elfo
       for (const side of [-1, 1]) {
         const ear = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.28, 5), skinMat);
@@ -105,13 +105,13 @@ export function makeCharacter({ bodyColor = 0x8a1a12, trimColor = 0x2c2c34, skin
     }
     if (race.beard) { // barba de enano
       const beard = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 6),
-        new THREE.MeshStandardMaterial({ color: 0x8a5a2a }));
+        new THREE.MeshStandardMaterial({ flatShading: true, color: 0x8a5a2a }));
       beard.position.set(0, 1.62, 0.2);
       beard.rotation.x = 0.25;
       g.add(beard);
     }
     if (race.tusks) { // colmillos de orco
-      const tuskMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0 });
+      const tuskMat = new THREE.MeshStandardMaterial({ flatShading: true, color: 0xe8e0d0 });
       for (const side of [-1, 1]) {
         const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 5), tuskMat);
         tusk.position.set(side * 0.12, 1.82, 0.26);

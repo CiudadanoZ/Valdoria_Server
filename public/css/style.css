@@ -337,6 +337,12 @@ canvas { display: block; }
 #mount-btn:hover { border-color: var(--gold); }
 #mount-btn.on { color: #9ad0ff; border-color: #4a90d0; box-shadow: 0 0 10px rgba(74,144,208,0.4); }
 
+/* Viñeta cinematográfica: por encima del 3D, por debajo de todo el HUD */
+#vignette {
+  position: fixed; inset: 0; z-index: 5; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(8, 4, 12, 0.42) 100%);
+}
+
 /* Botón de gremio */
 #guild-btn {
   position: fixed; top: 16px; right: 340px; z-index: 20;

@@ -411,6 +411,10 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Mapeo tonal cinematográfico: comprime luces y recupera sombras como una
+  // cámara de cine. Es la diferencia entre "demo técnica" y "juego".
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
   renderer.shadowMap.enabled = shadowsEnabled();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.prepend(renderer.domElement);
@@ -987,6 +991,8 @@ function loop() {
   updateMinimap();
   animateWorld(worldRefs, time);
   updateQuestMarkers(npcs, time);
+  // El cielo acompaña al jugador para que el horizonte nunca se acabe
+  worldRefs.sky?.position.set(player.mesh.position.x, 0, player.mesh.position.z);
   // La sacudida usa el tiempo real: sigue viva durante el hit-stop y remata el golpe
   updateCamera(realDt);
   updateCryptLighting(dt);
