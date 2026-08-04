@@ -2,8 +2,10 @@
 // La experiencia la otorga el servidor (caza, misiones, pesca, cocina) y los
 // puntos de talento se gastan por RPC validado. Aquí solo se muestra y se
 // detectan las subidas de nivel para celebrarlas.
-import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from './talents-data.js';
-import { sendTalentSpend, sendTalentRespec } from './network.js';
+import {
+  TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel, ECHOES, ECHO_IDS, xpForEcho,
+} from './talents-data.js';
+import { sendTalentSpend, sendTalentRespec, sendEchoSpend } from './network.js';
 import { play } from './audio.js';
 import { toast } from './ui.js';
 
@@ -17,7 +19,11 @@ export const progression = {
   level: 1,
   xp: 0,
   points: 0,
-  talents: {}, // nodeId -> rango
+  talents: {},     // nodeId -> rango
+  echoes: 0,       // Ecos ganados tras tocar el techo de nivel
+  echoXp: 0,
+  echoPoints: 0,   // sin gastar
+  echoSpend: {},   // statId -> veces invertido
 };
 
 let tree = TALENT_TREES.guerrero;
@@ -36,13 +42,21 @@ export function initProgression(classId, { progressChanged }) {
 export function applyProgression(data) {
   if (!data) { renderHud(); return; }
   const prevLevel = progression.level;
+  const prevEchoes = progression.echoes;
   progression.level = data.level || 1;
   progression.xp = data.xp || 0;
   progression.points = data.points || 0;
   progression.talents = data.talents || {};
+  progression.echoes = data.echoes || 0;
+  progression.echoXp = data.echoXp || 0;
+  progression.echoPoints = data.echoPoints || 0;
+  progression.echoSpend = data.echoSpend || {};
 
   if (progression.level > prevLevel && prevLevel >= 1) {
     toast(`✦ ¡Nivel ${progression.level}! +1 punto de talento (tecla T) ✦`, 'quest');
+    play('levelup');
+  } else if (progression.echoes > prevEchoes) {
+    toast(`◈ ¡Eco ${progression.echoes}! +1 punto de Eco (tecla T) ◈`, 'quest');
     play('levelup');
   }
   renderHud();
@@ -58,9 +72,16 @@ export function pointsSpent() {
 function sumTalents(field) {
   return tree.reduce((sum, n) => sum + (n[field] || 0) * (progression.talents[n.id] || 0), 0);
 }
-export function talentDmg() { return sumTalents('dmg'); }
-export function talentArmor() { return sumTalents('armor'); }
-export function talentHp() { return sumTalents('hp') + (progression.level - 1) * HP_PER_LEVEL; }
+// Lo que aporta un Eco concreto (0 si no se ha invertido nada en él).
+export function echoBonus(statId) {
+  return (progression.echoSpend[statId] || 0) * (ECHOES[statId]?.per || 0);
+}
+
+export function talentDmg() { return sumTalents('dmg') + echoBonus('dmg'); }
+export function talentArmor() { return sumTalents('armor') + echoBonus('armor'); }
+export function talentHp() {
+  return sumTalents('hp') + echoBonus('hp') + (progression.level - 1) * HP_PER_LEVEL;
+}
 export function talentSpeedMul() { return 1 + sumTalents('speed'); }
 export function talentHealMul() { return 1 + sumTalents('healMul'); }
 export function talentCdr(skillId) {
@@ -80,14 +101,23 @@ export function toggleTalents() {
 }
 
 function renderHud() {
-  const need = xpForLevel(progression.level);
+  // Pasado el techo la barra sigue viva, pero midiendo Ecos en vez de niveles.
   const atCap = progression.level >= MAX_LEVEL;
-  document.getElementById('xp-level').textContent = `Nv ${progression.level}`;
-  document.getElementById('xp-text').textContent = atCap ? 'MAX' : `${progression.xp} / ${need} EXP`;
-  document.getElementById('xp-fill').style.width = atCap ? '100%' : `${Math.min(100, (progression.xp / need) * 100)}%`;
+  const need = atCap ? xpForEcho(progression.echoes) : xpForLevel(progression.level);
+  const have = atCap ? progression.echoXp : progression.xp;
+
+  document.getElementById('xp-level').textContent = atCap
+    ? `Nv ${MAX_LEVEL} · ◈ ${progression.echoes}`
+    : `Nv ${progression.level}`;
+  document.getElementById('xp-text').textContent =
+    `${Math.floor(have)} / ${need} ${atCap ? 'ECO' : 'EXP'}`;
+  document.getElementById('xp-fill').style.width = `${Math.min(100, (have / need) * 100)}%`;
+  document.getElementById('xp-fill').classList.toggle('echo', atCap);
+
   const btn = document.getElementById('talents-open');
-  btn.classList.toggle('has-points', progression.points > 0);
-  btn.textContent = progression.points > 0 ? `T · Talentos (${progression.points})` : 'T · Talentos';
+  const pend = progression.points + progression.echoPoints;
+  btn.classList.toggle('has-points', pend > 0);
+  btn.textContent = pend > 0 ? `T · Talentos (${pend})` : 'T · Talentos';
 }
 
 function renderPanel() {
@@ -97,6 +127,32 @@ function renderPanel() {
 
   const list = document.getElementById('talents-list');
   list.innerHTML = '';
+
+  // Los Ecos van arriba: al máximo son la única progresión que queda viva.
+  if (progression.level >= MAX_LEVEL || progression.echoes > 0) {
+    const h = document.createElement('div');
+    h.className = 'talent-branch echo-branch';
+    h.textContent = `◈ Ecos · ${progression.echoes} ganados · ${progression.echoPoints} sin gastar`;
+    list.appendChild(h);
+
+    for (const id of ECHO_IDS) {
+      const def = ECHOES[id];
+      const n = progression.echoSpend[id] || 0;
+      const row = document.createElement('div');
+      row.className = 'talent-row echo-row';
+      row.innerHTML =
+        `<span class="talent-icon">${def.icon}</span>` +
+        `<span class="talent-info"><b>${def.name}</b> <span class="talent-rank">${n}</span>` +
+        `<br/><small>${n ? def.fmt(n) : 'Sin invertir'} · cada punto ${def.fmt(1)}</small></span>`;
+      const btn = document.createElement('button');
+      btn.className = 'shop-btn';
+      btn.textContent = 'Invertir';
+      btn.disabled = progression.echoPoints < 1;
+      btn.addEventListener('click', () => sendEchoSpend(id));
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+  }
   let lastBranch = null;
   for (const node of tree) {
     // Cabecera al cambiar de rama

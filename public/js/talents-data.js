@@ -5,6 +5,25 @@ export const MAX_LEVEL = 15;
 export const HP_PER_LEVEL = 5;
 export const xpForLevel = (level) => 100 + (level - 1) * 60;
 
+// ---- Ecos ----
+// Al llegar al nivel 15 la experiencia dejaba de servir para nada, justo cuando
+// Las Profundidades empiezan a repartirla a espuertas. Los Ecos son la
+// progresión de después del techo: no suben de nivel ni desbloquean nada, solo
+// dan un punto que se gasta en una mejora pequeña y permanente. La barra nunca
+// se apaga y bajar hondo siempre paga.
+export const ECHOES = {
+  dmg:   { id: 'dmg',   name: 'Filo',    icon: '⚔️', per: 1,    fmt: (n) => `+${n} de daño` },
+  hp:    { id: 'hp',    name: 'Vigor',   icon: '❤️', per: 5,    fmt: (n) => `+${n * 5} de vida máxima` },
+  armor: { id: 'armor', name: 'Coraza',  icon: '🛡️', per: 1,    fmt: (n) => `+${n} de armadura` },
+  regen: { id: 'regen', name: 'Aliento', icon: '🌿', per: 0.2,  fmt: (n) => `+${(n * 0.2).toFixed(1)} de vida por segundo` },
+  gold:  { id: 'gold',  name: 'Fortuna', icon: '🪙', per: 0.01, fmt: (n) => `+${n}% de oro` },
+};
+export const ECHO_IDS = Object.keys(ECHOES);
+
+// Cada Eco cuesta un poco más que el anterior: el crecimiento no se corta, pero
+// tampoco se dispara. El primero ronda lo que costaba subir del 14 al 15.
+export const xpForEcho = (echoes) => 1200 + echoes * 150;
+
 // Cada clase tiene DOS ramas de talentos. Los puntos son comunes, así que a
 // nivel bajo eliges una rama y a nivel alto puedes tocar las dos.
 // Nodos: max = rangos; req = puntos gastados en el árbol para desbloquear;

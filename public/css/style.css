@@ -337,6 +337,15 @@ canvas { display: block; }
 #mount-btn:hover { border-color: var(--gold); }
 #mount-btn.on { color: #9ad0ff; border-color: #4a90d0; box-shadow: 0 0 10px rgba(74,144,208,0.4); }
 
+/* ---- Ecos: la progresión de después del techo ---- */
+/* La barra cambia de color para que se note que ya no mides niveles. */
+#xp-fill.echo {
+  background: linear-gradient(90deg, #6a4a9a, #b090ff);
+  box-shadow: 0 0 8px rgba(176, 144, 255, .45);
+}
+.echo-branch { color: #c9a4f0 !important; border-bottom-color: #4a3a6a !important; }
+.talent-row.echo-row { border-left: 2px solid #6a4a9a; }
+
 /* ---- Las Profundidades ---- */
 .depths-controls {
   display: flex; align-items: center; gap: 10px;

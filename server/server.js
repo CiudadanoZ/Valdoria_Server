@@ -25,7 +25,7 @@ import { WAYSTONES, waystoneById, MOUNTS } from '../public/js/world-data.js';
 import {
   ensureState, bagCount, bagAdd, bagRemove, bagAddEntry, bagTakeAt,
   equipFromBag, unequipToBag,
-  maxPlausibleHit, addXp, spendTalent, syncPayload,
+  maxPlausibleHit, addXp, spendTalent, spendEcho, syncPayload,
   computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
   onBountyKill, claimBounty, acceptBounty, respecCost, respecTalents,
   computeMaxResource, resourceDef, startingResource,
@@ -1460,6 +1460,16 @@ wss.on('connection', (ws) => {
         if (error) { fail(p, `Talento: ${error}`); return; }
         sendSync(p);
         send(ws, { type: 'rpc_ok', kind: 'talent', nodeId: msg.nodeId });
+        break;
+      }
+      case 'echo_spend': {
+        if (!st) return;
+        const error = spendEcho(st, String(msg.stat));
+        if (error) { fail(p, `Eco: ${error}`); return; }
+        // La vida máxima puede haber subido: que se note al instante.
+        p.hp = Math.min(computeMaxHp(p.character), p.hp);
+        sendSync(p);
+        send(ws, { type: 'echo_spent', stat: msg.stat, ...vitals(p) });
         break;
       }
 

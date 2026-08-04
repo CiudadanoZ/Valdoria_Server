@@ -2,7 +2,9 @@
 // experiencia, talentos). El servidor es el único que muta estos datos; el
 // cliente recibe sincronizaciones y solo los muestra.
 import { ITEMS } from '../public/js/items.js';
-import { TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel } from '../public/js/talents-data.js';
+import {
+  TALENT_TREES, MAX_LEVEL, HP_PER_LEVEL, xpForLevel, ECHOES, xpForEcho,
+} from '../public/js/talents-data.js';
 import { RACES, CLASSES } from '../public/js/races.js';
 import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
 import { dailyBounties, weeklyBounties, todayNumber, thisWeekNumber } from '../public/js/bounties.js';
@@ -70,6 +72,17 @@ export function ensureState(character) {
     st.inventory.equipment[k] = sanitizeEntry(st.inventory.equipment[k]);
   }
   st.progression = st.progression || { level: 1, xp: 0, points: 0, talents: {} };
+  // Ecos: progresión de después del techo. Los personajes de antes entran con
+  // el contador a cero, sin perder nada de lo que ya tenían.
+  const prog = st.progression;
+  prog.echoes = Math.max(0, Math.round(Number(prog.echoes) || 0));
+  prog.echoXp = Math.max(0, Number(prog.echoXp) || 0);
+  prog.echoPoints = Math.max(0, Math.round(Number(prog.echoPoints) || 0));
+  if (!prog.echoSpend || typeof prog.echoSpend !== 'object') prog.echoSpend = {};
+  for (const k of Object.keys(prog.echoSpend)) {
+    if (!ECHOES[k]) delete prog.echoSpend[k];
+    else prog.echoSpend[k] = Math.max(0, Math.round(Number(prog.echoSpend[k]) || 0));
+  }
   st.kills = st.kills || {};
   st.pvpKills = st.pvpKills || 0;
   st.claimedQuests = st.claimedQuests || [];
@@ -179,6 +192,7 @@ export function computeMaxHp(character) {
     + (st.progression.level - 1) * HP_PER_LEVEL
     + talentSum(character, 'hp')
     + affixBonus(st, 'hp')
+    + echoBonus(st, 'hp')
     + (blessingActive(st, 'vida') ? 25 : 0);
 }
 
@@ -191,6 +205,7 @@ export function computeArmor(character, skillBuffArmor = 0) {
   return equipArmor
     + raceOf(character).armor + classOf(character).armor
     + talentSum(character, 'armor')
+    + echoBonus(st, 'armor')
     + (blessingActive(st, 'piedra') ? 3 : 0)
     + skillBuffArmor;
 }
@@ -204,7 +219,8 @@ export function computeHealMul(character) {
 // Regeneración por segundo fuera de combate
 export function regenPerSec(character) {
   return 2.5 * raceOf(character).regenMul * classOf(character).regenMul
-    + affixBonus(character.state, 'regen');
+    + affixBonus(character.state, 'regen')
+    + echoBonus(character.state, 'regen');
 }
 
 // Velocidad extra por afijos, en fracción (0.06 = +6%). El servidor la usa para
@@ -215,7 +231,7 @@ export function affixSpeed(st) {
 
 // Multiplicador de oro por afijos de Codicia.
 export function goldMultiplier(st) {
-  return 1 + affixBonus(st, 'gold');
+  return 1 + affixBonus(st, 'gold') + echoBonus(st, 'gold');
 }
 
 // ---- Recurso de clase (furia / vigor / maná) ----
@@ -350,14 +366,19 @@ export function equippedWeaponDmg(st) {
 
 // Daño máximo verosímil de un jugador (para acotar lo que declare el cliente).
 // La fórmula vive en combat-data.js para no desincronizarse del cliente.
+// Los Ecos de Filo TIENEN que entrar aquí: si no, el servidor recortaría los
+// golpes buenos de un personaje veterano tomándolos por trampa.
 export function maxPlausibleHit(st) {
-  return maxMeleeHit(equippedWeaponDmg(st));
+  return maxMeleeHit(equippedWeaponDmg(st)) + echoBonus(st, 'dmg');
 }
 
-// ---- Experiencia y talentos ----
+// ---- Experiencia, talentos y Ecos ----
 export function addXp(st, amount) {
   const p = st.progression;
-  if (!amount || p.level >= MAX_LEVEL) return false;
+  if (!amount) return false;
+  // Pasado el techo, la experiencia deja de subir niveles y alimenta los Ecos.
+  if (p.level >= MAX_LEVEL) return addEchoXp(st, amount);
+
   p.xp += amount;
   let leveled = false;
   while (p.level < MAX_LEVEL && p.xp >= xpForLevel(p.level)) {
@@ -366,8 +387,44 @@ export function addXp(st, amount) {
     p.points++;
     leveled = true;
   }
-  if (p.level >= MAX_LEVEL) p.xp = 0;
+  // Al tocar techo, lo que sobra no se tira: arranca el primer Eco.
+  if (p.level >= MAX_LEVEL) {
+    const sobra = p.xp;
+    p.xp = 0;
+    if (sobra > 0) addEchoXp(st, sobra);
+  }
   return leveled;
+}
+
+// Suma experiencia de Eco y otorga los puntos que dé. Devuelve true si ha
+// ganado al menos uno (para que el cliente lo celebre igual que un nivel).
+export function addEchoXp(st, amount) {
+  const p = st.progression;
+  p.echoXp = (p.echoXp || 0) + amount;
+  let ganado = false;
+  while (p.echoXp >= xpForEcho(p.echoes || 0)) {
+    p.echoXp -= xpForEcho(p.echoes || 0);
+    p.echoes = (p.echoes || 0) + 1;
+    p.echoPoints = (p.echoPoints || 0) + 1;
+    ganado = true;
+  }
+  return ganado;
+}
+
+// Gasta un punto de Eco en una mejora permanente.
+export function spendEcho(st, statId) {
+  if (!ECHOES[statId]) return 'mejora desconocida';
+  const p = st.progression;
+  if ((p.echoPoints || 0) < 1) return 'no tienes puntos de Eco';
+  p.echoSpend[statId] = (p.echoSpend[statId] || 0) + 1;
+  p.echoPoints--;
+  return null;
+}
+
+// Lo que aportan los Ecos gastados en una estadística concreta.
+export function echoBonus(st, statId) {
+  const n = st.progression?.echoSpend?.[statId] || 0;
+  return n * (ECHOES[statId]?.per || 0);
 }
 
 export function spendTalent(st, classId, nodeId) {

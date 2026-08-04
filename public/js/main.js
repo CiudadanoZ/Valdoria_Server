@@ -29,6 +29,7 @@ import {
   initProgression, applyProgression, toggleTalents, setGoldForRespec,
   talentDmg, talentSpeedMul, talentCdr, isSkillUnlocked,
 } from './progression.js';
+import { ECHOES } from './talents-data.js';
 import { openCooking, refreshCooking } from './cooking.js';
 import { initLeaderboard, openLeaderboard, applyLeaderboard } from './leaderboard.js';
 import { ITEMS } from './items.js';
@@ -265,6 +266,12 @@ connect({
   respec_ok(msg) {
     ui.toast(`🔄 Talentos reasignados (−${msg.cost} oro). Vuelve a repartir tus puntos.`, 'quest');
     play('levelup');
+  },
+  echo_spent(msg) {
+    const def = ECHOES[msg.stat];
+    ui.toast(`◈ Eco invertido en ${def?.name || msg.stat}`, 'quest');
+    play('levelup');
+    setVitals(msg);   // la vida máxima puede haber subido
   },
   leaderboard(msg) { applyLeaderboard(msg.boards); },
   password_ok() { onPasswordResult(true); },
