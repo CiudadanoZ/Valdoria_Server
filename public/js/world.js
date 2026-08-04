@@ -597,36 +597,56 @@ export function buildWorld(scene) {
 // mismo tipo de señal flotante que el Tablón para que se vea que se puede usar.
 function buildDepthsHatch(scene, torchLights) {
   const group = new THREE.Group();
-  group.position.set(-6, 0, -6);   // debe coincidir con HATCH_SPOT del servidor
+  group.position.set(28, 0, -26);   // debe coincidir con HATCH_SPOT del servidor
 
-  const marco = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.34, 3.4), mat(0x39332c));
-  marco.position.y = 0.17;
+  // Brocal de piedra vieja: no es una trampilla nueva, es algo que llevaba
+  // siglos tapiado y que alguien volvió a abrir.
+  const marco = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.5, 4.2), mat(0x413a44));
+  marco.position.y = 0.25;
   marco.receiveShadow = true;
   group.add(marco);
 
   // El hueco: negro de verdad, sin luz que rebote.
   const hueco = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.4, 2.4),
+    new THREE.PlaneGeometry(2.8, 2.8),
     new THREE.MeshBasicMaterial({ color: 0x04040a })
   );
   hueco.rotation.x = -Math.PI / 2;
-  hueco.position.y = 0.35;
+  hueco.position.y = 0.52;
   group.add(hueco);
 
-  for (const [dx, dz] of [[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]]) {
-    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.5, 6), mat(0x2f2a24));
-    poste.position.set(dx, 0.75, dz);
-    poste.castShadow = true;
-    group.add(poste);
+  // Arco derruido sobre la boca: dos jambas inclinadas y el dintel caído.
+  for (const lado of [-1, 1]) {
+    const jamba = new THREE.Mesh(new THREE.BoxGeometry(0.8, 4.2, 0.8), mat(0x4a4250));
+    jamba.position.set(lado * 2.3, 2.1, 0);
+    jamba.rotation.z = lado * 0.09;
+    jamba.castShadow = true;
+    group.add(jamba);
+  }
+  const dintel = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.7, 1.0), mat(0x453d4a));
+  dintel.position.set(0, 4.3, 0);
+  dintel.rotation.z = 0.04;
+  dintel.castShadow = true;
+  group.add(dintel);
+
+  // Cascotes alrededor: la piedra que se llevó por delante al abrirse.
+  for (const [dx, dz, s] of [[-3.1, 2.4, 0.5], [2.9, 2.8, 0.38], [-2.6, -3.0, 0.44], [3.3, -2.2, 0.32]]) {
+    const cascote = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), mat(0x3d3742));
+    cascote.position.set(dx, s * 0.6, dz);
+    cascote.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    cascote.castShadow = true;
+    group.add(cascote);
   }
 
-  const brillo = new THREE.PointLight(0x7a4fd0, 9, 11);
-  brillo.position.set(0, 0.7, 0);
+  // El resplandor sale DEL hueco, hacia arriba: es lo que delata que abajo hay
+  // algo despierto.
+  const brillo = new THREE.PointLight(0x7a4fd0, 14, 16);
+  brillo.position.set(0, 1.2, 0);
   group.add(brillo);
-  torchLights.push({ light: brillo, base: 9, seed: Math.random() * 10 });
+  torchLights.push({ light: brillo, base: 14, seed: Math.random() * 10 });
 
   const marker = makeBoardMarker('🕳️', '#9a6fe0');
-  marker.position.y = 3.2;
+  marker.position.y = 5.6;   // por encima del arco
   group.add(marker);
   group.userData.marker = marker;
 
@@ -1348,7 +1368,7 @@ export function animateWorld({ torchLights, herbs, fishingSpots, waystones, boar
   if (bm) bm.position.y = 3.6 + Math.sin(time * 2.2) * 0.16;
   // Y lo mismo la boca de Las Profundidades, un poco más lenta y honda
   const hm = hatch?.userData?.marker;
-  if (hm) hm.position.y = 3.2 + Math.sin(time * 1.7) * 0.2;
+  if (hm) hm.position.y = 5.6 + Math.sin(time * 1.7) * 0.2;
   for (const f of fishingSpots) {
     f.children.forEach((c, i) => {
       if (c.isMesh && c.material.transparent) {

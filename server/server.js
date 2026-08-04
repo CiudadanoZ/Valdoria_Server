@@ -31,7 +31,10 @@ import {
   computeMaxResource, resourceDef, startingResource,
   affixSpeed, goldMultiplier, powerValue,
 } from './state.js';
-import { rollGear, displayName, tierFromXp, sellValueOf, POWERS } from '../public/js/affixes.js';
+import {
+  rollGear, displayName, tierFromXp, sellValueOf, POWERS,
+  retemper, reforge, forgeCost,
+} from '../public/js/affixes.js';
 import {
   DEPTHS_ENTRY, STAIRS_SPOT, HATCH_SPOT, HATCH_RANGE, MAX_DEPTH,
   buildDepthMobs, depthRealmId, isDepthRealm, guardianFor, ensureDepths, recordDepth,
@@ -1416,6 +1419,38 @@ wss.on('connection', (ws) => {
         st.inventory.gold += item.sell;
         sendSync(p);
         send(ws, { type: 'rpc_ok', kind: 'sell', itemId: item.id, gold: item.sell });
+        break;
+      }
+
+      // ---- Bramm retempla y reforja el equipo con afijos ----
+      case 'forge_roll': {
+        if (!st) return;
+        if (!nearSpot(p, NPC_SPOTS.bramm)) { fail(p, 'Estás demasiado lejos de la forja'); return; }
+        const kind = msg.kind === 'reforge' ? 'reforge' : 'retemper';
+        const idx = Number(msg.bagIndex);
+        const slot = st.inventory.slots[idx];
+        if (!slot?.roll) { fail(p, 'Bramm solo puede trabajar piezas con afijos'); return; }
+
+        const coste = forgeCost(slot.roll, kind);
+        if (bagCount(st, 'esquirla_abisal') < coste.shards) {
+          fail(p, `Te faltan Esquirlas Abisales (necesitas ${coste.shards})`); return;
+        }
+        if (st.inventory.gold < coste.gold) { fail(p, 'No llevas suficiente oro'); return; }
+
+        const nueva = kind === 'reforge'
+          ? reforge(slot.itemId, slot.roll)
+          : retemper(slot.roll);
+        if (!nueva) { fail(p, 'Bramm no sabe trabajar esa pieza'); return; }
+
+        bagRemove(st, 'esquirla_abisal', coste.shards);
+        st.inventory.gold -= coste.gold;
+        slot.roll = nueva;
+
+        sendSync(p);
+        send(ws, {
+          type: 'forge_rolled', kind, bagIndex: idx,
+          itemId: slot.itemId, roll: nueva, gold: coste.gold, shards: coste.shards,
+        });
         break;
       }
 

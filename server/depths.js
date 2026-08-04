@@ -18,9 +18,11 @@ export const DEPTHS_ORIGIN = [2000, 0];
 export const DEPTHS_RADIUS = 34;
 export const DEPTHS_ENTRY = [2000, 26];    // donde apareces al bajar
 export const STAIRS_SPOT = [2000, -30];    // la escalera al piso siguiente
-// Trampilla en la Ciudadela: en el empedrado al suroeste de la fuente, en un
-// claro de la plaza donde no tapa a ningún mercader.
-export const HATCH_SPOT = [-6, -6];
+// Boca de Las Profundidades: en el rincón trasero de la Ciudadela, al noreste,
+// detrás de la forja. Apartada a propósito — una escalera que nadie ha visto
+// terminar no se abre en mitad de la plaza mayor, se abre donde la ciudad
+// prefiere no mirar.
+export const HATCH_SPOT = [28, -26];
 export const HATCH_RANGE = 6;
 
 export const MAX_DEPTH = 999;
@@ -98,6 +100,10 @@ export function buildDepthMobs(depth, nextId, week = thisWeekNumber()) {
       xp: Math.round(base.xp * scale.xp),
       gold: [Math.round(base.gold[0] * scale.gold), Math.round(base.gold[1] * scale.gold)],
       respawn: 10 ** 9,   // en la mazmorra no reaparece nada: se limpia y se baja
+      // La Esquirla Abisal solo cae aquí abajo: es la moneda con la que Bramm
+      // vuelve a templar el equipo, y lo que da sentido a bajar hondo aunque ya
+      // tengas la pieza que querías.
+      drops: [...base.drops, ['esquirla_abisal', isGuardian ? 1 : 0.22]],
     };
     mobs.push({
       id: nextId(), type, def,

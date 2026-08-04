@@ -194,6 +194,59 @@ export function rollGear(itemId, tier = 1, rnd = Math.random) {
   return roll;
 }
 
+// ---- La forja de Bramm ----
+// Todo botín aleatorio necesita una vía de rezar menos. Estas dos operaciones
+// dejan APUNTAR a un objeto en vez de esperar a que caiga del cielo.
+
+// Retemplar: mismos afijos, valores nuevos. Es la apuesta pequeña — mejorar lo
+// que ya tienes sin arriesgarte a perder los afijos que te gustan.
+export function retemper(roll, rnd = Math.random) {
+  if (!roll) return null;
+  const out = {
+    tier: roll.tier,
+    grade: roll.grade,
+    affixes: roll.affixes.map((a) => ({ id: a.id, v: affixValue(AFFIXES[a.id], roll.tier, rnd) })),
+  };
+  if (roll.power) out.power = roll.power;   // el poder no se toca
+  return out;
+}
+
+// Reforjar: afijos nuevos de arriba abajo, manteniendo el grado. Es la apuesta
+// grande — puedes salir con el poder legendario que buscabas... o perder el que
+// llevabas. Por eso cuesta lo que cuesta.
+export function reforge(itemId, roll, rnd = Math.random) {
+  if (!roll) return null;
+  const item = ITEMS[itemId];
+  if (!item?.slot) return null;
+
+  const power = roll.grade === 3 && rnd() < POWER_CHANCE
+    ? POWER_IDS[Math.floor(rnd() * POWER_IDS.length)]
+    : null;
+  const nAffixes = roll.grade - (power ? 1 : 0);
+
+  const pool = affixesFor(item.slot);
+  const affixes = [];
+  for (let i = 0; i < nAffixes && pool.length; i++) {
+    const id = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+    affixes.push({ id, v: affixValue(AFFIXES[id], roll.tier, rnd) });
+  }
+  affixes.sort((a, b) => AFFIX_IDS.indexOf(a.id) - AFFIX_IDS.indexOf(b.id));
+  const out = { tier: roll.tier, grade: roll.grade, affixes };
+  if (power) out.power = power;
+  return out;
+}
+
+// Lo que cobra Bramm. Sube con el tier y con el grado: retemplar una reliquia
+// de los pisos hondos no puede costar lo mismo que una pieza de la llanura.
+export function forgeCost(roll, kind) {
+  if (!roll) return null;
+  const base = kind === 'reforge' ? { shards: 6, gold: 120 } : { shards: 2, gold: 40 };
+  return {
+    shards: base.shards + Math.floor(roll.tier / 4) + (roll.grade - 1),
+    gold: Math.round(base.gold * (1 + roll.tier * 0.25 + (roll.grade - 1) * 0.5)),
+  };
+}
+
 // ---- Leer instancias ----
 // Una entrada puede ser un id suelto ('espada_acero', como se guardaba antes),
 // o una instancia { itemId, roll }. Todo lo que consulte equipo o bolsa pasa

@@ -518,6 +518,18 @@ export const ITEMS = {
     armor: 4,
     sell: 180,
   },
+  // ---- Las Profundidades ----
+  esquirla_abisal: {
+    id: 'esquirla_abisal',
+    name: 'Esquirla Abisal',
+    icon: '🔮',
+    type: 'Material',
+    rarity: 'rare',
+    stackable: true,
+    desc: 'Un fragmento de piedra que solo existe bajo la Ciudadela, donde la roca recuerda lo que fue. Bramm la usa para volver a templar el acero encantado.',
+    sell: 30,
+  },
+
   // ---- Cumbres Heladas ----
   piel_escarcha: {
     id: 'piel_escarcha',

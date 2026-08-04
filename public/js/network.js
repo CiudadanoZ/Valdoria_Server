@@ -98,6 +98,9 @@ export function sendShopSell(itemId) { send({ type: 'shop_sell', itemId }); }
 // Vender una pieza concreta de la bolsa (la que tiene afijos), no "una igual".
 export function sendShopSellSlot(bagIndex) { send({ type: 'shop_sell', bagIndex }); }
 export function sendEchoSpend(stat) { send({ type: 'echo_spend', stat }); }
+// Bramm trabaja los afijos de una pieza: 'retemper' (mismos afijos, otros
+// valores) o 'reforge' (afijos nuevos de arriba abajo).
+export function sendForgeRoll(bagIndex, kind) { send({ type: 'forge_roll', bagIndex, kind }); }
 // Las Profundidades
 export function sendDepthsEnter(depth) { send({ type: 'depths_enter', depth }); }
 export function sendDepthsDescend() { send({ type: 'depths_descend' }); }

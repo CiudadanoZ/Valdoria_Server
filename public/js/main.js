@@ -267,6 +267,16 @@ connect({
     ui.toast(`🔄 Talentos reasignados (−${msg.cost} oro). Vuelve a repartir tus puntos.`, 'quest');
     play('levelup');
   },
+  forge_rolled(msg) {
+    const entry = { itemId: msg.itemId, roll: msg.roll };
+    const g = gradeInfo(msg.roll.grade);
+    ui.toast(
+      `🔨 ${msg.kind === 'reforge' ? 'Reforjada' : 'Retemplada'}: ${g.stars} ${displayName(entry)}`,
+      msg.roll.power ? 'quest' : undefined
+    );
+    play(msg.roll.power ? 'levelup' : 'craft');
+    refreshCrafting();
+  },
   echo_spent(msg) {
     const def = ECHOES[msg.stat];
     ui.toast(`◈ Eco invertido en ${def?.name || msg.stat}`, 'quest');
