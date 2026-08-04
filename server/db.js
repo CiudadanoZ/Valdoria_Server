@@ -412,20 +412,22 @@ export function listAuctions(limit = 100) {
   return Object.values(auctions)
     .sort((a, b) => b.ts - a.ts)
     .slice(0, limit)
-    .map((a) => ({ id: a.id, seller: a.seller, sellerName: a.sellerName, item: a.item, price: a.price, ts: a.ts }));
+    .map((a) => ({ id: a.id, seller: a.seller, sellerName: a.sellerName, item: a.item, roll: a.roll || null, price: a.price, ts: a.ts }));
 }
 export function auctionsBySeller(sellerKey) {
   return Object.values(auctions)
     .filter((a) => a.seller === sellerKey)
     .sort((a, b) => b.ts - a.ts)
-    .map((a) => ({ id: a.id, sellerName: a.sellerName, item: a.item, price: a.price, ts: a.ts }));
+    .map((a) => ({ id: a.id, sellerName: a.sellerName, item: a.item, roll: a.roll || null, price: a.price, ts: a.ts }));
 }
 export function getAuction(id) {
   return auctions[Number(id)] || null;
 }
-export function addAuction(sellerKey, sellerName, item, price) {
+// roll: la tirada de afijos de la pieza puesta en venta. Viaja con la subasta,
+// porque es justo lo que hace que valga lo que pide el vendedor.
+export function addAuction(sellerKey, sellerName, item, price, roll = null) {
   const id = nextAuctionId++;
-  auctions[id] = { id, seller: sellerKey, sellerName, item, price: Math.round(price), ts: Date.now() };
+  auctions[id] = { id, seller: sellerKey, sellerName, item, roll, price: Math.round(price), ts: Date.now() };
   saveSoon();
   return id;
 }

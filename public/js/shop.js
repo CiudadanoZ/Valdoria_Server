@@ -2,8 +2,9 @@
 import { ITEMS } from './items.js';
 import { SHOP_BUY_LIST } from './recipes.js';
 import { inventory, countItem } from './inventory.js';
-import { sendShopBuy, sendShopSell } from './network.js';
+import { sendShopBuy, sendShopSell, sendShopSellSlot } from './network.js';
 import { showTooltip, hideTooltip } from './ui.js';
+import { idOf, rollOf, displayName, affixLines, gradeInfo, sellValueOf } from './affixes.js';
 
 let currentTab = 'buy';
 
@@ -38,41 +39,55 @@ function render() {
     for (const itemId of SHOP_BUY_LIST) {
       const item = ITEMS[itemId];
       const canAfford = inventory.gold >= item.price;
-      list.appendChild(shopRow(item, `${item.price} 🪙`, 'Comprar', canAfford, () => sendShopBuy(itemId)));
+      list.appendChild(shopRow({ itemId }, `${item.price} 🪙`, 'Comprar', canAfford, () => sendShopBuy(itemId)));
     }
     return;
   }
 
+  // Lo corriente se agrupa por tipo; cada pieza CON AFIJOS va en su propia
+  // fila, porque no es intercambiable con otra que se llame igual.
   const sellable = [];
   const seen = new Set();
-  for (const s of inventory.slots) {
-    if (!s || seen.has(s.itemId)) continue;
+  inventory.slots.forEach((s, i) => {
+    if (!s) return;
     const item = ITEMS[s.itemId];
-    if (item.sell) {
+    if (!item?.sell) return;
+    if (rollOf(s)) {
+      sellable.push({ entry: s, index: i, count: 1 });
+    } else if (!seen.has(s.itemId)) {
       seen.add(s.itemId);
-      sellable.push({ item, count: countItem(s.itemId) });
+      sellable.push({ entry: s, index: -1, count: countItem(s.itemId) });
     }
-  }
+  });
+
   if (sellable.length === 0) {
     list.innerHTML = '<p class="shop-empty">No llevas nada que Lyra quiera comprar. El botín de las criaturas del exterior se vende bien.</p>';
     return;
   }
-  for (const { item, count } of sellable) {
-    list.appendChild(shopRow(item, `${item.sell} 🪙`, `Vender (x${count})`, true, () => sendShopSell(item.id)));
+  for (const { entry, index, count } of sellable) {
+    const gold = sellValueOf(entry);
+    const label = index >= 0 ? 'Vender' : `Vender (x${count})`;
+    list.appendChild(shopRow(entry, `${gold} 🪙`, label, true,
+      () => (index >= 0 ? sendShopSellSlot(index) : sendShopSell(entry.itemId))));
   }
 }
 
-function shopRow(item, priceText, btnLabel, enabled, onClick) {
+function shopRow(entry, priceText, btnLabel, enabled, onClick) {
+  const item = ITEMS[idOf(entry)];
+  const roll = rollOf(entry);
+  const grade = gradeInfo(roll?.grade || 0);
   const row = document.createElement('div');
   row.className = 'shop-row';
 
   const info = document.createElement('div');
   info.className = 'shop-info';
   info.innerHTML = `<span class="shop-icon rarity-${item.rarity}">${item.icon}</span>` +
-    `<span class="shop-name">${item.name}</span>`;
+    `<span class="shop-name" ${roll ? `style="color:${grade.color}"` : ''}>` +
+      `${displayName(entry)}${roll ? ` ${grade.stars}` : ''}</span>`;
   info.addEventListener('mousemove', (e) => showTooltip(
-    `<div class="t-name">${item.icon} ${item.name}</div>` +
-    `<div class="t-type">${item.type}</div>` +
+    `<div class="t-name" ${roll ? `style="color:${grade.color}"` : ''}>${item.icon} ${displayName(entry)}</div>` +
+    `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
+    affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('') +
     `<div class="t-desc">${item.desc}</div>`,
     e.clientX, e.clientY
   ));

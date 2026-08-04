@@ -4,6 +4,9 @@
 import { ITEMS } from './items.js';
 import { sendUseItem, sendEquip, sendUnequip } from './network.js';
 import { setGold, showTooltip, hideTooltip } from './ui.js';
+import {
+  statsOf, sumStats, displayName, affixLines, gradeInfo, rollOf, idOf, AFFIXES,
+} from './affixes.js';
 
 const SLOTS = 24;
 
@@ -68,17 +71,22 @@ export function countItem(itemId) {
   return inventory.slots.reduce((n, s) => n + (s && s.itemId === itemId ? s.count : 0), 0);
 }
 
-// Daño del arma EQUIPADA (0 si peleas con los puños).
+const equippedList = () => Object.values(inventory.equipment).filter(Boolean);
+
+// Daño del arma EQUIPADA (0 si peleas con los puños), afijos incluidos.
 export function getWeaponDamage() {
-  const itemId = inventory.equipment.arma;
-  return itemId ? (ITEMS[itemId].dmg || 0) : 0;
+  return statsOf(inventory.equipment.arma).dmg;
 }
 
 // Armadura total de las piezas EQUIPADAS.
 export function getArmor() {
-  return Object.values(inventory.equipment).reduce(
-    (sum, itemId) => sum + (itemId ? (ITEMS[itemId].armor || 0) : 0), 0
-  );
+  return sumStats(equippedList(), 'armor');
+}
+
+// Bonificaciones que aportan los afijos del equipo. El servidor lleva las
+// suyas por su cuenta; estas son para que el cliente mueva y pinte igual.
+export function getAffix(field) {
+  return sumStats(equippedList(), field);
 }
 
 // ---- Interacción (todo termina en un RPC al servidor) ----
@@ -90,14 +98,48 @@ function handleSlotClick(i) {
   else if (item.use) sendUseItem(item.id);
 }
 
-function itemTooltip(item) {
-  const stats = [];
-  if (item.dmg) stats.push(`+${item.dmg} daño`);
-  if (item.armor) stats.push(`+${item.armor} armadura`);
+// Comparación con lo que llevas puesto. Con botín aleatorio esta es LA pregunta
+// que se hace el jugador cada vez que cae algo: ¿mejora lo que tengo?
+function compareLines(entry) {
+  const item = ITEMS[idOf(entry)];
+  if (!item?.slot) return '';
+  const worn = inventory.equipment[item.slot];
+  if (!worn || worn === entry) return '';
+
+  const mine = statsOf(entry);
+  const theirs = statsOf(worn);
+  const rows = [];
+  for (const field of ['dmg', 'armor', 'hp', 'speed', 'healMul', 'regen', 'gold']) {
+    const diff = (mine[field] || 0) - (theirs[field] || 0);
+    if (!diff) continue;
+    const def = AFFIXES[field];
+    const label = def ? def.label : field;
+    const shown = field === 'dmg' || field === 'armor' || field === 'hp'
+      ? Math.round(diff)
+      : `${diff > 0 ? '+' : ''}${Math.round(diff * 100)}%`;
+    const txt = typeof shown === 'number' ? `${shown > 0 ? '+' : ''}${shown}` : shown;
+    rows.push(`<span class="${diff > 0 ? 'cmp-up' : 'cmp-down'}">${txt} ${label}</span>`);
+  }
+  if (!rows.length) return '<div class="t-cmp">Igual que lo equipado</div>';
+  return `<div class="t-cmp">Frente a lo equipado: ${rows.join(' · ')}</div>`;
+}
+
+function itemTooltip(entry, { compare = false } = {}) {
+  const item = ITEMS[idOf(entry)];
+  if (!item) return '';
+  const roll = rollOf(entry);
+  const grade = gradeInfo(roll?.grade || 0);
+  const base = [];
+  if (item.dmg) base.push(`${item.dmg} de daño`);
+  if (item.armor) base.push(`${item.armor} de armadura`);
+
   return (
-    `<div class="t-name">${item.icon} ${item.name}</div>` +
-    `<div class="t-type">${item.type}</div>` +
-    (stats.length ? `<div class="t-use">${stats.join(' · ')}</div>` : '') +
+    `<div class="t-name" ${roll ? `style="color:${grade.color}"` : ''}>` +
+      `${item.icon} ${displayName(entry)}${roll ? ` <span class="t-stars">${grade.stars}</span>` : ''}</div>` +
+    `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
+    (base.length ? `<div class="t-base">${base.join(' · ')}</div>` : '') +
+    affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('') +
+    (compare ? compareLines(entry) : '') +
     `<div class="t-desc">${item.desc}</div>` +
     (item.use ? `<div class="t-use">${item.use}</div>` : '') +
     (item.slot ? `<div class="t-use">Clic para equipar</div>` : '')
@@ -107,13 +149,13 @@ function itemTooltip(item) {
 function handleSlotHover(i, e) {
   const s = inventory.slots[i];
   if (!s) { hideTooltip(); return; }
-  showTooltip(itemTooltip(ITEMS[s.itemId]), e.clientX, e.clientY);
+  showTooltip(itemTooltip(s, { compare: true }), e.clientX, e.clientY);
 }
 
 function handleEquipHover(slotId, e) {
-  const itemId = inventory.equipment[slotId];
-  if (!itemId) { hideTooltip(); return; }
-  showTooltip(itemTooltip(ITEMS[itemId]) + '<div class="t-use">Clic para desequipar</div>', e.clientX, e.clientY);
+  const entry = inventory.equipment[slotId];
+  if (!entry) { hideTooltip(); return; }
+  showTooltip(itemTooltip(entry) + '<div class="t-use">Clic para desequipar</div>', e.clientX, e.clientY);
 }
 
 // ---- Renderizado ----
@@ -128,27 +170,39 @@ function render() {
       el.innerHTML = '';
     } else {
       const item = ITEMS[s.itemId];
-      el.className = 'inv-slot filled';
+      const roll = rollOf(s);
+      el.className = 'inv-slot filled' + (roll ? ` graded g${roll.grade}` : '');
       el.innerHTML =
         `<span class="rarity-${item.rarity}">${item.icon}</span>` +
-        (s.count > 1 ? `<span class="count">${s.count}</span>` : '');
+        (s.count > 1 ? `<span class="count">${s.count}</span>` : '') +
+        (roll ? `<span class="stars">${gradeInfo(roll.grade).stars}</span>` : '');
     }
   }
 
   const eqGrid = document.getElementById('equipment-grid');
   for (const el of eqGrid.children) {
-    const itemId = inventory.equipment[el.dataset.slot];
+    const entry = inventory.equipment[el.dataset.slot];
     const iconEl = el.querySelector('.equip-icon');
-    if (itemId) {
-      const item = ITEMS[itemId];
-      el.classList.add('filled');
+    if (entry) {
+      const item = ITEMS[idOf(entry)];
+      const roll = rollOf(entry);
+      el.className = `equip-slot filled${roll ? ` graded g${roll.grade}` : ''}`;
       iconEl.innerHTML = `<span class="rarity-${item.rarity}">${item.icon}</span>`;
     } else {
-      el.classList.remove('filled');
+      el.className = 'equip-slot';
       iconEl.innerHTML = '';
     }
   }
 
   const stats = document.getElementById('equip-stats');
-  if (stats) stats.textContent = `⚔ Daño ${5 + getWeaponDamage()}–${9 + getWeaponDamage()} · 🛡 Armadura ${getArmor()}`;
+  if (!stats) return;
+  const dmg = getWeaponDamage();
+  const extra = [];
+  const hp = getAffix('hp');
+  const spd = getAffix('speed');
+  if (hp) extra.push(`❤️ +${hp}`);
+  if (spd) extra.push(`💨 +${Math.round(spd * 100)}%`);
+  stats.textContent =
+    `⚔ Daño ${5 + dmg}–${9 + dmg} · 🛡 Armadura ${getArmor()}` +
+    (extra.length ? ` · ${extra.join(' · ')}` : '');
 }

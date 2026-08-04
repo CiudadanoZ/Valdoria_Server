@@ -5,6 +5,7 @@ import { inventory } from './inventory.js';
 import { sendTradeOffer, sendTradeConfirm, sendTradeCancel } from './network.js';
 import { toast, showTooltip, hideTooltip } from './ui.js';
 import { play } from './audio.js';
+import { idOf, rollOf, displayName, affixLines, gradeInfo } from './affixes.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -76,24 +77,41 @@ function renderBag() {
     const el = document.createElement('div');
     if (!s) { el.className = 'trade-slot'; bag.appendChild(el); return; }
     const item = ITEMS[s.itemId];
-    el.className = 'trade-slot filled' + (offerSlots.has(i) ? ' offered' : '');
-    el.innerHTML = `<span class="rarity-${item.rarity}">${item.icon}</span>` + (s.count > 1 ? `<span class="count">${s.count}</span>` : '');
+    const roll = rollOf(s);
+    el.className = 'trade-slot filled' + (offerSlots.has(i) ? ' offered' : '') + (roll ? ` graded g${roll.grade}` : '');
+    el.innerHTML = `<span class="rarity-${item.rarity}">${item.icon}</span>`
+      + (s.count > 1 ? `<span class="count">${s.count}</span>` : '')
+      + (roll ? `<span class="stars">${gradeInfo(roll.grade).stars}</span>` : '');
     el.addEventListener('click', () => toggleSlot(i));
-    el.addEventListener('mousemove', (e) => showTooltip(`<div class="t-name">${item.icon} ${item.name}</div><div class="t-type">${item.type}</div>`, e.clientX, e.clientY));
+    el.addEventListener('mousemove', (e) => showTooltip(tradeTooltip(s), e.clientX, e.clientY));
     el.addEventListener('mouseleave', hideTooltip);
     bag.appendChild(el);
   });
 }
 
+// Lo que se ve al pasar por encima de una pieza puesta sobre la mesa. Con
+// afijos hay que poder mirar bien lo que te ofrecen antes de aceptar.
+function tradeTooltip(entry) {
+  const item = ITEMS[idOf(entry)];
+  if (!item) return '<div class="t-name">¿?</div>';
+  const roll = rollOf(entry);
+  const grade = gradeInfo(roll?.grade || 0);
+  return `<div class="t-name" ${roll ? `style="color:${grade.color}"` : ''}>${item.icon} ${displayName(entry)}</div>` +
+    `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
+    affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('');
+}
+
 function renderOffer(container, items) {
   container.innerHTML = '';
-  for (const itemId of items) {
-    const item = ITEMS[itemId];
+  for (const entry of items) {
+    const item = ITEMS[idOf(entry)];
+    const roll = rollOf(entry);
     const el = document.createElement('div');
-    el.className = 'trade-slot filled';
-    el.innerHTML = `<span class="rarity-${item?.rarity || 'common'}">${item?.icon || '?'}</span>`;
+    el.className = 'trade-slot filled' + (roll ? ` graded g${roll.grade}` : '');
+    el.innerHTML = `<span class="rarity-${item?.rarity || 'common'}">${item?.icon || '?'}</span>`
+      + (roll ? `<span class="stars">${gradeInfo(roll.grade).stars}</span>` : '');
     if (item) {
-      el.addEventListener('mousemove', (e) => showTooltip(`<div class="t-name">${item.icon} ${item.name}</div><div class="t-type">${item.type}</div>`, e.clientX, e.clientY));
+      el.addEventListener('mousemove', (e) => showTooltip(tradeTooltip(entry), e.clientX, e.clientY));
       el.addEventListener('mouseleave', hideTooltip);
     }
     container.appendChild(el);

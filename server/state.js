@@ -8,9 +8,51 @@ import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
 import { dailyBounties, weeklyBounties, todayNumber, thisWeekNumber } from '../public/js/bounties.js';
 import { resourceOf } from '../public/js/skills-data.js';
 import { maxMeleeHit } from '../public/js/combat-data.js';
+import { idOf, rollOf, statsOf, sumStats, AFFIXES, clampTier } from '../public/js/affixes.js';
 
 const BAG_SLOTS = 24;
 const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio'];
+
+// Una pieza de equipo viaja siempre como { itemId, roll }. Se sanea al cargar
+// porque el estado llega de la base de datos y no hay que fiarse de él: una
+// tirada corrupta o inventada por un cliente listo se descarta en silencio.
+function sanitizeRoll(roll) {
+  if (!roll || typeof roll !== 'object' || !Array.isArray(roll.affixes)) return null;
+  const grade = Math.max(1, Math.min(3, Math.round(Number(roll.grade) || 1)));
+  const affixes = roll.affixes
+    .filter((a) => a && AFFIXES[a.id] && Number.isFinite(Number(a.v)))
+    .slice(0, grade)
+    .map((a) => ({ id: a.id, v: Number(a.v) }));
+  if (!affixes.length) return null;
+  return { tier: clampTier(roll.tier), grade: affixes.length, affixes };
+}
+
+// Acepta las dos formas que puede tener un objeto guardado: el id suelto de
+// antes de los afijos y la instancia de ahora.
+function sanitizeEntry(entry) {
+  const itemId = idOf(entry);
+  if (!itemId || !ITEMS[itemId]) return null;
+  const roll = sanitizeRoll(rollOf(entry));
+  return roll ? { itemId, roll } : { itemId };
+}
+
+function sanitizeSlot(slot) {
+  if (!slot) return null;
+  const entry = sanitizeEntry(slot);
+  if (!entry) return null;
+  const count = Math.max(1, Math.round(Number(slot.count) || 1));
+  return entry.roll ? { ...entry, count: 1 } : { ...entry, count };
+}
+
+// Las piezas equipadas, como lista, para sumar estadísticas de un vistazo.
+function equippedEntries(st) {
+  return EQUIP_KEYS.map((k) => st.inventory.equipment[k]).filter(Boolean);
+}
+
+// Bonificación total que aportan los afijos del equipo.
+export function affixBonus(st, field) {
+  return sumStats(equippedEntries(st), field);
+}
 
 // Normaliza el estado antiguo de un personaje al formato autoritativo.
 export function ensureState(character) {
@@ -18,11 +60,14 @@ export function ensureState(character) {
   st.inventory = st.inventory || { gold: 0, slots: [], equipment: {} };
   st.inventory.gold = Math.max(0, Number(st.inventory.gold) || 0);
   if (!Array.isArray(st.inventory.slots)) st.inventory.slots = [];
-  st.inventory.slots = st.inventory.slots.slice(0, BAG_SLOTS);
+  st.inventory.slots = st.inventory.slots.slice(0, BAG_SLOTS).map(sanitizeSlot);
   while (st.inventory.slots.length < BAG_SLOTS) st.inventory.slots.push(null);
   st.inventory.equipment = st.inventory.equipment || {};
+  // Los personajes de antes de los afijos guardaban el equipo como un id suelto
+  // ('espada_acero'); sanitizeEntry lo convierte en instancia sin tirada, así
+  // que siguen llevando puesto lo mismo y no pierden nada.
   for (const k of EQUIP_KEYS) {
-    if (st.inventory.equipment[k] === undefined) st.inventory.equipment[k] = null;
+    st.inventory.equipment[k] = sanitizeEntry(st.inventory.equipment[k]);
   }
   st.progression = st.progression || { level: 1, xp: 0, points: 0, talents: {} };
   st.kills = st.kills || {};
@@ -133,6 +178,7 @@ export function computeMaxHp(character) {
     + raceOf(character).hp + classOf(character).hp
     + (st.progression.level - 1) * HP_PER_LEVEL
     + talentSum(character, 'hp')
+    + affixBonus(st, 'hp')
     + (blessingActive(st, 'vida') ? 25 : 0);
 }
 
@@ -140,9 +186,8 @@ export function computeMaxHp(character) {
 // + mejora temporal de habilidad (Grito de Guerra / Escudo de Fe).
 export function computeArmor(character, skillBuffArmor = 0) {
   const st = character.state;
-  const equipArmor = Object.values(st.inventory.equipment).reduce(
-    (sum, itemId) => sum + (itemId ? (ITEMS[itemId]?.armor || 0) : 0), 0
-  );
+  // Suma base del objeto + lo que aporten sus afijos.
+  const equipArmor = affixBonus(st, 'armor');
   return equipArmor
     + raceOf(character).armor + classOf(character).armor
     + talentSum(character, 'armor')
@@ -151,12 +196,26 @@ export function computeArmor(character, skillBuffArmor = 0) {
 }
 
 export function computeHealMul(character) {
-  return classOf(character).healMul * (1 + talentSum(character, 'healMul'));
+  const st = character.state;
+  return classOf(character).healMul
+    * (1 + talentSum(character, 'healMul') + affixBonus(st, 'healMul'));
 }
 
 // Regeneración por segundo fuera de combate
 export function regenPerSec(character) {
-  return 2.5 * raceOf(character).regenMul * classOf(character).regenMul;
+  return 2.5 * raceOf(character).regenMul * classOf(character).regenMul
+    + affixBonus(character.state, 'regen');
+}
+
+// Velocidad extra por afijos, en fracción (0.06 = +6%). El servidor la usa para
+// ampliar el tope de movimiento que tolera antes de considerarlo trampa.
+export function affixSpeed(st) {
+  return affixBonus(st, 'speed');
+}
+
+// Multiplicador de oro por afijos de Codicia.
+export function goldMultiplier(st) {
+  return 1 + affixBonus(st, 'gold');
 }
 
 // ---- Recurso de clase (furia / vigor / maná) ----
@@ -187,12 +246,16 @@ export function bagCount(st, itemId) {
   return st.inventory.slots.reduce((n, s) => n + (s && s.itemId === itemId ? s.count : 0), 0);
 }
 
-export function bagAdd(st, itemId, count = 1) {
+// roll: tirada de afijos. Una pieza con tirada nunca se apila con otra, porque
+// aunque se llamen igual no son el mismo objeto.
+export function bagAdd(st, itemId, count = 1, roll = null) {
   const item = ITEMS[itemId];
   if (!item || count < 1) return false;
   const slots = st.inventory.slots;
-  if (item.stackable) {
-    const existing = slots.find((s) => s && s.itemId === itemId);
+  const clean = sanitizeRoll(roll);
+
+  if (item.stackable && !clean) {
+    const existing = slots.find((s) => s && s.itemId === itemId && !s.roll);
     if (existing) { existing.count += count; return true; }
     const free = slots.findIndex((s) => !s);
     if (free === -1) return false;
@@ -202,16 +265,48 @@ export function bagAdd(st, itemId, count = 1) {
   const freeCount = slots.reduce((n, s) => n + (s ? 0 : 1), 0);
   if (freeCount < count) return false;
   for (let c = 0; c < count; c++) {
-    slots[slots.findIndex((s) => !s)] = { itemId, count: 1 };
+    const slot = { itemId, count: 1 };
+    if (clean) slot.roll = clean;
+    slots[slots.findIndex((s) => !s)] = slot;
   }
   return true;
 }
 
+// Añade una instancia ya formada (la que venía de una subasta, un intercambio
+// o el suelo), conservando su tirada.
+export function bagAddEntry(st, entry) {
+  const clean = sanitizeEntry(entry);
+  if (!clean) return false;
+  return bagAdd(st, clean.itemId, 1, clean.roll || null);
+}
+
+// Saca de la bolsa la instancia concreta que hay en esa casilla y la devuelve.
+// Vender o subastar tiene que ir por aquí y no por bagRemove(itemId): si no,
+// el juego podría quitarte el Filo Glacial bueno y dejarte el malo.
+export function bagTakeAt(st, index, count = 1) {
+  const slot = st.inventory.slots[index];
+  if (!slot || slot.count < count) return null;
+  const taken = { itemId: slot.itemId, count };
+  if (slot.roll) taken.roll = slot.roll;
+  slot.count -= count;
+  if (slot.count <= 0) st.inventory.slots[index] = null;
+  return taken;
+}
+
+// Gasta objetos por id (recetas, misiones, entregas). Se lleva primero los que
+// NO tienen tirada: si tienes dos espadas iguales y una salió con afijos, una
+// receta no debería fundirte precisamente la buena.
 export function bagRemove(st, itemId, count = 1) {
   if (bagCount(st, itemId) < count) return false;
   let remaining = count;
   const slots = st.inventory.slots;
-  for (let i = 0; i < slots.length && remaining > 0; i++) {
+  const order = [...slots.keys()].sort((a, b) => {
+    const ra = slots[a]?.roll ? 1 : 0;
+    const rb = slots[b]?.roll ? 1 : 0;
+    return ra - rb || a - b;
+  });
+  for (const i of order) {
+    if (remaining <= 0) break;
     const s = slots[i];
     if (s && s.itemId === itemId) {
       const take = Math.min(s.count, remaining);
@@ -224,31 +319,33 @@ export function bagRemove(st, itemId, count = 1) {
 }
 
 // ---- Equipo ----
+// La tirada viaja con la pieza al equipar y al quitar: es lo que la hace tuya.
 export function equipFromBag(st, bagIndex) {
   const s = st.inventory.slots[bagIndex];
   if (!s) return false;
   const item = ITEMS[s.itemId];
   if (!item?.slot) return false;
   const prev = st.inventory.equipment[item.slot];
-  st.inventory.equipment[item.slot] = s.itemId;
-  st.inventory.slots[bagIndex] = prev ? { itemId: prev, count: 1 } : null;
+  const entry = { itemId: s.itemId };
+  if (s.roll) entry.roll = s.roll;
+  st.inventory.equipment[item.slot] = entry;
+  st.inventory.slots[bagIndex] = prev ? { ...prev, count: 1 } : null;
   return true;
 }
 
 export function unequipToBag(st, slotKey) {
   if (!EQUIP_KEYS.includes(slotKey)) return false;
-  const itemId = st.inventory.equipment[slotKey];
-  if (!itemId) return false;
+  const entry = st.inventory.equipment[slotKey];
+  if (!entry) return false;
   const free = st.inventory.slots.findIndex((s) => !s);
   if (free === -1) return false;
-  st.inventory.slots[free] = { itemId, count: 1 };
+  st.inventory.slots[free] = { ...entry, count: 1 };
   st.inventory.equipment[slotKey] = null;
   return true;
 }
 
 export function equippedWeaponDmg(st) {
-  const itemId = st.inventory.equipment.arma;
-  return itemId ? (ITEMS[itemId]?.dmg || 0) : 0;
+  return statsOf(st.inventory.equipment.arma).dmg;
 }
 
 // Daño máximo verosímil de un jugador (para acotar lo que declare el cliente).

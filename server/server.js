@@ -23,12 +23,15 @@ import {
 } from './db.js';
 import { WAYSTONES, waystoneById, MOUNTS } from '../public/js/world-data.js';
 import {
-  ensureState, bagCount, bagAdd, bagRemove, equipFromBag, unequipToBag,
+  ensureState, bagCount, bagAdd, bagRemove, bagAddEntry, bagTakeAt,
+  equipFromBag, unequipToBag,
   maxPlausibleHit, addXp, spendTalent, syncPayload,
   computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
   onBountyKill, claimBounty, acceptBounty, respecCost, respecTalents,
   computeMaxResource, resourceDef, startingResource,
+  affixSpeed, goldMultiplier,
 } from './state.js';
+import { rollGear, displayName, tierFromXp, sellValueOf } from '../public/js/affixes.js';
 import { skillById } from '../public/js/skills-data.js';
 import { xpForLevel } from '../public/js/talents-data.js';
 import { applyArmor } from '../public/js/combat-data.js';
@@ -476,11 +479,13 @@ function leaveParty(id, notifySelf = true) {
 
 // ============================ COMERCIO ENTRE JUGADORES ============================
 // Cada jugador en comercio guarda p.tradeWith (id del socio) y p.tradeOffer
-// { items:[itemId...], gold, confirmed }. El intercambio lo ejecuta el servidor
-// de forma atómica (con reversión si algo falla).
+// { slots:[índice...], items:[{itemId,roll}...], gold, confirmed }. Se guardan
+// las CASILLAS y no solo los ids: con afijos, dos objetos que se llaman igual
+// no valen lo mismo, y el que enseñas tiene que ser el que entregas.
+// El intercambio lo ejecuta el servidor de forma atómica (con reversión).
 const TRADE_RANGE = 14;
 
-function emptyOffer() { return { items: [], gold: 0, confirmed: false }; }
+function emptyOffer() { return { slots: [], items: [], gold: 0, confirmed: false }; }
 
 function offerPayload(p) {
   return { items: (p.tradeOffer?.items || []).slice(), gold: p.tradeOffer?.gold || 0, confirmed: !!p.tradeOffer?.confirmed };
@@ -513,16 +518,19 @@ function cancelTrade(id, reason = 'El comercio se ha cancelado.') {
   }
 }
 
-// ¿Tiene el jugador los objetos y el oro que ofrece?
+// ¿Sigue teniendo el jugador, en esas mismas casillas, lo que puso sobre la
+// mesa? Se comprueba casilla a casilla porque entre la oferta y la confirmación
+// pudo vender, equipar o subastar la pieza.
 function offerIsValid(p) {
   const st = p.character.state;
-  if ((p.tradeOffer.gold || 0) > st.inventory.gold) return false;
-  const need = {};
-  for (const itemId of p.tradeOffer.items) need[itemId] = (need[itemId] || 0) + 1;
-  for (const [itemId, n] of Object.entries(need)) {
-    if (!ITEMS[itemId] || bagCount(st, itemId) < n) return false;
-  }
-  return true;
+  const offer = p.tradeOffer;
+  if ((offer.gold || 0) > st.inventory.gold) return false;
+  return offer.slots.every((idx, n) => {
+    const slot = st.inventory.slots[idx];
+    const shown = offer.items[n];
+    if (!slot || !shown || slot.itemId !== shown.itemId) return false;
+    return JSON.stringify(slot.roll || null) === JSON.stringify(shown.roll || null);
+  });
 }
 
 function executeTrade(aId, bId) {
@@ -538,16 +546,16 @@ function executeTrade(aId, bId) {
   const backupA = JSON.parse(JSON.stringify(sa.inventory));
   const backupB = JSON.parse(JSON.stringify(sb.inventory));
 
-  // Retirar lo ofrecido de cada uno
-  for (const itemId of a.tradeOffer.items) bagRemove(sa, itemId, 1);
-  for (const itemId of b.tradeOffer.items) bagRemove(sb, itemId, 1);
+  // Retirar de cada uno las piezas EXACTAS que puso sobre la mesa
+  const fromA = a.tradeOffer.slots.map((i) => bagTakeAt(sa, i, 1)).filter(Boolean);
+  const fromB = b.tradeOffer.slots.map((i) => bagTakeAt(sb, i, 1)).filter(Boolean);
   sa.inventory.gold -= a.tradeOffer.gold;
   sb.inventory.gold -= b.tradeOffer.gold;
 
-  // Entregar al otro (comprobando espacio en la bolsa)
-  let ok = true;
-  for (const itemId of a.tradeOffer.items) { if (!bagAdd(sb, itemId, 1)) { ok = false; break; } }
-  if (ok) for (const itemId of b.tradeOffer.items) { if (!bagAdd(sa, itemId, 1)) { ok = false; break; } }
+  // Entregar al otro, con su tirada (comprobando espacio en la bolsa)
+  let ok = fromA.length === a.tradeOffer.slots.length && fromB.length === b.tradeOffer.slots.length;
+  if (ok) for (const entry of fromA) { if (!bagAddEntry(sb, entry)) { ok = false; break; } }
+  if (ok) for (const entry of fromB) { if (!bagAddEntry(sa, entry)) { ok = false; break; } }
 
   if (!ok) {
     sa.inventory = backupA; sb.inventory = backupB;
@@ -627,6 +635,13 @@ function dist(ax, az, bx, bz) {
 
 function isCryptMob(m) { return m.homeX > 400; }
 
+// Lo "duro" que es un bicho, en la escala que usan los afijos. Sale de la
+// experiencia que da, que es la medida de dureza que el juego ya tenía: así no
+// hay que etiquetar veinte criaturas a mano ni se puede desincronizar.
+function mobTier(m) {
+  return tierFromXp(m.def.xp) + (m.depthBonus || 0);
+}
+
 // ---- Muerte de un mob: oro/objetos/experiencia directos al estado del personaje ----
 function killMob(realm, m, killerId) {
   m.state = 'dead';
@@ -659,12 +674,26 @@ function killMob(realm, m, killerId) {
     if (!p?.character) continue;
     const st = p.character.state;
 
-    const gold = m.def.gold[0] + Math.floor(Math.random() * (m.def.gold[1] - m.def.gold[0] + 1));
+    const baseGold = m.def.gold[0] + Math.floor(Math.random() * (m.def.gold[1] - m.def.gold[0] + 1));
+    const gold = Math.round(baseGold * goldMultiplier(st));
     st.inventory.gold += gold;
 
+    // Lo que suelta se tira: el equipo sale con su grado y sus afijos según lo
+    // duro que fuera el bicho, así que dos Filos Glaciales nunca son iguales.
+    const tier = mobTier(m);
     const items = [];
     for (const [itemId, chance] of m.def.drops) {
-      if (Math.random() < chance && bagAdd(st, itemId, 1)) items.push(itemId);
+      if (Math.random() >= chance) continue;
+      const roll = rollGear(itemId, tier);
+      if (!bagAdd(st, itemId, 1, roll)) continue;
+      items.push(roll ? { itemId, roll } : itemId);
+      // Un hallazgo de grado alto es un acontecimiento: que se entere el reino.
+      if (roll && roll.grade >= 3) {
+        broadcast(realm, {
+          type: 'announce',
+          text: `✦✦✦ ¡${p.name} ha encontrado ${displayName({ itemId, roll })}, una reliquia digna de las canciones!`,
+        });
+      }
     }
 
     addXp(st, m.def.xp);
@@ -980,8 +1009,10 @@ wss.on('connection', (ws) => {
         const nx = Number(msg.x) || 0;
         const nz = Number(msg.z) || 0;
         const now = Date.now();
-        // La montura activa aumenta el presupuesto de velocidad
-        const speedCap = MAX_SPEED * (1 + (p.riding ? (MOUNTS[p.riding]?.speed || 0) : 0));
+        // La montura activa y los afijos del Viento aumentan el presupuesto
+        const speedCap = MAX_SPEED * (1
+          + (p.riding ? (MOUNTS[p.riding]?.speed || 0) : 0)
+          + affixSpeed(p.character.state));
         p.moveBudget = Math.min(speedCap + 6, p.moveBudget + ((now - p.lastMoveMs) / 1000) * speedCap);
         p.lastMoveMs = now;
 
@@ -1172,6 +1203,23 @@ wss.on('connection', (ws) => {
       case 'shop_sell': {
         if (!st) return;
         if (!nearSpot(p, NPC_SPOTS.lyra)) { fail(p, 'Estás demasiado lejos de Lyra'); return; }
+
+        // Con afijos, "vender una Espada de Acero" ya no basta: hay que decir
+        // CUÁL, porque una puede valer el triple que la otra. Las piezas con
+        // tirada se venden por su casilla; lo apilable sigue yendo por id.
+        if (msg.bagIndex !== undefined) {
+          const idx = Number(msg.bagIndex);
+          const slot = st.inventory.slots[idx];
+          if (!slot || !ITEMS[slot.itemId]?.sell) { fail(p, 'Lyra no compra eso'); return; }
+          const gold = sellValueOf(slot);
+          const taken = bagTakeAt(st, idx, 1);
+          if (!taken) { fail(p, 'No llevas ese objeto'); return; }
+          st.inventory.gold += gold;
+          sendSync(p);
+          send(ws, { type: 'rpc_ok', kind: 'sell', itemId: taken.itemId, gold });
+          break;
+        }
+
         const item = ITEMS[msg.itemId];
         if (!item?.sell) return;
         if (!bagRemove(st, item.id, 1)) return;
@@ -1596,15 +1644,19 @@ wss.on('connection', (ws) => {
         if (!p?.tradeWith || !st) return;
         const other = players.get(p.tradeWith);
         if (!other) { cancelTrade(id); return; }
-        // Resolver los índices de bolsa a itemIds (máx. 12 objetos)
+        // Resolver los índices de bolsa a instancias concretas (máx. 12 objetos)
         const idxs = Array.isArray(msg.slots) ? msg.slots.slice(0, 12) : [];
+        const slots = [];
         const items = [];
         for (const i of idxs) {
-          const slot = st.inventory.slots[Number(i)];
-          if (slot && ITEMS[slot.itemId]) items.push(slot.itemId);
+          const idx = Number(i);
+          const slot = st.inventory.slots[idx];
+          if (!slot || !ITEMS[slot.itemId] || slots.includes(idx)) continue;
+          slots.push(idx);
+          items.push(slot.roll ? { itemId: slot.itemId, roll: slot.roll } : { itemId: slot.itemId });
         }
         const gold = Math.max(0, Math.min(st.inventory.gold, Math.round(Number(msg.gold) || 0)));
-        p.tradeOffer = { items, gold, confirmed: false };
+        p.tradeOffer = { slots, items, gold, confirmed: false };
         other.tradeOffer.confirmed = false; // cualquier cambio anula la confirmación
         sendTradeUpdate(p, other);
         break;
@@ -1700,10 +1752,12 @@ wss.on('connection', (ws) => {
         if (ITEMS[slot.itemId].type === 'Objeto de misión') { fail(p, 'No puedes subastar objetos de misión'); return; }
         if (price < 1 || price > 1000000) { fail(p, 'Precio no válido'); return; }
         if (countAuctionsBySeller(p.account.name.toLowerCase()) >= 10) { fail(p, 'Máximo 10 subastas activas'); return; }
-        if (!bagRemove(st, slot.itemId, 1)) { fail(p, 'No tienes ese objeto'); return; }
-        addAuction(p.account.name.toLowerCase(), p.name, slot.itemId, price);
+        // Se retira ESA pieza exacta, con su tirada, no "una que se llame igual".
+        const taken = bagTakeAt(st, Number(msg.slot), 1);
+        if (!taken) { fail(p, 'No tienes ese objeto'); return; }
+        addAuction(p.account.name.toLowerCase(), p.name, taken.itemId, price, taken.roll || null);
         sendSync(p);
-        send(ws, { type: 'rpc_ok', kind: 'auction_create', itemId: slot.itemId });
+        send(ws, { type: 'rpc_ok', kind: 'auction_create', itemId: taken.itemId });
         break;
       }
       case 'auction_buy': {
@@ -1712,7 +1766,7 @@ wss.on('connection', (ws) => {
         if (!a) { fail(p, 'Esa subasta ya no existe'); return; }
         if (a.seller === p.account.name.toLowerCase()) { fail(p, 'No puedes comprar tu propia subasta'); return; }
         if (st.inventory.gold < a.price) { fail(p, 'No llevas suficiente oro'); return; }
-        if (!bagAdd(st, a.item, 1)) { fail(p, 'Bolsa llena'); return; }
+        if (!bagAdd(st, a.item, 1, a.roll || null)) { fail(p, 'Bolsa llena'); return; }
         st.inventory.gold -= a.price;
         removeAuction(a.id);
         // Pagar al vendedor (menos 5% de comisión); si está conectado, sincronizar
@@ -1735,7 +1789,7 @@ wss.on('connection', (ws) => {
         if (!st) return;
         const a = getAuction(Number(msg.id));
         if (!a || a.seller !== p.account.name.toLowerCase()) return;
-        if (!bagAdd(st, a.item, 1)) { fail(p, 'Bolsa llena: haz sitio para recuperar el objeto'); return; }
+        if (!bagAdd(st, a.item, 1, a.roll || null)) { fail(p, 'Bolsa llena: haz sitio para recuperar el objeto'); return; }
         removeAuction(a.id);
         sendSync(p);
         send(ws, { type: 'rpc_ok', kind: 'auction_cancel', itemId: a.item });

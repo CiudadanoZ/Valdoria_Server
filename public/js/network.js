@@ -95,6 +95,8 @@ export function sendEquip(bagIndex) { send({ type: 'equip', bagIndex }); }
 export function sendUnequip(slot) { send({ type: 'unequip', slot }); }
 export function sendShopBuy(itemId) { send({ type: 'shop_buy', itemId }); }
 export function sendShopSell(itemId) { send({ type: 'shop_sell', itemId }); }
+// Vender una pieza concreta de la bolsa (la que tiene afijos), no "una igual".
+export function sendShopSellSlot(bagIndex) { send({ type: 'shop_sell', bagIndex }); }
 export function sendCraft(recipe) { send({ type: 'craft', recipe }); }
 export function sendCook(recipe) { send({ type: 'cook', recipe }); }
 export function sendGather(herb) { send({ type: 'gather', herb }); }

@@ -8,6 +8,7 @@ import {
   sendAuctionBrowse, sendAuctionCreate, sendAuctionBuy, sendAuctionCancel, sendAuctionCollect,
 } from './network.js';
 import { showTooltip, hideTooltip, toast } from './ui.js';
+import { idOf, rollOf, displayName, affixLines, gradeInfo } from './affixes.js';
 
 let listings = [];
 let mine = [];
@@ -39,8 +40,25 @@ export function refreshAuction() {
   if (!document.getElementById('auction-panel').classList.contains('hidden')) sendAuctionBrowse();
 }
 
-function itemTip(item) {
-  return `<div class="t-name">${item.icon} ${item.name}</div><div class="t-type">${item.type}</div><div class="t-desc">${item.desc}</div>`;
+// entry: id suelto o instancia { itemId, roll }. En una casa de subastas con
+// botín aleatorio, los afijos SON el anuncio: sin verlos no se puede pujar.
+function itemTip(entry) {
+  const item = ITEMS[idOf(entry)];
+  if (!item) return '';
+  const roll = rollOf(entry);
+  const grade = gradeInfo(roll?.grade || 0);
+  return `<div class="t-name" ${roll ? `style="color:${grade.color}"` : ''}>${item.icon} ${displayName(entry)}</div>` +
+    `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
+    affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('') +
+    `<div class="t-desc">${item.desc}</div>`;
+}
+
+// Nombre con estrellas y color para las filas del listado.
+function itemLabel(entry) {
+  const roll = rollOf(entry);
+  const grade = gradeInfo(roll?.grade || 0);
+  return `<span class="shop-name" ${roll ? `style="color:${grade.color}"` : ''}>` +
+    `${displayName(entry)}${roll ? ` ${grade.stars}` : ''}</span>`;
 }
 
 function render() {
@@ -67,12 +85,14 @@ function renderBuy() {
   for (const a of listings) {
     const item = ITEMS[a.item];
     if (!item) continue;
+    const entry = { itemId: a.item, roll: a.roll || null };
     const row = document.createElement('div');
     row.className = 'shop-row';
     const info = document.createElement('div');
     info.className = 'shop-info';
-    info.innerHTML = `<span class="shop-icon rarity-${item.rarity}">${item.icon}</span><span class="shop-name">${item.name}<br/><small style="color:#8a7a5a">${a.sellerName}</small></span>`;
-    info.addEventListener('mousemove', (e) => showTooltip(itemTip(item), e.clientX, e.clientY));
+    info.innerHTML = `<span class="shop-icon rarity-${item.rarity}">${item.icon}</span>` +
+      `<span class="shop-name">${itemLabel(entry)}<br/><small style="color:#8a7a5a">${a.sellerName}</small></span>`;
+    info.addEventListener('mousemove', (e) => showTooltip(itemTip(entry), e.clientX, e.clientY));
     info.addEventListener('mouseleave', hideTooltip);
     row.appendChild(info);
     const price = document.createElement('span');
@@ -97,16 +117,21 @@ function renderSell() {
     const el = document.createElement('div');
     if (!s) { el.className = 'trade-slot'; grid.appendChild(el); return; }
     const item = ITEMS[s.itemId];
+    const roll = rollOf(s);
     const sellable = item.type !== 'Objeto de misión';
-    el.className = 'trade-slot filled' + (sellSlot === i ? ' offered' : '') + (sellable ? '' : ' locked');
-    el.innerHTML = `<span class="rarity-${item.rarity}">${item.icon}</span>` + (s.count > 1 ? `<span class="count">${s.count}</span>` : '');
+    el.className = 'trade-slot filled' + (sellSlot === i ? ' offered' : '') + (sellable ? '' : ' locked')
+      + (roll ? ` graded g${roll.grade}` : '');
+    el.innerHTML = `<span class="rarity-${item.rarity}">${item.icon}</span>`
+      + (s.count > 1 ? `<span class="count">${s.count}</span>` : '')
+      + (roll ? `<span class="stars">${gradeInfo(roll.grade).stars}</span>` : '');
     if (sellable) el.addEventListener('click', () => { sellSlot = (sellSlot === i ? null : i); render(); });
-    el.addEventListener('mousemove', (e) => showTooltip(itemTip(item), e.clientX, e.clientY));
+    el.addEventListener('mousemove', (e) => showTooltip(itemTip(s), e.clientX, e.clientY));
     el.addEventListener('mouseleave', hideTooltip);
     grid.appendChild(el);
   });
   const sel = sellSlot !== null ? inventory.slots[sellSlot] : null;
-  document.getElementById('ah-sell-selected').textContent = sel ? `${ITEMS[sel.itemId].icon} ${ITEMS[sel.itemId].name}` : 'ningún objeto';
+  document.getElementById('ah-sell-selected').textContent =
+    sel ? `${ITEMS[sel.itemId].icon} ${displayName(sel)}` : 'ningún objeto';
   document.getElementById('ah-sell-btn').disabled = !sel;
 }
 
@@ -125,9 +150,11 @@ function renderMine() {
   for (const a of mine) {
     const item = ITEMS[a.item];
     if (!item) continue;
+    const entry = { itemId: a.item, roll: a.roll || null };
     const row = document.createElement('div');
     row.className = 'shop-row';
-    row.innerHTML = `<div class="shop-info"><span class="shop-icon rarity-${item.rarity}">${item.icon}</span><span class="shop-name">${item.name}</span></div><span class="shop-price">${a.price} 🪙</span>`;
+    row.innerHTML = `<div class="shop-info"><span class="shop-icon rarity-${item.rarity}">${item.icon}</span>` +
+      `${itemLabel(entry)}</div><span class="shop-price">${a.price} 🪙</span>`;
     const btn = document.createElement('button');
     btn.className = 'shop-btn';
     btn.textContent = 'Retirar';

@@ -32,7 +32,8 @@ import {
 import { openCooking, refreshCooking } from './cooking.js';
 import { initLeaderboard, openLeaderboard, applyLeaderboard } from './leaderboard.js';
 import { ITEMS } from './items.js';
-import { initInventory, applyInventory, getWeaponDamage, getArmor, inventory } from './inventory.js';
+import { idOf, rollOf, displayName, gradeInfo } from './affixes.js';
+import { initInventory, applyInventory, getWeaponDamage, getArmor, getAffix, inventory } from './inventory.js';
 import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker, questState } from './quests.js';
 import { initShop, openShop, refreshShop } from './shop.js';
 import { initCrafting, openCrafting, refreshCrafting } from './crafting.js';
@@ -185,18 +186,25 @@ connect({
   // aquí solo se celebra y se avanza el estado de las misiones.
   loot(msg) {
     if (msg.gold) { ui.toast(`+${msg.gold} de oro`); play('gold'); }
-    let legendary = false;
-    for (const itemId of msg.items) {
-      const item = ITEMS[itemId];
+    let fanfare = false;
+    // Cada entrada es un id suelto o una instancia { itemId, roll } con afijos.
+    for (const entry of msg.items) {
+      const item = ITEMS[idOf(entry)];
       if (!item) continue;
-      if (item.rarity === 'legendary') {
-        legendary = true;
-        ui.toast(`✦ ¡LEGENDARIO! ${item.icon} ${item.name} ✦`, 'quest');
+      const roll = rollOf(entry);
+      const name = `${item.icon} ${displayName(entry)}`;
+      if (roll) {
+        fanfare = fanfare || roll.grade >= 2;
+        const g = gradeInfo(roll.grade);
+        ui.toast(`${g.stars} ${name} — ${g.name}`, roll.grade >= 2 ? 'quest' : undefined);
+      } else if (item.rarity === 'legendary') {
+        fanfare = true;
+        ui.toast(`✦ ¡LEGENDARIO! ${name} ✦`, 'quest');
       } else {
-        ui.toast(`Obtenido: ${item.icon} ${item.name}`);
+        ui.toast(`Obtenido: ${name}`);
       }
     }
-    if (msg.items.length) play(legendary ? 'levelup' : 'loot');
+    if (msg.items.length) play(fanfare ? 'levelup' : 'loot');
     onEnemyKilled(msg.mobType);
     onLootChanged();
     saveGame();
@@ -988,7 +996,7 @@ function loop() {
 
   updateCombat(dt);
   const mountMul = pstate.riding ? (1 + (MOUNTS[pstate.riding]?.speed || 0)) : 1;
-  player.speedMul = skillSpeedMul() * talentSpeedMul() * mountMul;
+  player.speedMul = skillSpeedMul() * talentSpeedMul() * mountMul * (1 + getAffix('speed'));
   player.update(dt);
   remotes.update(dt);
   mobs.update(dt);
