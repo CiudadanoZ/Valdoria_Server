@@ -97,6 +97,11 @@ export function sendShopBuy(itemId) { send({ type: 'shop_buy', itemId }); }
 export function sendShopSell(itemId) { send({ type: 'shop_sell', itemId }); }
 // Vender una pieza concreta de la bolsa (la que tiene afijos), no "una igual".
 export function sendShopSellSlot(bagIndex) { send({ type: 'shop_sell', bagIndex }); }
+// Las Profundidades
+export function sendDepthsEnter(depth) { send({ type: 'depths_enter', depth }); }
+export function sendDepthsDescend() { send({ type: 'depths_descend' }); }
+export function sendDepthsLeave() { send({ type: 'depths_leave' }); }
+export function sendDepthsInfo() { send({ type: 'depths_info' }); }
 export function sendCraft(recipe) { send({ type: 'craft', recipe }); }
 export function sendCook(recipe) { send({ type: 'cook', recipe }); }
 export function sendGather(herb) { send({ type: 'gather', herb }); }

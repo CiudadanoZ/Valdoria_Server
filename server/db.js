@@ -309,20 +309,29 @@ export function getLeaderboards(topN = 10) {
         gold: c.state?.inventory?.gold || 0,
         kills,
         pvp: c.state?.pvpKills || 0,
+        depth: c.state?.depths?.best || 0,
       });
     }
   }
   const top = (metric, tiebreak) => [...chars]
     .sort((a, b) => (b[metric] - a[metric]) || ((b[tiebreak] || 0) - (a[tiebreak] || 0)))
     .slice(0, topN)
-    .map((c) => ({ name: c.name, race: c.race, class: c.class, level: c.level, gold: c.gold, kills: c.kills, pvp: c.pvp }));
+    .map((c) => ({ name: c.name, race: c.race, class: c.class, level: c.level, gold: c.gold, kills: c.kills, pvp: c.pvp, depth: c.depth }));
   return {
     level: top('level', 'xp'),
     gold: top('gold', 'level'),
     kills: top('kills', 'level'),
     pvp: top('pvp', 'level'),
+    // Quién bajó más hondo ESTA semana. La marca se reinicia cada lunes con la
+    // semilla, así que la carrera vuelve a empezar para todos.
+    depth: top('depth', 'level').filter((c) => c.depth > 0),
     guilds: topGuilds(topN),
   };
+}
+
+// Solo la tabla de Las Profundidades, para el panel de la mazmorra.
+export function getDepthsBoard(topN = 10) {
+  return getLeaderboards(topN).depth;
 }
 
 export function getCharacter(account, charId) {

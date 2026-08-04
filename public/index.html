@@ -350,6 +350,29 @@
     <div id="bounty-list"></div>
   </div>
 
+  <!-- Las Profundidades: la escalera sin fondo bajo la Ciudadela -->
+  <div id="depths-panel" class="panel hidden">
+    <div class="panel-header">
+      <h2>Las Profundidades</h2>
+      <button class="close-btn" id="depths-close">✕</button>
+    </div>
+    <div id="depths-info"></div>
+    <div class="depths-controls">
+      <label for="depths-floor">Descender al</label>
+      <select id="depths-floor"></select>
+      <button id="depths-enter-btn" class="shop-btn">Bajar</button>
+    </div>
+    <h3 class="bounty-section">Los que más hondo llegaron esta semana</h3>
+    <div id="depths-board"></div>
+  </div>
+
+  <!-- Marcador de piso mientras estás dentro -->
+  <div id="depths-hud" class="hidden"></div>
+  <div id="depths-actions">
+    <button id="depths-descend-btn" class="shop-btn hidden">⬇ Bajar al siguiente piso</button>
+    <button id="depths-leave-btn" class="shop-btn hidden">⬆ Salir a la Ciudadela</button>
+  </div>
+
   <!-- Destello rojo al recibir daño -->
   <div id="damage-vignette"></div>
 

@@ -400,6 +400,14 @@ export class Mobs {
     for (const data of list) this.create(data);
   }
 
+  // Vacía la escena de criaturas y la repuebla. Se usa al cruzar entre el mundo
+  // y una instancia de Las Profundidades: son poblaciones distintas.
+  reset(list = []) {
+    for (const mob of this.map.values()) this.scene.remove(mob.mesh);
+    this.map.clear();
+    this.init(list);
+  }
+
   create({ id, type, x, z, hp, dead }) {
     const info = MOB_INFO[type];
     if (!info || this.map.has(id)) return;

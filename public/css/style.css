@@ -337,6 +337,38 @@ canvas { display: block; }
 #mount-btn:hover { border-color: var(--gold); }
 #mount-btn.on { color: #9ad0ff; border-color: #4a90d0; box-shadow: 0 0 10px rgba(74,144,208,0.4); }
 
+/* ---- Las Profundidades ---- */
+.depths-controls {
+  display: flex; align-items: center; gap: 10px;
+  margin: 12px 0; padding: 10px; border: 1px solid #3a2d18; border-radius: 6px;
+  background: rgba(20, 12, 28, .5);
+}
+.depths-controls label { color: #8a7a5a; font-size: 0.92em; }
+.depths-controls select {
+  flex: 1; padding: 6px 8px; border-radius: 4px;
+  background: #17121d; color: #e8dcc0; border: 1px solid #4a3d28;
+}
+.depths-mark { color: #b9a06f; }
+
+/* Marcador de piso, mientras estás dentro */
+#depths-hud {
+  position: fixed; top: 96px; left: 50%; transform: translateX(-50%);
+  z-index: 40; text-align: center; pointer-events: none;
+  padding: 8px 18px; border-radius: 8px;
+  background: linear-gradient(180deg, rgba(30,14,40,.86), rgba(12,8,18,.86));
+  border: 1px solid #6a4a9a; box-shadow: 0 0 18px rgba(122,79,208,.35);
+}
+#depths-hud .dh-floor { color: #c9a4f0; font-size: 1.25em; letter-spacing: 2px; }
+#depths-hud .dh-lock { color: #d08a8a; font-size: 0.9em; }
+#depths-hud .dh-open { color: #d9a441; font-size: 0.9em; }
+#depths-hud .dh-warn { color: #6a5a48; font-size: 0.8em; font-style: italic; margin-top: 2px; }
+
+#depths-actions {
+  position: fixed; top: 176px; left: 50%; transform: translateX(-50%);
+  z-index: 40; display: flex; gap: 8px;
+}
+#depths-actions button.hidden { display: none; }
+
 /* ---- Botín con afijos ---- */
 /* El borde y las estrellas dicen de un vistazo si merece la pena mirar. */
 .inv-slot.graded, .trade-slot.graded, .equip-slot.graded { position: relative; }

@@ -16,7 +16,7 @@ import {
   loadDb, flushAndClose, authenticate, publicCharacters, createCharacter,
   deleteCharacter, getCharacter, saveCharacterState, touch,
   isAdminAccount, banAccount, unbanAccount, changePassword, getLeaderboards,
-  getAccountsSummary, findCharacterByName,
+  getDepthsBoard, getAccountsSummary, findCharacterByName,
   listAuctions, auctionsBySeller, getAuction, addAuction, removeAuction, countAuctionsBySeller,
   getGuild, guildExists, createGuild, deleteGuild, guildAddMember, guildRemoveMember,
   setGuildMotd, setGuildLeader, isCleanName,
@@ -32,6 +32,10 @@ import {
   affixSpeed, goldMultiplier,
 } from './state.js';
 import { rollGear, displayName, tierFromXp, sellValueOf } from '../public/js/affixes.js';
+import {
+  DEPTHS_ENTRY, STAIRS_SPOT, HATCH_SPOT, HATCH_RANGE, MAX_DEPTH,
+  buildDepthMobs, depthRealmId, isDepthRealm, guardianFor, ensureDepths, recordDepth,
+} from './depths.js';
 import { skillById } from '../public/js/skills-data.js';
 import { xpForLevel } from '../public/js/talents-data.js';
 import { applyArmor } from '../public/js/combat-data.js';
@@ -242,6 +246,12 @@ function damagePlayer(p, id, rawDmg, mobName) {
       type: 'you_died', by: mobName, x: p.x, z: p.z, xpLost,
       ...vitals(p), ...weakPayload(p),
     });
+    // Caer en Las Profundidades acaba el descenso: la marca es hasta dónde
+    // llegaste VIVO, y por eso bajar un piso más siempre es una apuesta.
+    if (isDepthRealm(p.realm)) {
+      leaveDepths(p, id, `Caíste en el piso ${p.depth}. Las Profundidades te escupen a la superficie.`);
+      return;
+    }
     broadcast(p.realm, { type: 'player_state', id, x: p.x, z: p.z, rot: p.rot }, id);
   } else {
     send(p.ws, { type: 'player_hurt', dmg: reduced, mobName, ...vitals(p) });
@@ -642,6 +652,66 @@ function mobTier(m) {
   return tierFromXp(m.def.xp) + (m.depthBonus || 0);
 }
 
+// ============================ LAS PROFUNDIDADES ============================
+// Cada héroe baja a su propia instancia. Nace al entrar, se rehace al descender
+// un piso y el bucle de IA la desmonta en cuanto se queda vacía.
+
+// Monta (o rehace) la instancia del héroe en el piso pedido y lo mete dentro.
+function enterDepths(p, id, depth) {
+  const realmId = depthRealmId(p.charId);
+  const mobs = new Map();
+  for (const m of buildDepthMobs(depth, () => nextMobId++)) mobs.set(m.id, m);
+  realmMobs.set(realmId, mobs);
+
+  const prev = p.realm;
+  p.realm = realmId;
+  p.depth = depth;
+  p.stairsOpen = false;
+  [p.x, p.z] = DEPTHS_ENTRY;
+  p.moveBudget = 4;
+  p.lastMoveMs = Date.now();
+  stopFishing(p);
+  dismount(p, id);
+  // Que el mundo que deja atrás no siga viéndolo plantado en la plaza.
+  if (prev && prev !== realmId) broadcast(prev, { type: 'player_leave', id }, id);
+
+  send(p.ws, {
+    type: 'depths_entered',
+    depth,
+    realm: realmId,
+    x: p.x, z: p.z,
+    guardian: MOB_TYPES[guardianFor(depth)].name,
+    mobs: mobSnapshotFull(realmId),
+    best: ensureDepths(p.character.state).best,
+  });
+}
+
+// Devuelve al héroe a la Ciudadela y desmonta su instancia.
+function leaveDepths(p, id, reason = 'Sales de Las Profundidades.') {
+  if (!isDepthRealm(p.realm)) return;
+  const realmId = p.realm;
+  const depth = p.depth || 1;
+  realmMobs.delete(realmId);
+
+  p.realm = p.homeRealm || REALMS[0].id;
+  p.depth = 0;
+  p.stairsOpen = false;
+  [p.x, p.z] = HATCH_SPOT;
+  p.moveBudget = 4;
+  p.lastMoveMs = Date.now();
+
+  sendSync(p);
+  send(p.ws, {
+    type: 'depths_left', reason, depth,
+    realm: p.realm, x: p.x, z: p.z,
+    mobs: mobSnapshotFull(p.realm),
+  });
+  broadcast(p.realm, {
+    type: 'player_join', id, name: p.name, race: p.race, class: p.class,
+    x: p.x, z: p.z, rot: p.rot,
+  }, id);
+}
+
 // ---- Muerte de un mob: oro/objetos/experiencia directos al estado del personaje ----
 function killMob(realm, m, killerId) {
   m.state = 'dead';
@@ -667,6 +737,23 @@ function killMob(realm, m, killerId) {
   if (m.isEvent) {
     const hero = players.get(killerId)?.name || 'un héroe';
     broadcast(realm, { type: 'announce', text: `🏆 ¡El ${m.def.name} ha caído por la mano de ${hero} y sus aliados! El botín se reparte entre los valientes.` });
+  }
+
+  // El guardián del umbral era lo único que cerraba la escalera al piso de abajo.
+  if (m.isGuardian && isDepthRealm(realm)) {
+    for (const [pid, p] of players) {
+      if (p.realm !== realm) continue;
+      p.stairsOpen = true;
+      recordDepth(p.character.state, p.depth || 1);
+      sendSync(p);
+      send(p.ws, {
+        type: 'depths_stairs_open',
+        depth: p.depth,
+        x: STAIRS_SPOT[0], z: STAIRS_SPOT[1],
+        text: `El ${m.def.name} cae y la escalera al piso ${(p.depth || 1) + 1} se abre.`,
+      });
+      void pid;
+    }
   }
 
   for (const pid of recipients) {
@@ -710,9 +797,13 @@ const TICK = 0.1;
 setInterval(() => {
   const now = Date.now();
 
-  for (const realm of REALMS) {
-    const mobs = realmMobs.get(realm.id);
-    const realmPlayers = [...players.entries()].filter(([, p]) => p.realm === realm.id);
+  // Los reinos fijos más las instancias de Las Profundidades que estén vivas.
+  for (const realmId of [...realmMobs.keys()]) {
+    const realm = { id: realmId };
+    const mobs = realmMobs.get(realmId);
+    const realmPlayers = [...players.entries()].filter(([, p]) => p.realm === realmId);
+    // Una instancia sin nadie dentro se desmonta: no tiene sentido simularla.
+    if (isDepthRealm(realmId) && realmPlayers.length === 0) { realmMobs.delete(realmId); continue; }
     const changed = [];
 
     for (const m of mobs.values()) {
@@ -1044,11 +1135,14 @@ wss.on('connection', (ws) => {
         if (!p?.realm || !p.charId) return;
         // El cliente solo reporta las banderas de diálogo de misiones; la vida
         // y la posición las impone el servidor
+        // Dentro de la mazmorra se guarda la trampilla: las coordenadas de una
+        // instancia no valen nada cuando esa instancia deja de existir.
+        const pos = isDepthRealm(p.realm) ? HATCH_SPOT : [p.x, p.z];
         saveCharacterState(p.account, p.charId, {
           quests: (typeof msg.state === 'object' && msg.state?.quests) || undefined,
           hp: Math.round(p.hp),
-          x: +p.x.toFixed(1),
-          z: +p.z.toFixed(1),
+          x: +pos[0].toFixed(1),
+          z: +pos[1].toFixed(1),
         });
         break;
       }
@@ -1184,6 +1278,42 @@ wss.on('connection', (ws) => {
         if (!unequipToBag(st, String(msg.slot))) { fail(p, 'Bolsa llena: no puedes desequipar'); return; }
         sendSync(p);
         send(ws, { type: 'rpc_ok', kind: 'unequip' });
+        break;
+      }
+
+      // ---- Las Profundidades ----
+      case 'depths_enter': {
+        if (!p?.realm || !st) return;
+        if (isDepthRealm(p.realm)) { fail(p, 'Ya estás dentro'); return; }
+        if (dist(p.x, p.z, HATCH_SPOT[0], HATCH_SPOT[1]) > HATCH_RANGE) {
+          fail(p, 'Estás lejos de la trampilla de Las Profundidades'); return;
+        }
+        // Se puede empezar en cualquier piso ya conquistado esta semana, o en
+        // el siguiente: obliga a ganarse la profundidad, pero no a repetir
+        // veinte pisos cada vez que quieras jugar.
+        const tope = ensureDepths(st).best + 1;
+        const pedido = Math.max(1, Math.min(MAX_DEPTH, Math.round(Number(msg.depth) || 1)));
+        if (pedido > tope) { fail(p, `Aún no has llegado tan hondo (máximo: ${tope})`); return; }
+        p.homeRealm = p.realm;
+        enterDepths(p, id, pedido);
+        break;
+      }
+      case 'depths_descend': {
+        if (!p || !isDepthRealm(p.realm)) return;
+        if (!p.stairsOpen) { fail(p, 'El guardián del umbral aún vigila la escalera'); return; }
+        if (dist(p.x, p.z, STAIRS_SPOT[0], STAIRS_SPOT[1]) > 8) { fail(p, 'Estás lejos de la escalera'); return; }
+        enterDepths(p, id, (p.depth || 1) + 1);
+        break;
+      }
+      case 'depths_leave': {
+        if (!p || !isDepthRealm(p.realm)) return;
+        leaveDepths(p, id);
+        break;
+      }
+      case 'depths_info': {
+        if (!p || !st) return;
+        const d = ensureDepths(st);
+        send(ws, { type: 'depths_info', best: d.best, record: d.record || 0, top: getDepthsBoard(10) });
         break;
       }
 
@@ -1816,7 +1946,13 @@ wss.on('connection', (ws) => {
     cancelTrade(id);
     leaveParty(id, false);
     if (p.realm && p.charId) {
-      saveCharacterState(p.account, p.charId, { x: +p.x.toFixed(1), z: +p.z.toFixed(1), hp: Math.round(p.hp) });
+      // Si se desconecta dentro de Las Profundidades no se puede guardar su
+      // posición: son coordenadas de una instancia que ya no existirá. Vuelve
+      // a la trampilla, en la Ciudadela.
+      const salida = isDepthRealm(p.realm) ? HATCH_SPOT : [p.x, p.z];
+      saveCharacterState(p.account, p.charId, {
+        x: +salida[0].toFixed(1), z: +salida[1].toFixed(1), hp: Math.round(p.hp),
+      });
       broadcast(p.realm, { type: 'player_leave', id }, id);
       broadcast(p.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `${p.name} ha abandonado el mundo.` }, id);
       console.log(`[-] ${p.account.name}/${p.name} (#${id}) desconectado. Conectados: ${players.size - 1}`);

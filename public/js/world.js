@@ -82,9 +82,17 @@ function inRooms(rooms, lx, lz) {
 
 export function isInCrypt(x) { return x > 400; }
 
+// ---- Las Profundidades ----
+// Una sala circular, lejos del mundo y de las criptas. La forma es la misma en
+// todos los pisos: lo que cambia de un piso a otro es lo que la habita.
+export const DEPTHS_X = 2000;
+export const DEPTHS_R = 34;
+export function isInDepths(x) { return x > 1500; }
+
 // La muralla ocupa el anillo [40, 44]; solo se cruza por el corredor de la puerta sur.
 // En las criptas solo se camina por las salas.
 export function isBlocked(x, z) {
+  if (isInDepths(x)) return Math.hypot(x - DEPTHS_X, z) > DEPTHS_R - 1.5;
   if (isInCrypt(x)) {
     const region = CRYPT_REGIONS.find((c) => Math.abs(x - c.origin) <= 90);
     return !region || !inRooms(region.rooms, x - region.origin, z);
@@ -575,7 +583,138 @@ export function buildWorld(scene) {
     waystones.push(buildWaystone(scene, w));
   }
 
-  return { torchLights, herbs, portals, fishingSpots, campfires, board, waystones, sky, lights: { ambient, hemi, sun } };
+  // ---- Trampilla de Las Profundidades y su sala ----
+  const hatch = buildDepthsHatch(scene, torchLights);
+  const depthsRoom = buildDepthsRoom(scene, torchLights);
+
+  return {
+    torchLights, herbs, portals, fishingSpots, campfires, board, waystones,
+    hatch, depthsRoom, sky, lights: { ambient, hemi, sun },
+  };
+}
+
+// Trampilla en la plaza: la boca de la escalera sin fondo. Clicable, con el
+// mismo tipo de señal flotante que el Tablón para que se vea que se puede usar.
+function buildDepthsHatch(scene, torchLights) {
+  const group = new THREE.Group();
+  group.position.set(-6, 0, -6);   // debe coincidir con HATCH_SPOT del servidor
+
+  const marco = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.34, 3.4), mat(0x39332c));
+  marco.position.y = 0.17;
+  marco.receiveShadow = true;
+  group.add(marco);
+
+  // El hueco: negro de verdad, sin luz que rebote.
+  const hueco = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 2.4),
+    new THREE.MeshBasicMaterial({ color: 0x04040a })
+  );
+  hueco.rotation.x = -Math.PI / 2;
+  hueco.position.y = 0.35;
+  group.add(hueco);
+
+  for (const [dx, dz] of [[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]]) {
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.5, 6), mat(0x2f2a24));
+    poste.position.set(dx, 0.75, dz);
+    poste.castShadow = true;
+    group.add(poste);
+  }
+
+  const brillo = new THREE.PointLight(0x7a4fd0, 9, 11);
+  brillo.position.set(0, 0.7, 0);
+  group.add(brillo);
+  torchLights.push({ light: brillo, base: 9, seed: Math.random() * 10 });
+
+  const marker = makeBoardMarker('🕳️', '#9a6fe0');
+  marker.position.y = 3.2;
+  group.add(marker);
+  group.userData.marker = marker;
+
+  scene.add(group);
+  return group;
+}
+
+// La sala de Las Profundidades: un pozo circular de piedra oscura, con la
+// escalera al fondo. Se construye una sola vez y sirve para todos los pisos.
+function buildDepthsRoom(scene, torchLights) {
+  const group = new THREE.Group();
+  group.position.set(DEPTHS_X, 0, 0);
+
+  // Piedra clara a propósito: bajo tierra no llega ni sol ni cielo, así que si
+  // el suelo es oscuro no se ve absolutamente nada. El ambiente lo pone la luz
+  // violeta de los fuegos, no el color de la roca.
+  const suelo = new THREE.Mesh(new THREE.CircleGeometry(DEPTHS_R, 40), mat(0x6b6478));
+  suelo.rotation.x = -Math.PI / 2;
+  suelo.receiveShadow = true;
+  group.add(suelo);
+
+  // Muro anular visto SOLO por dentro. Es importante que sea de una cara: la
+  // cámara es cenital y se queda fuera del círculo cuando el héroe camina cerca
+  // del borde; a doble cara, el muro le taparía la sala entera.
+  const muro = new THREE.Mesh(
+    new THREE.CylinderGeometry(DEPTHS_R, DEPTHS_R, 26, 40, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x554e63, roughness: 1, side: THREE.BackSide, flatShading: true })
+  );
+  muro.position.y = 13;
+  group.add(muro);
+
+  // Sin bóveda cerrada a propósito: la cámara es cenital y un techo la dejaría
+  // mirando el reverso de una tapa. Lo que oculta el exterior es esconder la
+  // cúpula del cielo mientras estás abajo (lo hace main.js).
+
+  // Columnas que sostienen la bóveda
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, 11, 6), mat(0x7a7288));
+    col.position.set(Math.cos(a) * (DEPTHS_R - 5), 5.5, Math.sin(a) * (DEPTHS_R - 5));
+    col.castShadow = true;
+    group.add(col);
+
+    const fuego = new THREE.PointLight(0x9a5ff0, 30, 40);
+    fuego.position.set(Math.cos(a) * (DEPTHS_R - 7), 5, Math.sin(a) * (DEPTHS_R - 7));
+    group.add(fuego);
+    torchLights.push({ light: fuego, base: 30, seed: Math.random() * 10 });
+  }
+
+  // Luz cenital fría en el centro: da forma a la sala.
+  const cenital = new THREE.PointLight(0xb090ff, 45, 80);
+  cenital.position.set(0, 11, 0);
+  group.add(cenital);
+
+  // Luz propia de la sala. El ambiente global del juego es oscuro a propósito
+  // (es un ocaso de fantasía oscura) y a 34 de radio las antorchas no llegan al
+  // centro por mucho que se suban: sin esto el suelo no se lee. Una
+  // hemisférica no se atenúa con la distancia, así que ilumina la sala entera
+  // sin aplanarla y sin tocar el ambiente del resto del mundo.
+  const propia = new THREE.HemisphereLight(0xc9b0ff, 0x4a3f5c, 2.4);
+  propia.position.set(0, 20, 0);
+  group.add(propia);
+
+  // La escalera al piso de abajo, al fondo de la sala.
+  const escalera = new THREE.Group();
+  escalera.position.set(0, 0, -30);
+  for (let i = 0; i < 5; i++) {
+    const peldano = new THREE.Mesh(new THREE.BoxGeometry(6 - i * 0.6, 0.4, 1.2), mat(0x3a3340));
+    peldano.position.set(0, -i * 0.4, -i * 1.1);
+    escalera.add(peldano);
+  }
+  const pozo = new THREE.Mesh(
+    new THREE.PlaneGeometry(5, 5),
+    new THREE.MeshBasicMaterial({ color: 0x05030a })
+  );
+  pozo.rotation.x = -Math.PI / 2;
+  pozo.position.set(0, -1.9, -5.5);
+  escalera.add(pozo);
+
+  const luzEscalera = new THREE.PointLight(0xd9a441, 0, 16);
+  luzEscalera.position.set(0, 2, -3);
+  escalera.add(luzEscalera);
+  group.add(escalera);
+
+  group.userData.stairs = escalera;
+  group.userData.stairLight = luzEscalera;
+  scene.add(group);
+  return group;
 }
 
 // Portal clicable: arco de piedra con vacío oscuro y resplandor.
@@ -1057,16 +1196,16 @@ function buildBountyBoard(scene, x, z) {
 }
 
 // Pergamino dorado flotante sobre el Tablón de Encargos.
-function makeBoardMarker() {
+function makeBoardMarker(glyph = '📜', glow = '#ffb400') {
   const canvas = document.createElement('canvas');
   canvas.width = 96; canvas.height = 96;
   const ctx = canvas.getContext('2d');
   ctx.font = '72px Georgia';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = '#ffb400';
+  ctx.shadowColor = glow;
   ctx.shadowBlur = 16;
-  ctx.fillText('📜', 48, 50);
+  ctx.fillText(glyph, 48, 50);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas), depthTest: false, transparent: true,
   }));
@@ -1203,10 +1342,13 @@ function buildMiniCrypt(scene, portals, torchLights, cfg) {
 }
 
 // Animación por frame: parpadeo de antorchas, balanceo de hierbas y ondas de pesca.
-export function animateWorld({ torchLights, herbs, fishingSpots, waystones, board }, time) {
+export function animateWorld({ torchLights, herbs, fishingSpots, waystones, board, hatch }, time) {
   // El pergamino del Tablón flota para llamar la atención
   const bm = board?.userData?.marker;
   if (bm) bm.position.y = 3.6 + Math.sin(time * 2.2) * 0.16;
+  // Y lo mismo la boca de Las Profundidades, un poco más lenta y honda
+  const hm = hatch?.userData?.marker;
+  if (hm) hm.position.y = 3.2 + Math.sin(time * 1.7) * 0.2;
   for (const f of fishingSpots) {
     f.children.forEach((c, i) => {
       if (c.isMesh && c.material.transparent) {
@@ -1221,7 +1363,9 @@ export function animateWorld({ torchLights, herbs, fishingSpots, waystones, boar
   for (const t of torchLights) {
     const flicker = Math.sin(time * 9 + t.seed) * 0.5 + Math.sin(time * 23 + t.seed * 3) * 0.3;
     t.light.intensity = t.base + flicker * 6;
-    t.flame.scale.setScalar(1 + flicker * 0.15);
+    // No toda luz parpadeante tiene llama visible (la trampilla, los fuegos de
+    // Las Profundidades): sin esta guarda, una sola rompía todo el bucle.
+    if (t.flame) t.flame.scale.setScalar(1 + flicker * 0.15);
   }
   for (const h of herbs) {
     if (h.visible) h.children.forEach((c, i) => {

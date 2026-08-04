@@ -281,6 +281,14 @@ export class RemotePlayers {
     this.players = new Map(); // id -> { mesh, target: {x,z,rot}, walkTime }
   }
 
+  // Vacía la escena de otros héroes. Al cruzar a una instancia de Las
+  // Profundidades dejas de compartir mundo con ellos, y se quedarían ahí
+  // plantados como fantasmas.
+  clear() {
+    for (const p of this.players.values()) this.scene.remove(p.mesh);
+    this.players.clear();
+  }
+
   add({ id, name, race, class: clazz, x, z, rot, pvp, mount }) {
     if (this.players.has(id)) return;
     const mesh = makeHero(race, clazz);

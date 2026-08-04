@@ -3,7 +3,7 @@
 // (inventario, equipo, misiones, bendiciones, vida, posición) vive en el
 // servidor y se sincroniza continuamente.
 import * as THREE from 'three';
-import { buildWorld, animateWorld, isInCrypt } from './world.js';
+import { buildWorld, animateWorld, isInCrypt, isInDepths } from './world.js';
 import { heightAt } from './terrain.js';
 import { LocalPlayer, RemotePlayers } from './entities.js';
 import { RACES, CLASSES } from './races.js';
@@ -33,6 +33,9 @@ import { openCooking, refreshCooking } from './cooking.js';
 import { initLeaderboard, openLeaderboard, applyLeaderboard } from './leaderboard.js';
 import { ITEMS } from './items.js';
 import { idOf, rollOf, displayName, gradeInfo } from './affixes.js';
+import {
+  initDepths, openDepths, applyDepthsInfo, onDepthsEntered, onDepthsLeft, onStairsOpen, depths,
+} from './depths.js';
 import { initInventory, applyInventory, getWeaponDamage, getArmor, getAffix, inventory } from './inventory.js';
 import { initQuests, loadQuests, serializeQuests, getDialog, onHerbCollected, onEnemyKilled, onLootChanged, onClaimResult, setShopOpener, setForgeOpener, setMiraServices, renderTracker, questState } from './quests.js';
 import { initShop, openShop, refreshShop } from './shop.js';
@@ -182,6 +185,30 @@ connect({
     if (combatTarget && combatTarget.id === msg.id) combatTarget = null;
   },
   mob_spawn(msg) { mobs?.onSpawn(msg); },
+
+  // ---- Las Profundidades ----
+  // Cruzar a una instancia (o volver) cambia de reino: hay que vaciar las
+  // criaturas y los otros jugadores, porque son poblaciones distintas.
+  depths_entered(msg) {
+    combatTarget = null;
+    pvpTarget = null;
+    remotes.clear();
+    mobs.reset(msg.mobs || []);
+    player.stop();
+    player.mesh.position.set(msg.x, heightAt(msg.x, msg.z), msg.z);
+    onDepthsEntered(msg);
+  },
+  depths_left(msg) {
+    combatTarget = null;
+    pvpTarget = null;
+    remotes.clear();
+    mobs.reset(msg.mobs || []);
+    player.stop();
+    player.mesh.position.set(msg.x, heightAt(msg.x, msg.z), msg.z);
+    onDepthsLeft(msg);
+  },
+  depths_stairs_open(msg) { onStairsOpen(msg); },
+  depths_info(msg) { applyDepthsInfo(msg); },
   // El servidor ya aplicó oro/objetos/EXP a tu personaje (llega con state_sync);
   // aquí solo se celebra y se avanza el estado de las misiones.
   loot(msg) {
@@ -445,6 +472,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   initQuests({ changed: saveGame });
   initShop();
   initCrafting();
+  initDepths();
   initBlessings();
   initParty(id);
   initGuild(charName);
@@ -563,6 +591,9 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
     openShop,
     openCrafting,
     flushSave,
+    scene: () => scene,
+    camera: () => camera,
+    worldRefs: () => worldRefs,
   };
   function project(worldPos, yOffset) {
     const v = worldPos.clone();
@@ -647,6 +678,14 @@ function onPointerDown(e) {
   if (boardHits.length > 0) {
     combatTarget = null;
     player.moveTo(worldRefs.board.position.clone(), () => { openBountyBoard(); play('click'); }, 3.0);
+    return;
+  }
+
+  // 4d-bis) ¿Clic sobre la trampilla de Las Profundidades?
+  const hatchHits = raycaster.intersectObjects([worldRefs.hatch], true);
+  if (hatchHits.length > 0) {
+    combatTarget = null;
+    player.moveTo(worldRefs.hatch.position.clone(), () => { openDepths(); play('click'); }, 3.5);
     return;
   }
 
@@ -945,16 +984,27 @@ function updateCamera(dt) {
 let cryptBlend = 0;
 const FOG_SURFACE = new THREE.Color(0x1a1220);
 const FOG_CRYPT = new THREE.Color(0x07090c);
+// Las Profundidades tienen su propio color: violeta en vez del gris de cripta,
+// y niebla menos cerrada, porque la sala es mucho más ancha que un pasillo.
+const FOG_DEPTHS = new THREE.Color(0x0d0716);
 function updateCryptLighting(dt) {
-  const target = isInCrypt(player.mesh.position.x) ? 1 : 0;
+  const x = player.mesh.position.x;
+  const enProfundidades = isInDepths(x);
+  const target = isInCrypt(x) ? 1 : 0;
   cryptBlend += (target - cryptBlend) * Math.min(1, dt * 3);
   const { sun, hemi, ambient } = worldRefs.lights;
   sun.intensity = 1.15 * (1 - cryptBlend) + 0.06 * cryptBlend;
   hemi.intensity = 0.5 * (1 - cryptBlend) + 0.08 * cryptBlend;
-  ambient.intensity = 0.55 * (1 - cryptBlend) + 0.3 * cryptBlend;
-  scene.fog.color.copy(FOG_SURFACE).lerp(FOG_CRYPT, cryptBlend);
-  scene.fog.density = 0.008 + 0.02 * cryptBlend;
+  // Bajo tierra sube algo el relleno; el grueso de la luz de la sala la pone
+  // ella misma (una hemisférica propia, en world.js).
+  const ambienteHondo = enProfundidades ? 0.7 : 0.3;
+  ambient.intensity = 0.55 * (1 - cryptBlend) + ambienteHondo * cryptBlend;
+  scene.fog.color.copy(FOG_SURFACE).lerp(enProfundidades ? FOG_DEPTHS : FOG_CRYPT, cryptBlend);
+  scene.fog.density = 0.008 + (enProfundidades ? 0.006 : 0.02) * cryptBlend;
   scene.background.copy(scene.fog.color);
+  // Bajo tierra no hay cielo. La cúpula sigue al jugador, así que si no se
+  // esconde asoma por encima del muro y se ve el ocaso desde la mazmorra.
+  if (worldRefs.sky) worldRefs.sky.visible = !enProfundidades;
 }
 
 // ---------- Aviso de interacción por cercanía ----------
