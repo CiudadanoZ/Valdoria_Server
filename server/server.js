@@ -29,9 +29,9 @@ import {
   computeMaxHp, computeArmor, computeHealMul, regenPerSec, applyBlessing,
   onBountyKill, claimBounty, acceptBounty, respecCost, respecTalents,
   computeMaxResource, resourceDef, startingResource,
-  affixSpeed, goldMultiplier,
+  affixSpeed, goldMultiplier, powerValue,
 } from './state.js';
-import { rollGear, displayName, tierFromXp, sellValueOf } from '../public/js/affixes.js';
+import { rollGear, displayName, tierFromXp, sellValueOf, POWERS } from '../public/js/affixes.js';
 import {
   DEPTHS_ENTRY, STAIRS_SPOT, HATCH_SPOT, HATCH_RANGE, MAX_DEPTH,
   buildDepthMobs, depthRealmId, isDepthRealm, guardianFor, ensureDepths, recordDepth,
@@ -183,7 +183,9 @@ function addResource(p, amount) {
 
 // Cobra el coste de una habilidad. Devuelve false (y avisa) si no alcanza.
 function spendResource(p, skill) {
-  const cost = skill.cost || 0;
+  // Ímpetu Inagotable abarata todo lo que lanzas.
+  const descuento = powerValue(p.character.state, 'impetu');
+  const cost = Math.round((skill.cost || 0) * (1 - descuento));
   if (p.mp < cost) { fail(p, resourceDef(p.character).empty); return false; }
   p.mp -= cost;
   return true;
@@ -221,12 +223,65 @@ function applyDeathPenalty(p) {
   return lost;
 }
 
+// ---- Poderes legendarios ----
+// Los aplica siempre el servidor. El cliente no sabe cuánto roba ni cuánto
+// devuelve: solo ve el resultado, igual que con el resto del combate.
+
+// Sed de Sangre: robas vida en proporción al daño que haces.
+function applySed(p, dmg) {
+  const frac = powerValue(p.character.state, 'sed');
+  if (!frac) return;
+  const cura = Math.max(1, Math.round(dmg * frac));
+  healPlayer(p, cura);
+}
+
+// Verdugo: castiga el primer golpe sobre un enemigo que aún está intacto.
+function applyVerdugo(p, m, dmg) {
+  const frac = powerValue(p.character.state, 'verdugo');
+  if (!frac || m.hp < m.def.hp) return dmg;
+  return Math.round(dmg * (1 + frac));
+}
+
+// Eco Sangriento: cada baja te devuelve vida.
+function applyEco(p) {
+  const cura = powerValue(p.character.state, 'eco');
+  if (cura) healPlayer(p, Math.round(cura));
+}
+
+// Espinas: devuelve parte del daño recibido a quien te golpeó.
+function applyEspinas(p, m, reduced, realm) {
+  const frac = powerValue(p.character.state, 'espinas');
+  if (!frac || !m || m.state === 'dead') return;
+  const vuelta = Math.max(1, Math.round(reduced * frac));
+  m.hp -= vuelta;
+  if (m.hp <= 0) killMob(realm, m, [...players].find(([, pp]) => pp === p)?.[0] ?? null);
+  else broadcast(realm, { type: 'mob_hit', id: m.id, hp: m.hp, dmg: vuelta });
+}
+
+// Segundo Aliento: una red de seguridad al cruzar el cuarto de vida. Con
+// enfriamiento propio, porque si no convertiría al héroe en inmortal.
+function applySegundoAliento(p) {
+  const cura = powerValue(p.character.state, 'aliento');
+  if (!cura) return false;
+  const now = Date.now();
+  const cd = (POWERS.aliento.cooldown || 60) * 1000;
+  if (p.hp > computeMaxHp(p.character) * 0.25) return false;
+  if (now - (p.lastAlientoMs || 0) < cd) return false;
+  p.lastAlientoMs = now;
+  healPlayer(p, Math.round(cura));
+  return true;
+}
+
 // Aplica daño de una criatura: reduce por armadura, detecta la muerte y
 // reaparece al jugador junto a la fuente con el 60% de la vida.
-function damagePlayer(p, id, rawDmg, mobName) {
+function damagePlayer(p, id, rawDmg, mobName, atacante = null, realm = null) {
   dismount(p, id);
   const reduced = applyArmor(rawDmg, computeArmor(p.character, currentBuffArmor(p)));
   p.hp = Math.max(0, p.hp - reduced);
+  // Espinas devuelve el golpe; Segundo Aliento puede salvarte justo aquí, antes
+  // de que se evalúe la muerte.
+  if (atacante && realm) applyEspinas(p, atacante, reduced, realm);
+  if (p.hp > 0) applySegundoAliento(p);
   p.lastCombatMs = Date.now();
   // Recibir daño también alimenta la furia del guerrero
   const gain = resourceDef(p.character).onHurt;
@@ -784,6 +839,7 @@ function killMob(realm, m, killerId) {
     }
 
     addXp(st, m.def.xp);
+    applyEco(p);   // Eco Sangriento: cada baja devuelve vida
     st.kills[m.type] = (st.kills[m.type] || 0) + 1;
     onBountyKill(st, m.type);
 
@@ -850,7 +906,7 @@ setInterval(() => {
             if (m.attackTimer <= 0) {
               m.attackTimer = m.def.cd;
               const dmg = Math.round(m.def.dmgMin + Math.random() * (m.def.dmgMax - m.def.dmgMin));
-              damagePlayer(target, m.targetId, dmg, m.def.name);
+              damagePlayer(target, m.targetId, dmg, m.def.name, m, realm.id);
             }
           }
         }
@@ -1157,10 +1213,12 @@ wss.on('connection', (ws) => {
         const m = realmMobs.get(p.realm).get(Number(msg.mobId));
         if (!m || m.state === 'dead') return;
         if (dist(p.x, p.z, m.x, m.z) > 6) return;
-        const dmg = Math.round(Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1))) * weakMul(p));
+        let dmg = Math.round(Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1))) * weakMul(p));
+        dmg = applyVerdugo(p, m, dmg);
         // El golpe básico alimenta la furia del guerrero
         const gain = resourceDef(p.character).onAttack;
         if (gain) { addResource(p, gain); p.lastRageMs = now; }
+        applySed(p, dmg);
         m.hp -= dmg;
         m.damagers.add(id);
         if (m.state !== 'chase' && m.state !== 'return') {
@@ -1188,7 +1246,9 @@ wss.on('connection', (ws) => {
           const m = mobsHere.get(Number(h.mobId));
           if (!m || m.state === 'dead') continue;
           if (dist(p.x, p.z, m.x, m.z) > 18) continue;
-          const dmg = Math.round(Math.min(maxSkillHit, Math.max(1, Math.round(Number(h.dmg) || 1))) * weakMul(p));
+          let dmg = Math.round(Math.min(maxSkillHit, Math.max(1, Math.round(Number(h.dmg) || 1))) * weakMul(p));
+          dmg = applyVerdugo(p, m, dmg);
+          applySed(p, dmg);
           m.hp -= dmg;
           m.damagers.add(id);
           if (m.state !== 'chase' && m.state !== 'return') {

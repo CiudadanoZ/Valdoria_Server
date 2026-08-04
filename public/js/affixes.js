@@ -70,6 +70,52 @@ export const AFFIXES = {
 
 export const AFFIX_IDS = Object.keys(AFFIXES);
 
+// ---- Poderes legendarios ----
+// Los afijos de arriba hacen que un objeto sea MEJOR; estos hacen que juegues
+// DISTINTO, que es lo que sostiene la caza a largo plazo: nadie repite mil
+// veces una mazmorra por un 8% más de daño, pero sí por la posibilidad de que
+// caiga algo que le cambie el personaje.
+//
+// Solo aparecen en reliquias (✦✦✦), uno por pieza, y como se pueden llevar
+// varias piezas a la vez, se combinan entre sí. Los aplica el SERVIDOR: el
+// cliente solo los muestra.
+export const POWERS = {
+  sed: {
+    id: 'sed', name: 'Sed de Sangre', suffix: 'de la Sed', icon: '🩸',
+    value: 0.08,
+    desc: 'Robas vida igual al 8% del daño que infliges.',
+  },
+  eco: {
+    id: 'eco', name: 'Eco Sangriento', suffix: 'del Eco', icon: '💀',
+    value: 12,
+    desc: 'Cada baja te devuelve 12 de vida.',
+  },
+  impetu: {
+    id: 'impetu', name: 'Ímpetu Inagotable', suffix: 'del Ímpetu', icon: '🌀',
+    value: 0.3,
+    desc: 'Tus habilidades cuestan un 30% menos de recurso.',
+  },
+  espinas: {
+    id: 'espinas', name: 'Coraza de Espinas', suffix: 'de las Espinas', icon: '🌵',
+    value: 0.25,
+    desc: 'Devuelves el 25% del daño que recibes.',
+  },
+  aliento: {
+    id: 'aliento', name: 'Segundo Aliento', suffix: 'del Aliento', icon: '💗',
+    value: 40, cooldown: 60,
+    desc: 'Al bajar de un cuarto de vida te curas 40 (una vez por minuto).',
+  },
+  verdugo: {
+    id: 'verdugo', name: 'Verdugo', suffix: 'del Verdugo', icon: '🪓',
+    value: 0.6,
+    desc: 'Tu primer golpe a un enemigo intacto hace un 60% más de daño.',
+  },
+};
+export const POWER_IDS = Object.keys(POWERS);
+
+// Probabilidad de que una reliquia traiga poder en vez de un tercer afijo.
+const POWER_CHANCE = 0.45;
+
 // Tier máximo razonable. Las criaturas del mundo llegan a 10; Las Profundidades
 // suben de ahí, y por eso el tope se deja alto y el escalado es lineal y suave.
 export const MAX_TIER = 25;
@@ -128,15 +174,24 @@ export function rollGear(itemId, tier = 1, rnd = Math.random) {
   const grade = pickGrade(t, rnd);
   if (grade === 0) return null;
 
+  // Una reliquia puede traer un poder legendario en lugar de su tercer afijo:
+  // se cambia un número por una forma distinta de jugar.
+  const power = grade === 3 && rnd() < POWER_CHANCE
+    ? POWER_IDS[Math.floor(rnd() * POWER_IDS.length)]
+    : null;
+  const nAffixes = power ? grade - 1 : grade;
+
   const pool = affixesFor(item.slot);
   const affixes = [];
-  for (let i = 0; i < grade && pool.length; i++) {
+  for (let i = 0; i < nAffixes && pool.length; i++) {
     const id = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
     affixes.push({ id, v: affixValue(AFFIXES[id], t, rnd) });
   }
   // El afijo más "definitorio" primero: es el que da nombre al objeto.
   affixes.sort((a, b) => AFFIX_IDS.indexOf(a.id) - AFFIX_IDS.indexOf(b.id));
-  return { tier: t, grade, affixes };
+  const roll = { tier: t, grade, affixes };
+  if (power) roll.power = power;
+  return roll;
 }
 
 // ---- Leer instancias ----
@@ -183,9 +238,11 @@ export function displayName(entry) {
   if (!item) return '¿?';
   const roll = rollOf(entry);
   if (!roll) return item.name;
+  // El poder manda sobre los afijos al bautizar la pieza: es lo que la define.
+  const power = roll.power && POWERS[roll.power];
+  if (power) return `${item.name} ${power.suffix}`;
   const first = roll.affixes[0];
-  const suffix = first ? ` ${AFFIXES[first.id].suffix}` : '';
-  return `${item.name}${suffix}`;
+  return `${item.name}${first ? ` ${AFFIXES[first.id].suffix}` : ''}`;
 }
 
 // Líneas sueltas para la descripción emergente: "+4 de daño", "+12 de vida"...
@@ -194,6 +251,23 @@ export function affixLines(entry) {
     const def = AFFIXES[a.id];
     return `${def.icon} ${def.fmt(a.v)}`;
   });
+}
+
+// El poder legendario de una pieza, si lo tiene.
+export function powerOf(entry) {
+  const id = rollOf(entry)?.power;
+  return id ? POWERS[id] || null : null;
+}
+
+// Poderes activos del equipo completo. Se pueden llevar varios (uno por pieza)
+// y ahí está la gracia: combinarlos es lo que crea builds.
+export function activePowers(entries) {
+  const out = new Map();
+  for (const e of entries) {
+    const p = powerOf(e);
+    if (p && !out.has(p.id)) out.set(p.id, p);
+  }
+  return out;
 }
 
 // Valor de venta: los afijos suben lo que paga Lyra, para que una buena tirada

@@ -8,7 +8,7 @@ import {
   sendAuctionBrowse, sendAuctionCreate, sendAuctionBuy, sendAuctionCancel, sendAuctionCollect,
 } from './network.js';
 import { showTooltip, hideTooltip, toast } from './ui.js';
-import { idOf, rollOf, displayName, affixLines, gradeInfo } from './affixes.js';
+import { idOf, rollOf, displayName, affixLines, gradeInfo, powerOf } from './affixes.js';
 
 let listings = [];
 let mine = [];
@@ -50,6 +50,7 @@ function itemTip(entry) {
   return `<div class="t-name" ${roll ? `style="color:${grade.color}"` : ''}>${item.icon} ${displayName(entry)}</div>` +
     `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
     affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('') +
+    (powerOf(entry) ? `<div class="t-power"><b>${powerOf(entry).icon} ${powerOf(entry).name}</b><br/>${powerOf(entry).desc}</div>` : '') +
     `<div class="t-desc">${item.desc}</div>`;
 }
 

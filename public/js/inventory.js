@@ -5,7 +5,7 @@ import { ITEMS } from './items.js';
 import { sendUseItem, sendEquip, sendUnequip } from './network.js';
 import { setGold, showTooltip, hideTooltip } from './ui.js';
 import {
-  statsOf, sumStats, displayName, affixLines, gradeInfo, rollOf, idOf, AFFIXES,
+  statsOf, sumStats, displayName, affixLines, gradeInfo, rollOf, idOf, AFFIXES, powerOf,
 } from './affixes.js';
 
 const SLOTS = 24;
@@ -124,6 +124,14 @@ function compareLines(entry) {
   return `<div class="t-cmp">Frente a lo equipado: ${rows.join(' · ')}</div>`;
 }
 
+// El poder legendario va aparte y destacado: no es un número más, es la razón
+// por la que esa pieza se guarda.
+function powerLine(entry) {
+  const p = powerOf(entry);
+  if (!p) return '';
+  return `<div class="t-power"><b>${p.icon} ${p.name}</b><br/>${p.desc}</div>`;
+}
+
 function itemTooltip(entry, { compare = false } = {}) {
   const item = ITEMS[idOf(entry)];
   if (!item) return '';
@@ -139,6 +147,7 @@ function itemTooltip(entry, { compare = false } = {}) {
     `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
     (base.length ? `<div class="t-base">${base.join(' · ')}</div>` : '') +
     affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('') +
+    powerLine(entry) +
     (compare ? compareLines(entry) : '') +
     `<div class="t-desc">${item.desc}</div>` +
     (item.use ? `<div class="t-use">${item.use}</div>` : '') +

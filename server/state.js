@@ -10,7 +10,9 @@ import { MIRA_BLESSING_PRICES } from '../public/js/recipes.js';
 import { dailyBounties, weeklyBounties, todayNumber, thisWeekNumber } from '../public/js/bounties.js';
 import { resourceOf } from '../public/js/skills-data.js';
 import { maxMeleeHit } from '../public/js/combat-data.js';
-import { idOf, rollOf, statsOf, sumStats, AFFIXES, clampTier } from '../public/js/affixes.js';
+import {
+  idOf, rollOf, statsOf, sumStats, AFFIXES, clampTier, POWERS, activePowers,
+} from '../public/js/affixes.js';
 
 const BAG_SLOTS = 24;
 const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio'];
@@ -21,12 +23,37 @@ const EQUIP_KEYS = ['arma', 'cabeza', 'torso', 'escudo', 'espalda', 'accesorio']
 function sanitizeRoll(roll) {
   if (!roll || typeof roll !== 'object' || !Array.isArray(roll.affixes)) return null;
   const grade = Math.max(1, Math.min(3, Math.round(Number(roll.grade) || 1)));
+
+  // Una pieza tiene como mucho TRES huecos, y el poder ocupa uno. Hay que
+  // descontarlo ANTES de recortar los afijos: si no, un cliente manipulado
+  // podría declarar la pieza perfecta con tres afijos y poder encima.
+  const power = POWERS[roll.power] ? roll.power : null;
+  const sitioAfijos = grade - (power ? 1 : 0);
+
   const affixes = roll.affixes
     .filter((a) => a && AFFIXES[a.id] && Number.isFinite(Number(a.v)))
-    .slice(0, grade)
+    .slice(0, Math.max(0, sitioAfijos))
     .map((a) => ({ id: a.id, v: Number(a.v) }));
-  if (!affixes.length) return null;
-  return { tier: clampTier(roll.tier), grade: affixes.length, affixes };
+
+  const huecos = affixes.length + (power ? 1 : 0);
+  if (!huecos) return null;
+  const out = { tier: clampTier(roll.tier), grade: huecos, affixes };
+  if (power) out.power = power;
+  return out;
+}
+
+// Los poderes legendarios que lleva puestos ahora mismo el héroe.
+export function equippedPowers(st) {
+  return activePowers(equippedEntries(st));
+}
+
+export function hasPower(st, id) {
+  return equippedPowers(st).has(id);
+}
+
+// El valor del poder (robo, curación, descuento...) o 0 si no lo lleva.
+export function powerValue(st, id) {
+  return hasPower(st, id) ? (POWERS[id]?.value || 0) : 0;
 }
 
 // Acepta las dos formas que puede tener un objeto guardado: el id suelto de

@@ -32,7 +32,9 @@ test('una tirada nunca tiene más afijos que su grado, ni afijos repetidos', () 
   for (let i = 0; i < 400; i++) {
     const roll = rollGear('filo_glacial', 1 + (i % MAX_TIER), rnd);
     if (!roll) continue;
-    assert.equal(roll.affixes.length, roll.grade, 'grado y número de afijos deben coincidir');
+    // El grado son los HUECOS de la pieza, y un poder legendario ocupa uno.
+    const huecos = roll.affixes.length + (roll.power ? 1 : 0);
+    assert.equal(huecos, roll.grade, 'el grado debe coincidir con los huecos ocupados');
     assert.ok(roll.grade >= 1 && roll.grade <= 3, `grado fuera de rango: ${roll.grade}`);
     const ids = roll.affixes.map((a) => a.id);
     assert.equal(new Set(ids).size, ids.length, 'no puede repetirse el mismo afijo');

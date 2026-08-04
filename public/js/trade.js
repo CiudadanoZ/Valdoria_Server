@@ -5,7 +5,7 @@ import { inventory } from './inventory.js';
 import { sendTradeOffer, sendTradeConfirm, sendTradeCancel } from './network.js';
 import { toast, showTooltip, hideTooltip } from './ui.js';
 import { play } from './audio.js';
-import { idOf, rollOf, displayName, affixLines, gradeInfo } from './affixes.js';
+import { idOf, rollOf, displayName, affixLines, gradeInfo, powerOf } from './affixes.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -98,7 +98,8 @@ function tradeTooltip(entry) {
   const grade = gradeInfo(roll?.grade || 0);
   return `<div class="t-name" ${roll ? `style="color:${grade.color}"` : ''}>${item.icon} ${displayName(entry)}</div>` +
     `<div class="t-type">${item.type}${roll ? ` · ${grade.name}` : ''}</div>` +
-    affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('');
+    affixLines(entry).map((l) => `<div class="t-affix">${l}</div>`).join('') +
+    (powerOf(entry) ? `<div class="t-power"><b>${powerOf(entry).icon} ${powerOf(entry).name}</b><br/>${powerOf(entry).desc}</div>` : '');
 }
 
 function renderOffer(container, items) {
