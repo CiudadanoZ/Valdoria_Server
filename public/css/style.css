@@ -942,3 +942,205 @@ canvas { display: block; }
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #0d0906; }
 ::-webkit-scrollbar-thumb { background: #3a2d18; border-radius: 4px; }
+
+/* =====================================================================
+   TEMA PÍXEL
+   Se activa con body.pixel (Ajustes → Estilo píxel). Todo lo de arriba
+   sigue intacto: apagar el interruptor devuelve el aspecto clásico.
+
+   Referencia: las ventanas de los RPG de 16 bits. Esquinas rectas, borde
+   doble (línea oscura por fuera, dorada por dentro), relleno opaco, sombras
+   como bloques duros desplazados en vez de difuminados, y texto con
+   contorno en lugar de resplandor.
+   ===================================================================== */
+body.pixel {
+  font-family: 'Pixelify Sans', 'Courier New', monospace;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  font-smooth: never;
+}
+
+/* Esquinas rectas en todo, salvo lo que es redondo por identidad: los orbes
+   de vida y maná (la seña de un Diablo) y el minimapa. */
+body.pixel *:not(#hp-orb):not(#mp-orb):not(#hp-fill):not(#mp-fill):not(#minimap):not(#minimap-wrap) {
+  border-radius: 0 !important;
+}
+/* Nada de resplandores difusos en el texto: en pixel art se ven borrosos. */
+body.pixel * { text-shadow: none !important; }
+
+/* Títulos con la fuente de los 8 bits. Es muy ancha: se reduce el tamaño. */
+body.pixel h1,
+body.pixel h2,
+body.pixel h3,
+body.pixel .panel-header h2,
+body.pixel .death-title,
+body.pixel #xp-level,
+body.pixel .talent-branch,
+body.pixel .bounty-section {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  letter-spacing: 0;
+  line-height: 1.6;
+  text-shadow: 2px 2px 0 #000 !important;
+}
+body.pixel .login-box h1 { font-size: 1.35em; }
+body.pixel .panel-header h2 { font-size: 0.78em; }
+body.pixel .bounty-section,
+body.pixel .talent-branch { font-size: 0.62em; text-transform: none; }
+body.pixel #xp-level { font-size: 0.62em; }
+body.pixel .death-title { font-size: 1.6em; }
+
+/* ---- Ventanas ---- */
+body.pixel .panel,
+body.pixel .login-box,
+body.pixel #tooltip,
+body.pixel #welcome-card,
+body.pixel #death-card,
+body.pixel .reconnect-box,
+body.pixel #quest-tracker,
+body.pixel #dialog-panel,
+body.pixel #depths-hud {
+  background: #140d09 !important;
+  border: 3px solid #d9a441 !important;
+  box-shadow:
+    0 0 0 3px #000,            /* línea exterior negra */
+    inset 0 0 0 2px #4a3214,   /* bisel interior oscuro */
+    8px 8px 0 3px rgba(0,0,0,.65) !important; /* sombra de bloque */
+}
+body.pixel #depths-hud { border-color: #9a6fe0 !important; background: #140c1e !important; }
+
+body.pixel .panel-header { border-bottom: 2px solid #4a3214; }
+
+/* ---- Botones: bisel de dos tonos, se "hunden" al pulsar ---- */
+body.pixel button,
+body.pixel .shop-btn,
+body.pixel .close-btn,
+body.pixel .shop-tab,
+body.pixel .welcome-btn,
+body.pixel #auth-btn,
+body.pixel #new-char-btn {
+  font-family: 'Pixelify Sans', 'Courier New', monospace;
+  background: #6b4a1c !important;
+  color: #ffe9a8 !important;
+  border: 2px solid #000 !important;
+  box-shadow: inset -3px -3px 0 #3a2508, inset 3px 3px 0 #c9944a !important;
+  transition: none !important;
+}
+body.pixel button:hover:not(:disabled),
+body.pixel .shop-btn:hover:not(:disabled) {
+  background: #87602a !important;
+  box-shadow: inset -3px -3px 0 #3a2508, inset 3px 3px 0 #f0c070 !important;
+}
+body.pixel button:active:not(:disabled),
+body.pixel .shop-btn:active:not(:disabled) {
+  box-shadow: inset 3px 3px 0 #3a2508, inset -3px -3px 0 #c9944a !important;
+  transform: translate(1px, 1px);
+}
+body.pixel button:disabled,
+body.pixel .shop-btn:disabled {
+  background: #2a2018 !important;
+  color: #6a5a40 !important;
+  box-shadow: inset -2px -2px 0 #1a120a, inset 2px 2px 0 #3a2c1c !important;
+  opacity: 1;
+}
+body.pixel .shop-tab.active,
+body.pixel #lb-tabs button.active {
+  background: #d9a441 !important;
+  color: #1a0f06 !important;
+}
+
+/* ---- Campos de texto ---- */
+body.pixel input[type=text],
+body.pixel input[type=password],
+body.pixel input[type=number],
+body.pixel textarea,
+body.pixel select,
+body.pixel #chat-input {
+  font-family: 'Pixelify Sans', 'Courier New', monospace;
+  background: #0a0605 !important;
+  color: #f0e0c0 !important;
+  border: 2px solid #000 !important;
+  box-shadow: inset 2px 2px 0 #000, inset -2px -2px 0 #4a3214 !important;
+}
+
+/* ---- Casillas de inventario, equipo y comercio ---- */
+body.pixel .inv-slot,
+body.pixel .equip-slot,
+body.pixel .trade-slot,
+body.pixel .skill-slot {
+  background: #0d0806 !important;
+  border: 2px solid #000 !important;
+  box-shadow: inset 2px 2px 0 #000, inset -2px -2px 0 #3a2a14 !important;
+}
+/* Los grados de afijo siguen leyéndose por el color del borde */
+body.pixel .inv-slot.g1, body.pixel .trade-slot.g1, body.pixel .equip-slot.g1 {
+  box-shadow: inset 0 0 0 2px #5fa8d3 !important;
+}
+body.pixel .inv-slot.g2, body.pixel .trade-slot.g2, body.pixel .equip-slot.g2 {
+  box-shadow: inset 0 0 0 2px #a06fd6 !important;
+}
+body.pixel .inv-slot.g3, body.pixel .trade-slot.g3, body.pixel .equip-slot.g3 {
+  box-shadow: inset 0 0 0 2px #d9a441, inset 0 0 0 4px #000 !important;
+}
+
+/* ---- Filas de listas ---- */
+body.pixel .shop-row,
+body.pixel .craft-row,
+body.pixel .talent-row,
+body.pixel .bounty-row,
+body.pixel .lb-row,
+body.pixel .realm-card,
+body.pixel .char-card,
+body.pixel .pick-card,
+body.pixel .travel-row,
+body.pixel .guild-member {
+  background: #1c130c !important;
+  border: 2px solid #000 !important;
+  box-shadow: inset -2px -2px 0 #0e0805, inset 2px 2px 0 #3a2a14 !important;
+}
+body.pixel .pick-card.selected,
+body.pixel .realm-card.selected,
+body.pixel .char-card.selected {
+  box-shadow: inset 0 0 0 2px #d9a441 !important;
+}
+
+/* ---- Avisos ---- */
+body.pixel .toast {
+  background: #140d09 !important;
+  border: 2px solid #d9a441 !important;
+  box-shadow: 0 0 0 2px #000, 4px 4px 0 2px rgba(0,0,0,.6) !important;
+  /* En pixel art no hay fundidos suaves: el aviso aparece y desaparece en
+     escalones, como en las consolas. */
+  animation: toast-in 0.3s steps(3), toast-out 0.5s steps(3) 2.8s forwards;
+}
+
+/* ---- Barra de experiencia y HUD ---- */
+body.pixel #xp-bar {
+  background: #000 !important;
+  border: 2px solid #000 !important;
+  box-shadow: inset 0 0 0 2px #3a2a14 !important;
+}
+body.pixel #xp-fill { box-shadow: none !important; }
+body.pixel #chat-log .msg { background: rgba(0,0,0,.72); }
+body.pixel #hp-orb,
+body.pixel #mp-orb {
+  border: 3px solid #000 !important;
+  box-shadow: 0 0 0 3px #d9a441, 0 0 0 6px #000 !important;
+}
+body.pixel #minimap-wrap {
+  box-shadow: 0 0 0 3px #d9a441, 0 0 0 6px #000 !important;
+}
+
+/* Cifras críticas (vida, maná, oro, experiencia) con la fuente de 8 bits: sus
+   dígitos son inequívocos. Con Pixelify Sans, a tamaño pequeño, un "2" podía
+   leerse como "8" — y en la vida eso no puede pasar. */
+body.pixel #hp-text,
+body.pixel #mp-text,
+body.pixel #gold-display,
+body.pixel #xp-text {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  letter-spacing: 0;
+}
+body.pixel #hp-text { font-size: 14px; }
+body.pixel #mp-text { font-size: 12px; }
+body.pixel #xp-text { font-size: 8px; }
+body.pixel #gold-display { font-size: 11px; }

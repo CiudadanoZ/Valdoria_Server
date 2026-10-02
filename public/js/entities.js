@@ -1,6 +1,7 @@
 // Personajes: malla low-poly del héroe, etiquetas de nombre, jugador local
 // (movimiento por clic estilo Diablo) y jugadores remotos interpolados.
 import * as THREE from 'three';
+import { asOverlay, drawLabel } from './pixel.js';
 import { isBlocked } from './world.js';
 import { heightAt } from './terrain.js';
 import { MOUNTS } from './world-data.js';
@@ -130,15 +131,10 @@ export function makeNameSprite(text, color = '#ffd97a') {
   const canvas = document.createElement('canvas');
   canvas.width = 256; canvas.height = 64;
   const ctx = canvas.getContext('2d');
-  ctx.font = 'bold 30px Georgia';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'black';
-  ctx.shadowBlur = 6;
-  ctx.fillStyle = color;
-  ctx.fillText(text, 128, 32);
+  drawLabel(ctx, text, 128, 32, { size: 30, color });
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  asOverlay(sprite); // nítido, por encima del pixel art
   sprite.scale.set(4, 1, 1);
   sprite.position.y = 3.1;
   return sprite;
@@ -149,15 +145,10 @@ export function makeQuestMarker(symbol) {
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 96;
   const ctx = canvas.getContext('2d');
-  ctx.font = 'bold 80px Georgia';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = '#ffb400';
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = '#ffd400';
-  ctx.fillText(symbol, 32, 48);
+  drawLabel(ctx, symbol, 32, 48, { size: 80, color: '#ffd400', glow: '#ffb400', blur: 12 });
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  asOverlay(sprite); // nítido, por encima del pixel art
   sprite.scale.set(0.9, 1.35, 1);
   sprite.position.y = 4.0;
   return sprite;

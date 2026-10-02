@@ -5,16 +5,39 @@ import { sendChangePassword, sendBugReport } from './network.js';
 
 const $ = (id) => document.getElementById(id);
 const SHADOW_KEY = 'valdoria_shadows';
+const PIXEL_KEY = 'valdoria_pixel';
+const PIXEL_SIZE_KEY = 'valdoria_pixel_size';
 export const GAME_VERSION = 'alpha-0.12';
 
 let onShadowsChange = null;
+let onPixelChange = null;
 
-export function shadowsEnabled() {
-  return localStorage.getItem(SHADOW_KEY) !== '0';
+// localStorage puede fallar (navegación privada, almacenamiento bloqueado): en
+// ese caso se usan los valores por defecto y el juego sigue igual.
+function leer(clave) {
+  try { return localStorage.getItem(clave); } catch { return null; }
+}
+function guardar(clave, valor) {
+  try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento */ }
 }
 
-export function initSettings({ onShadows } = {}) {
+export function shadowsEnabled() {
+  return leer(SHADOW_KEY) !== '0';
+}
+
+// El estilo píxel viene encendido por defecto: es el aspecto del juego.
+export function pixelEnabled() {
+  return leer(PIXEL_KEY) !== '0';
+}
+
+export function pixelSize() {
+  const n = Number(leer(PIXEL_SIZE_KEY));
+  return n >= 2 && n <= 5 ? n : 3;
+}
+
+export function initSettings({ onShadows, onPixel } = {}) {
   onShadowsChange = onShadows;
+  onPixelChange = onPixel;
 
   const vols = getVolumes();
   const music = $('vol-music');
@@ -37,9 +60,29 @@ export function initSettings({ onShadows } = {}) {
   });
   sfx.addEventListener('change', () => play('click'));
   shadows.addEventListener('change', () => {
-    localStorage.setItem(SHADOW_KEY, shadows.checked ? '1' : '0');
+    guardar(SHADOW_KEY, shadows.checked ? '1' : '0');
     onShadowsChange?.(shadows.checked);
   });
+
+  // Estilo píxel: interruptor y tamaño. Se aplican al instante, sin recargar.
+  const pixel = $('opt-pixel');
+  const size = $('opt-pixel-size');
+  if (pixel && size) {
+    pixel.checked = pixelEnabled();
+    size.value = pixelSize();
+    $('opt-pixel-size-val').textContent = size.value;
+    size.disabled = !pixel.checked;
+    pixel.addEventListener('change', () => {
+      guardar(PIXEL_KEY, pixel.checked ? '1' : '0');
+      size.disabled = !pixel.checked;
+      onPixelChange?.({ enabled: pixel.checked, size: Number(size.value) });
+    });
+    size.addEventListener('input', () => {
+      $('opt-pixel-size-val').textContent = size.value;
+      guardar(PIXEL_SIZE_KEY, size.value);
+      onPixelChange?.({ enabled: pixel.checked, size: Number(size.value) });
+    });
+  }
 
   $('settings-btn-lobby')?.addEventListener('click', () => togglePanel());
   $('settings-btn')?.addEventListener('click', () => togglePanel());

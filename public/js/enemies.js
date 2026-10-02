@@ -2,6 +2,7 @@
 // La IA, el daño y el botín viven en server/server.js — todos los jugadores
 // ven y cazan las mismas criaturas.
 import * as THREE from 'three';
+import { asOverlay, drawLabel } from './pixel.js';
 import { makeNameSprite } from './entities.js';
 import { heightAt } from './terrain.js';
 
@@ -292,6 +293,7 @@ function makeHPBar() {
   canvas.width = 128; canvas.height = 16;
   const tex = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  asOverlay(sprite); // nítido, por encima del pixel art
   sprite.scale.set(2.2, 0.28, 1);
   sprite.position.y = 2.6;
   sprite.visible = false;
@@ -314,14 +316,9 @@ export function spawnFloatText(scene, text, color, worldPos, big = false) {
   const canvas = document.createElement('canvas');
   canvas.width = 128; canvas.height = 64;
   const ctx = canvas.getContext('2d');
-  ctx.font = `bold ${big ? 44 : 34}px Georgia`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'black';
-  ctx.shadowBlur = 5;
-  ctx.fillStyle = color;
-  ctx.fillText(text, 64, 32);
+  drawLabel(ctx, text, 64, 32, { size: big ? 44 : 34, color, blur: 5 });
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false, transparent: true }));
+  asOverlay(sprite); // nítido, por encima del pixel art
   sprite.scale.set(2, 1, 1);
   sprite.position.copy(worldPos);
   sprite.position.y += 2.4;

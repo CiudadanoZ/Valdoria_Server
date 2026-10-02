@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ciudadela de Valdoria — MMORPG</title>
+  <!-- Fuentes del estilo píxel: Pixelify Sans para leer, Press Start 2P para títulos -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=Press+Start+2P&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
   <script type="importmap">
     { "imports": { "three": "/vendor/three.module.js" } }
@@ -180,6 +184,16 @@
       <label for="opt-shadows">🌑 Sombras</label>
       <input id="opt-shadows" type="checkbox" checked />
       <span class="settings-hint">Desactívalas si el juego va lento</span>
+    </div>
+    <div class="settings-row">
+      <label for="opt-pixel">👾 Estilo píxel</label>
+      <input id="opt-pixel" type="checkbox" checked />
+      <span class="settings-hint">Apágalo para volver al aspecto clásico</span>
+    </div>
+    <div class="settings-row">
+      <label for="opt-pixel-size">🔲 Tamaño del píxel</label>
+      <input id="opt-pixel-size" type="range" min="2" max="5" step="1" value="3" />
+      <span id="opt-pixel-size-val">3</span>
     </div>
 
     <!-- Solo en el juego: cuenta -->

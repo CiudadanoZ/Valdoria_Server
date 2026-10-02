@@ -46,7 +46,8 @@ import { BLESSINGS, initBlessings, applyBlessings, blessingDamage } from './bles
 import { initParty, offerInvite, onInvite, onPartyUpdate, onPartyLeft, onPlayerLeave as partyPlayerLeave } from './party.js';
 import { initGuild, toggleGuild, closeGuild, onGuildInfo, onGuildInvite } from './guild.js';
 import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby, clearSession } from './lobby.js';
-import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled, enableAccountSettings, onPasswordResult, onReportResult } from './settings.js';
+import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled, pixelEnabled, pixelSize, enableAccountSettings, onPasswordResult, onReportResult } from './settings.js';
+import { PixelPipeline } from './pixel.js';
 import { applyBounties, openBountyBoard } from './bountyboard.js';
 import { play } from './audio.js';
 import * as ui from './ui.js';
@@ -144,7 +145,24 @@ function flushSave() {
 
 // ---------- Conexión y lobby ----------
 initLobby();
-initSettings({ onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; } });
+// Las etiquetas del mundo se dibujan en un canvas UNA vez, al crearse: si la
+// fuente píxel no ha llegado aún, se pintarían con la de repuesto. Se pide ya,
+// mientras el jugador está en la pantalla de entrada.
+document.fonts?.load('700 30px "Pixelify Sans"').catch(() => {});
+document.fonts?.load('16px "Press Start 2P"').catch(() => {});
+
+// Estilo píxel: se puede encender, apagar y cambiar de tamaño en caliente.
+let pixelPipe = null;
+let pixelOn = pixelEnabled();
+document.body.classList.toggle('pixel', pixelOn);
+initSettings({
+  onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; },
+  onPixel: ({ enabled, size }) => {
+    pixelOn = enabled;
+    document.body.classList.toggle('pixel', enabled);
+    pixelPipe?.setPixelSize(size);
+  },
+});
 initLeaderboard();
 initTrade();
 initAuction();
@@ -483,6 +501,8 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
   renderer.shadowMap.enabled = shadowsEnabled();
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.prepend(renderer.domElement);
+  pixelPipe = new PixelPipeline(renderer, { pixelSize: pixelSize() });
+  pixelPipe.setSize(window.innerWidth, window.innerHeight);
 
   worldRefs = buildWorld(scene);
   npcs = spawnNPCs(scene);
@@ -617,6 +637,7 @@ function startGame({ id, spawn, realm, character, vitals: initialVitals, players
     flushSave,
     scene: () => scene,
     camera: () => camera,
+    pixel: () => pixelPipe,
     worldRefs: () => worldRefs,
   };
   function project(worldPos, yOffset) {
@@ -912,6 +933,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  pixelPipe?.setSize(window.innerWidth, window.innerHeight);
 }
 
 // ---------- Combate del jugador ----------
@@ -1093,5 +1115,6 @@ function loop() {
     Math.round(player.mesh.rotation.y * 100) / 100
   );
 
-  renderer.render(scene, camera);
+  if (pixelOn && pixelPipe) pixelPipe.render(scene, camera);
+  else renderer.render(scene, camera);
 }

@@ -2,6 +2,7 @@
 // puerta sur, edificios, fuente, antorchas, Hierbas Lumina) y el bioma exterior
 // (llanuras al este, bosque al oeste y sur profundo, camino de tierra).
 import * as THREE from 'three';
+import { asOverlay } from './pixel.js';
 import { WAYSTONES } from './world-data.js';
 import { heightAt, colorAt, biomeAt, WORLD_RADIUS } from './terrain.js';
 
@@ -1229,6 +1230,7 @@ function makeBoardMarker(glyph = '📜', glow = '#ffb400') {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas), depthTest: false, transparent: true,
   }));
+  asOverlay(sprite); // nítido, por encima del pixel art
   sprite.scale.set(1.5, 1.5, 1);
   return sprite;
 }
