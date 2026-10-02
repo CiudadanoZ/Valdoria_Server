@@ -30,6 +30,7 @@ import {
   onBountyKill, claimBounty, acceptBounty, respecCost, respecTalents,
   computeMaxResource, resourceDef, startingResource,
   affixSpeed, goldMultiplier, powerValue,
+  offenseOf, attackSpeedOf, defenseOf,
 } from './state.js';
 import {
   rollGear, displayName, tierFromXp, sellValueOf, POWERS,
@@ -41,7 +42,9 @@ import {
 } from './depths.js';
 import { skillById } from '../public/js/skills-data.js';
 import { xpForLevel } from '../public/js/talents-data.js';
-import { applyArmor } from '../public/js/combat-data.js';
+import {
+  applyArmor, resolveHit, resolveIncoming, attackCooldownMs,
+} from '../public/js/combat-data.js';
 import { EVENT_INTERVAL_S, COLOSO_SPOT, MOB_TYPES, SPAWNS } from './mobs-data.js';
 import {
   REALMS, PORTAL_JUMPS, FOUNTAIN, MAX_SPEED, HERB_SPOTS, HERB_COOLDOWN_MS,
@@ -279,7 +282,9 @@ function applySegundoAliento(p) {
 // reaparece al jugador junto a la fuente con el 60% de la vida.
 function damagePlayer(p, id, rawDmg, mobName, atacante = null, realm = null) {
   dismount(p, id);
-  const reduced = applyArmor(rawDmg, computeArmor(p.character, currentBuffArmor(p)));
+  // Armadura, luego reducción de daño, luego bloqueo (solo con escudo).
+  const golpe = resolveIncoming(rawDmg, defenseOf(p.character, currentBuffArmor(p)));
+  const reduced = golpe.dmg;
   p.hp = Math.max(0, p.hp - reduced);
   // Espinas devuelve el golpe; Segundo Aliento puede salvarte justo aquí, antes
   // de que se evalúe la muerte.
@@ -312,7 +317,7 @@ function damagePlayer(p, id, rawDmg, mobName, atacante = null, realm = null) {
     }
     broadcast(p.realm, { type: 'player_state', id, x: p.x, z: p.z, rot: p.rot }, id);
   } else {
-    send(p.ws, { type: 'player_hurt', dmg: reduced, mobName, ...vitals(p) });
+    send(p.ws, { type: 'player_hurt', dmg: reduced, mobName, blocked: golpe.blocked, ...vitals(p) });
   }
 }
 
@@ -320,7 +325,9 @@ function damagePlayer(p, id, rawDmg, mobName, atacante = null, realm = null) {
 // reaparece en la fuente y el atacante suma una baja de JcJ.
 function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
   dismount(target, targetId);
-  const reduced = applyArmor(rawDmg, computeArmor(target.character, currentBuffArmor(target)));
+  // En JcJ valen los mismos ejes: el atacante multiplica, el objetivo mitiga.
+  const bruto = resolveHit(rawDmg, offenseOf(attacker.character.state)).dmg;
+  const reduced = resolveIncoming(bruto, defenseOf(target.character, currentBuffArmor(target))).dmg;
   target.hp = Math.max(0, target.hp - reduced);
   target.lastCombatMs = Date.now();
   const gain = resourceDef(target.character).onHurt;
@@ -1210,14 +1217,20 @@ wss.on('connection', (ws) => {
       case 'attack': {
         if (!p?.realm || !st) return;
         const now = Date.now();
-        if (now - lastAttack < 600) return;
+        // El ritmo de golpe lo marca la velocidad de ataque del equipo, con un
+        // pellizco de margen para no castigar la latencia.
+        if (now - lastAttack < attackCooldownMs(attackSpeedOf(st)) - 60) return;
         lastAttack = now;
         dismount(p, id);
         const m = realmMobs.get(p.realm).get(Number(msg.mobId));
         if (!m || m.state === 'dead') return;
         if (dist(p.x, p.z, m.x, m.z) > 6) return;
-        let dmg = Math.round(Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1))) * weakMul(p));
-        dmg = applyVerdugo(p, m, dmg);
+        // El cliente declara el daño BASE; los multiplicadores (crítico y % de
+        // daño) los resuelve el servidor. Si el crítico lo tirase el cliente,
+        // uno manipulado criticaría siempre y el tope no lo notaría.
+        const base = Math.round(Math.min(maxPlausibleHit(st), Math.max(1, Math.round(Number(msg.dmg) || 1))) * weakMul(p));
+        const golpe = resolveHit(applyVerdugo(p, m, base), offenseOf(st));
+        const dmg = golpe.dmg;
         // El golpe básico alimenta la furia del guerrero
         const gain = resourceDef(p.character).onAttack;
         if (gain) { addResource(p, gain); p.lastRageMs = now; }
@@ -1229,7 +1242,7 @@ wss.on('connection', (ws) => {
           m.targetId = id;
         }
         if (m.hp <= 0) killMob(p.realm, m, id);
-        else broadcast(p.realm, { type: 'mob_hit', id: m.id, hp: m.hp, by: id, dmg });
+        else broadcast(p.realm, { type: 'mob_hit', id: m.id, hp: m.hp, by: id, dmg, crit: golpe.crit });
         break;
       }
       case 'skill_hits': {
@@ -1249,8 +1262,9 @@ wss.on('connection', (ws) => {
           const m = mobsHere.get(Number(h.mobId));
           if (!m || m.state === 'dead') continue;
           if (dist(p.x, p.z, m.x, m.z) > 18) continue;
-          let dmg = Math.round(Math.min(maxSkillHit, Math.max(1, Math.round(Number(h.dmg) || 1))) * weakMul(p));
-          dmg = applyVerdugo(p, m, dmg);
+          const bruto = Math.round(Math.min(maxSkillHit, Math.max(1, Math.round(Number(h.dmg) || 1))) * weakMul(p));
+          const golpe = resolveHit(applyVerdugo(p, m, bruto), offenseOf(st));
+          const dmg = golpe.dmg;
           applySed(p, dmg);
           m.hp -= dmg;
           m.damagers.add(id);
@@ -1259,7 +1273,7 @@ wss.on('connection', (ws) => {
             m.targetId = id;
           }
           if (m.hp <= 0) killMob(p.realm, m, id);
-          else broadcast(p.realm, { type: 'mob_hit', id: m.id, hp: m.hp, by: id, dmg });
+          else broadcast(p.realm, { type: 'mob_hit', id: m.id, hp: m.hp, by: id, dmg, crit: golpe.crit });
         }
         // Habilidades de área que además curan (Nova Sagrada): la cura va aquí
         // para cobrar el recurso una sola vez por lanzamiento.

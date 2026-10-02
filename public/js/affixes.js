@@ -66,6 +66,41 @@ export const AFFIXES = {
     base: 0.05, per: 0.015, kind: 'frac', slots: null,
     fmt: (v) => `+${Math.round(v * 100)}% de oro`,
   },
+
+  // ---- Ejes multiplicativos ----
+  // Estos no suman: multiplican. Son los que hacen que un personaje bien
+  // montado triplique a otro con el mismo equipo mal repartido, y los que
+  // permiten seguir bajando pisos sin que el combate se vuelva eterno.
+  crit: {
+    id: 'crit', label: 'Precisión', suffix: 'del Certero', icon: '🎯',
+    base: 0.03, per: 0.006, kind: 'frac', slots: null,
+    fmt: (v) => `+${(v * 100).toFixed(1)}% de probabilidad de crítico`,
+  },
+  critDmg: {
+    id: 'critDmg', label: 'Saña', suffix: 'de la Saña', icon: '💥',
+    base: 0.10, per: 0.022, kind: 'frac', slots: null,
+    fmt: (v) => `+${Math.round(v * 100)}% de daño crítico`,
+  },
+  atkSpeed: {
+    id: 'atkSpeed', label: 'Presteza', suffix: 'de la Presteza', icon: '⚡',
+    base: 0.03, per: 0.005, kind: 'frac', slots: ['arma', 'cabeza', 'accesorio', 'espalda'],
+    fmt: (v) => `+${Math.round(v * 100)}% de velocidad de ataque`,
+  },
+  dmgMul: {
+    id: 'dmgMul', label: 'Poderío', suffix: 'del Poderío', icon: '🔥',
+    base: 0.04, per: 0.008, kind: 'frac', slots: null,
+    fmt: (v) => `+${Math.round(v * 100)}% de daño`,
+  },
+  block: {
+    id: 'block', label: 'Guardia', suffix: 'de la Guardia', icon: '⛊',
+    base: 0.04, per: 0.008, kind: 'frac', slots: ['escudo', 'torso', 'accesorio'],
+    fmt: (v) => `+${Math.round(v * 100)}% de bloqueo`,
+  },
+  dr: {
+    id: 'dr', label: 'Temple', suffix: 'del Temple', icon: '🪨',
+    base: 0.02, per: 0.005, kind: 'frac', slots: ['cabeza', 'torso', 'escudo', 'espalda'],
+    fmt: (v) => `−${Math.round(v * 100)}% de daño recibido`,
+  },
 };
 
 export const AFFIX_IDS = Object.keys(AFFIXES);
@@ -267,7 +302,10 @@ export function itemOf(entry) {
 
 // Estadísticas totales de una pieza: lo que trae de fábrica más sus afijos.
 export function statsOf(entry) {
-  const out = { dmg: 0, armor: 0, hp: 0, speed: 0, healMul: 0, regen: 0, gold: 0 };
+  const out = {
+    dmg: 0, armor: 0, hp: 0, speed: 0, healMul: 0, regen: 0, gold: 0,
+    crit: 0, critDmg: 0, atkSpeed: 0, dmgMul: 0, block: 0, dr: 0,
+  };
   const item = itemOf(entry);
   if (!item) return out;
   out.dmg = item.dmg || 0;

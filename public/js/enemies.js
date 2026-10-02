@@ -477,18 +477,26 @@ export class Mobs {
     }
   }
 
-  onHit({ id, hp, dmg }) {
+  onHit({ id, hp, dmg, crit }) {
     const m = this.map.get(id);
     if (!m || m.dead) return;
-    const big = dmg >= m.info.maxHp * 0.15; // golpe contundente
+    // Un crítico siempre se celebra, aunque el bicho sea grande y el golpe
+    // parezca poco: es la recompensa de haber montado la build.
+    const big = crit || dmg >= m.info.maxHp * 0.15;
     m.hp = hp;
     drawHPBar(m.bar, hp / m.info.maxHp);
     m.bar.sprite.visible = true;
-    spawnFloatText(this.scene, `-${dmg}`, big ? '#ffb03a' : '#ffd97a', m.mesh.position, big);
+    spawnFloatText(
+      this.scene,
+      crit ? `¡${dmg}!` : `-${dmg}`,
+      crit ? '#ff5f2e' : (big ? '#ffb03a' : '#ffd97a'),
+      m.mesh.position,
+      big
+    );
     // Impacto: destello, achatado y chispas
     m.flash = FLASH_DUR;
     m.punch = 1;
-    spawnImpact(this.scene, m.mesh.position, big ? 0xffa030 : 0xffd06a, big ? 10 : 6);
+    spawnImpact(this.scene, m.mesh.position, crit ? 0xff5f2e : (big ? 0xffa030 : 0xffd06a), crit ? 14 : (big ? 10 : 6));
     return big;
   }
 

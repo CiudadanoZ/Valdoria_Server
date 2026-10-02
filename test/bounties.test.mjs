@@ -5,12 +5,22 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer } from './helpers/server.mjs';
 import { spawnBot, wait } from './helpers/bot.mjs';
-import { BOUNTY_COUNT, WEEKLY_COUNT } from '../public/js/bounties.js';
+import { BOUNTY_COUNT, WEEKLY_COUNT, dailyBounties, todayNumber } from '../public/js/bounties.js';
 
 const TABLON = [8, 6]; // Tablón de Encargos, en la plaza
 
+// Un día cuyo tablón trae encargo de lobos (están junto a la Ciudadela, así que
+// el bot puede cazarlos). Se fija el día en el servidor para que el test no
+// dependa del calendario: antes pasaba o fallaba según la fecha.
+function diaConLobos() {
+  for (let d = todayNumber(); d < todayNumber() + 400; d++) {
+    if (dailyBounties(d).some((b) => b.mob === 'lobo')) return d;
+  }
+  throw new Error('ningún día del próximo año trae encargo de lobos');
+}
+
 let server;
-before(async () => { server = await startServer(); });
+before(async () => { server = await startServer({ env: { BOUNTY_DAY: String(diaConLobos()) } }); });
 after(async () => { await server.stop(); });
 
 const encargos = (bot) => bot.sync?.bounties ?? bot.charState.bounties;
@@ -61,7 +71,8 @@ test('hay que estar junto al Tablón para aceptar', async () => {
 
 test('al aceptar, el encargo avanza con las bajas y se cobra al completarlo', async () => {
   const bot = await spawnBot(server.url, { account: 'aceptaEncargo', clazz: 'guerrero' });
-  const objetivo = encargos(bot).list.find((b) => b.mob === 'lobo') || encargos(bot).list[0];
+  const objetivo = encargos(bot).list.find((b) => b.mob === 'lobo');
+  assert.ok(objetivo, 'el día fijado debe traer encargo de lobos');
 
   // Aceptar junto al Tablón
   await bot.walkTo(...TABLON);

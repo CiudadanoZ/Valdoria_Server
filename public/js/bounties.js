@@ -40,8 +40,15 @@ export const WEEKLY_COUNT = 2; // contratos semanales activos
 
 // Sorteo determinista del día: mismos encargos para todo el reino ese día.
 // dayNumber = días transcurridos desde época (UTC).
+// BOUNTY_DAY fija el día a mano. Existe para los tests: sin él, que hubiera o no
+// un encargo de lobos dependía del calendario, y un mismo test pasaba un día y
+// fallaba al siguiente. En el navegador no hay `process`, así que no afecta.
+const DIA_FIJO = typeof process !== 'undefined' && process.env?.BOUNTY_DAY
+  ? Number(process.env.BOUNTY_DAY)
+  : null;
+
 export function todayNumber() {
-  return Math.floor(Date.now() / 86400000);
+  return DIA_FIJO ?? Math.floor(Date.now() / 86400000);
 }
 
 // Número de semana (lunes como día de reinicio: la época cayó en jueves).

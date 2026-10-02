@@ -17,6 +17,13 @@ export const ECHOES = {
   armor: { id: 'armor', name: 'Coraza',  icon: '🛡️', per: 1,    fmt: (n) => `+${n} de armadura` },
   regen: { id: 'regen', name: 'Aliento', icon: '🌿', per: 0.2,  fmt: (n) => `+${(n * 0.2).toFixed(1)} de vida por segundo` },
   gold:  { id: 'gold',  name: 'Fortuna', icon: '🪙', per: 0.01, fmt: (n) => `+${n}% de oro` },
+  // Ejes multiplicativos: valen menos por punto que los planos a propósito,
+  // porque se multiplican entre sí y con el equipo. Son la inversión a largo
+  // plazo del que baja de verdad.
+  crit:     { id: 'crit',     name: 'Ojo',      icon: '🎯', per: 0.004, fmt: (n) => `+${(n * 0.4).toFixed(1)}% de crítico` },
+  critDmg:  { id: 'critDmg',  name: 'Sana',     icon: '💥', per: 0.012, fmt: (n) => `+${Math.round(n * 1.2)}% de daño crítico` },
+  atkSpeed: { id: 'atkSpeed', name: 'Presteza', icon: '⚡', per: 0.004, fmt: (n) => `+${(n * 0.4).toFixed(1)}% de velocidad de ataque` },
+  dmgMul:   { id: 'dmgMul',   name: 'Poderío',  icon: '🔥', per: 0.006, fmt: (n) => `+${(n * 0.6).toFixed(1)}% de daño` },
 };
 export const ECHO_IDS = Object.keys(ECHOES);
 

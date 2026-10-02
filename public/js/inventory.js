@@ -7,6 +7,7 @@ import { setGold, showTooltip, hideTooltip } from './ui.js';
 import {
   statsOf, sumStats, displayName, affixLines, gradeInfo, rollOf, idOf, AFFIXES, powerOf,
 } from './affixes.js';
+import { BASE_CRIT, BASE_CRIT_DMG, offenseMultiplier } from './combat-data.js';
 
 const SLOTS = 24;
 
@@ -109,7 +110,9 @@ function compareLines(entry) {
   const mine = statsOf(entry);
   const theirs = statsOf(worn);
   const rows = [];
-  for (const field of ['dmg', 'armor', 'hp', 'speed', 'healMul', 'regen', 'gold']) {
+  const campos = ['dmg', 'armor', 'hp', 'speed', 'healMul', 'regen', 'gold',
+    'crit', 'critDmg', 'atkSpeed', 'dmgMul', 'block', 'dr'];
+  for (const field of campos) {
     const diff = (mine[field] || 0) - (theirs[field] || 0);
     if (!diff) continue;
     const def = AFFIXES[field];
@@ -206,12 +209,31 @@ function render() {
   const stats = document.getElementById('equip-stats');
   if (!stats) return;
   const dmg = getWeaponDamage();
-  const extra = [];
+  // Los ejes multiplicativos se muestran SIEMPRE, aunque estén a cero: son los
+  // que deciden una build, y si no se ven no se pueden construir.
+  const crit = BASE_CRIT + getAffix('crit');
+  const critDmg = BASE_CRIT_DMG + getAffix('critDmg');
+  const mult = offenseMultiplier({ crit: getAffix('crit'), critDmg: getAffix('critDmg'), dmgMul: getAffix('dmgMul') });
+
+  const linea1 = [
+    `⚔ Daño ${5 + dmg}–${9 + dmg}`,
+    `🛡 Armadura ${getArmor()}`,
+  ];
   const hp = getAffix('hp');
-  const spd = getAffix('speed');
-  if (hp) extra.push(`❤️ +${hp}`);
-  if (spd) extra.push(`💨 +${Math.round(spd * 100)}%`);
-  stats.textContent =
-    `⚔ Daño ${5 + dmg}–${9 + dmg} · 🛡 Armadura ${getArmor()}` +
-    (extra.length ? ` · ${extra.join(' · ')}` : '');
+  if (hp) linea1.push(`❤️ +${hp}`);
+
+  const linea2 = [
+    `🎯 ${(crit * 100).toFixed(1)}%`,
+    `💥 +${Math.round(critDmg * 100)}%`,
+    `⚡ +${Math.round(getAffix('atkSpeed') * 100)}%`,
+    `🔥 +${Math.round(getAffix('dmgMul') * 100)}%`,
+  ];
+  const def = [];
+  if (getAffix('dr')) def.push(`🪨 −${Math.round(getAffix('dr') * 100)}%`);
+  if (getAffix('block')) def.push(`⛊ ${Math.round(getAffix('block') * 100)}%`);
+
+  stats.innerHTML =
+    `<div>${linea1.join(' · ')}</div>` +
+    `<div class="stat-mult">${linea2.join(' · ')}${def.length ? ` · ${def.join(' · ')}` : ''}</div>` +
+    `<div class="stat-total">Multiplicador de daño: <b>×${mult.toFixed(2)}</b></div>`;
 }

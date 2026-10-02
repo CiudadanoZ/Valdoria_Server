@@ -27,8 +27,9 @@ import { MELEE } from './combat-data.js';
 import { initMinimap, updateMinimap, toggleMap, closeMap } from './minimap.js';
 import {
   initProgression, applyProgression, toggleTalents, setGoldForRespec,
-  talentDmg, talentSpeedMul, talentCdr, isSkillUnlocked,
+  talentDmg, talentSpeedMul, talentCdr, isSkillUnlocked, echoBonus,
 } from './progression.js';
+import { clampAtkSpeed, offenseMultiplier } from './combat-data.js';
 import { ECHOES } from './talents-data.js';
 import { openCooking, refreshCooking } from './cooking.js';
 import { initLeaderboard, openLeaderboard, applyLeaderboard } from './leaderboard.js';
@@ -116,6 +117,12 @@ let combatTarget = null;   // criatura enganchada
 let pvpTarget = null;      // jugador remoto enganchado (JcJ)
 let attackCooldown = 0;
 let myPvp = false;
+
+// Ritmo de golpe: el de la clase, acelerado por la Presteza del equipo y los
+// Ecos. El servidor valida con la misma fórmula, así que no se desincronizan.
+function attackInterval() {
+  return myClass.attackInterval / (1 + clampAtkSpeed(getAffix('atkSpeed') + echoBonus('atkSpeed')));
+}
 
 // ---------- Sincronización del estado con el servidor ----------
 let saveTimer = null;
@@ -932,7 +939,7 @@ function updateCombat(dt) {
     player.stop();
     player.mesh.rotation.y = Math.atan2(tp.x - player.mesh.position.x, tp.z - player.mesh.position.z);
     if (attackCooldown <= 0) {
-      attackCooldown = myClass.attackInterval;
+      attackCooldown = attackInterval();
       const dmg = rollAttackDamage();
       player.mesh.getObjectByName('armR').rotation.x = -1.7;
       play('attack');
@@ -960,7 +967,7 @@ function updateCombat(dt) {
   player.mesh.rotation.y = Math.atan2(d.x, d.z);
 
   if (attackCooldown <= 0) {
-    attackCooldown = myClass.attackInterval;
+    attackCooldown = attackInterval();
     const dmg = rollAttackDamage();
     player.mesh.getObjectByName('armR').rotation.x = -1.7;
     play('attack');

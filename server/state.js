@@ -395,8 +395,41 @@ export function equippedWeaponDmg(st) {
 // La fórmula vive en combat-data.js para no desincronizarse del cliente.
 // Los Ecos de Filo TIENEN que entrar aquí: si no, el servidor recortaría los
 // golpes buenos de un personaje veterano tomándolos por trampa.
+//
+// Ojo: esto acota el daño BASE. Los multiplicadores (crítico, % de daño) los
+// aplica el servidor DESPUÉS, así que no hace falta inflar el tope por ellos.
 export function maxPlausibleHit(st) {
   return maxMeleeHit(equippedWeaponDmg(st)) + echoBonus(st, 'dmg');
+}
+
+// ---- Perfil ofensivo y defensivo ----
+// Cada eje suma equipo + Ecos. El combate los multiplica entre sí.
+export function offenseOf(st) {
+  return {
+    crit: affixBonus(st, 'crit') + echoBonus(st, 'crit'),
+    critDmg: affixBonus(st, 'critDmg') + echoBonus(st, 'critDmg'),
+    dmgMul: affixBonus(st, 'dmgMul') + echoBonus(st, 'dmgMul'),
+  };
+}
+
+export function attackSpeedOf(st) {
+  return affixBonus(st, 'atkSpeed') + echoBonus(st, 'atkSpeed');
+}
+
+// ¿Lleva escudo? El bloqueo solo cuenta con uno puesto: es lo que se paga por
+// renunciar a otras piezas.
+export function hasShield(st) {
+  return !!idOf(st.inventory.equipment.escudo);
+}
+
+export function defenseOf(character, skillBuffArmor = 0) {
+  const st = character.state;
+  return {
+    armor: computeArmor(character, skillBuffArmor),
+    dr: affixBonus(st, 'dr'),
+    block: affixBonus(st, 'block'),
+    hasShield: hasShield(st),
+  };
 }
 
 // ---- Experiencia, talentos y Ecos ----
