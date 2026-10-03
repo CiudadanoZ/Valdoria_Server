@@ -1,6 +1,7 @@
 // NPCs de la Ciudadela. El Maestre Aldric entrega las misiones de Bienvenida;
 // el resto son ciudadanos con los que hay que hablar en la misión 3.
 import { makeCharacter, makeNameSprite, makeQuestMarker } from './entities.js';
+import { npcSheet, dressWithSprite, applyArt, artState, placeLabelAbove, HERO_HEIGHT } from './pixelsprites.js';
 import { heightAt } from './terrain.js';
 import { aldricMarker, toranMarker, baldurMarker, nyraMarker, ysraMarker, skadiMarker } from './quests.js';
 
@@ -111,9 +112,13 @@ export function spawnNPCs(scene) {
   const npcs = [];
   for (const data of NPC_DATA) {
     const mesh = makeCharacter({ bodyColor: data.bodyColor });
+    // Piel de pixel art propia de cada NPC; el muñeco 3D queda de zona de clic.
+    dressWithSprite(mesh, mesh.children[0], npcSheet(data.id));
     mesh.position.set(data.pos[0], heightAt(data.pos[0], data.pos[1]), data.pos[1]);
     mesh.rotation.y = data.rot;
-    mesh.add(makeNameSprite(data.name));
+    const etiqueta = makeNameSprite(data.name);
+    mesh.add(etiqueta);
+    mesh.userData.label = etiqueta;
     mesh.traverse((o) => { o.userData.npcId = data.id; });
     scene.add(mesh);
     npcs.push({ ...data, mesh, marker: null });
@@ -142,7 +147,24 @@ export function updateQuestMarkers(npcs, time) {
       npc.markerSymbol = symbol;
     }
     if (npc.marker) {
-      npc.marker.position.y = 4.0 + Math.sin(time * 3) * 0.18;
+      const flota = Math.sin(time * 3) * 0.18;
+      if (artState.sprites) placeLabelAbove(npc.marker, npc.mesh.rotation.y, HERO_HEIGHT + 1.5 + flota);
+      else npc.marker.position.set(0, 4.0 + flota, 0);
+    }
+  }
+}
+
+// Respiración en reposo y nombre sobre el sprite. Los NPCs no andan, pero un
+// sprite totalmente quieto parece un recorte de cartón.
+export function animateNPCs(npcs, dt) {
+  for (const npc of npcs) {
+    const { skin, label } = npc.mesh.userData;
+    if (!skin) continue;
+    applyArt(npc.mesh);
+    skin.update(dt, npc.mesh.rotation.y, false);
+    if (label) {
+      if (artState.sprites) placeLabelAbove(label, npc.mesh.rotation.y, HERO_HEIGHT + 0.5);
+      else label.position.set(0, 3.1, 0);
     }
   }
 }

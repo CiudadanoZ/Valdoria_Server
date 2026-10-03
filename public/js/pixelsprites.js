@@ -144,38 +144,70 @@ function darkOf(css) {
 // clase tiene una forma reconocible (yelmo y escudo, capucha y arco, túnica
 // larga y báculo).
 const CLASS_LOOK = {
-  guerrero: { main: 0x9a2a22, metal: 0x9aa4b4, leather: 0x5a3a24, head: 'yelmo', weapon: 'espada', offhand: 'escudo', robe: false },
-  explorador: { main: 0x3f6b34, metal: 0x8a8070, leather: 0x6a4428, head: 'capucha', weapon: 'arco', offhand: null, robe: false },
-  sacerdote: { main: 0xe2d6b8, metal: 0xd9a441, leather: 0x7a5a3a, head: 'diadema', weapon: 'baculo', offhand: null, robe: true },
+  guerrero: { main: 0x9a2a22, metal: 0x9aa4b4, leather: 0x5a3a24, head: 'yelmo', weapon: 'espada', offhand: 'escudo', armor: 'placas', cloak: false },
+  explorador: { main: 0x3f6b34, metal: 0x8a8070, leather: 0x6a4428, head: 'capucha', weapon: 'arco', offhand: null, armor: 'cuero', cloak: true },
+  sacerdote: { main: 0xe2d6b8, metal: 0xd9a441, leather: 0x7a5a3a, head: 'diadema', weapon: 'baculo', offhand: null, armor: 'tunica', cloak: false },
 };
 
 const HAIR = { humano: 0x5a3a22, elfo: 0xe8d088, enano: 0xa8502a, orco: 0x1e1a18 };
 
-export function heroLook(raceId, classId) {
-  const race = RACES[raceId] || RACES.humano;
-  const look = CLASS_LOOK[classId] || CLASS_LOOK.guerrero;
+// Construye la apariencia completa a partir de una especificación. La usan
+// los héroes (raza × clase) y los NPCs (cada uno la suya).
+function buildLook(spec) {
+  const race = RACES[spec.race] || RACES.humano;
+  const armor = spec.armor || 'cuero';
   return {
-    race: raceId,
-    skin: ramp(race.skin),
-    hair: ramp(HAIR[raceId] ?? HAIR.humano),
-    main: ramp(look.main),
-    metal: ramp(look.metal),
-    leather: ramp(look.leather),
+    race: spec.race,
+    skin: ramp(spec.skin ?? race.skin),
+    hair: ramp(spec.hair ?? HAIR[spec.race] ?? HAIR.humano),
+    beardColor: spec.beardColor ? ramp(spec.beardColor) : null,
+    main: ramp(spec.main),
+    cape: spec.cape ? ramp(spec.cape) : null,
+    metal: ramp(spec.metal ?? 0x9aa4b4),
+    leather: ramp(spec.leather ?? 0x5a3a24),
     boots: ramp(0x3a2a20),
     wood: ramp(0x7a5230),
-    glow: ramp(0x9fe8ff),
+    glow: ramp(spec.glow ?? 0x9fe8ff),
     gold: ramp(0xd9a441),
-    head: look.head,
-    weapon: look.weapon,
-    offhand: look.offhand,
-    robe: look.robe,
+    head: spec.head,
+    weapon: spec.weapon || null,
+    offhand: spec.offhand || null,
+    armor,
+    robe: armor === 'tunica',
+    cloak: !!spec.cloak,
     ears: !!race.ears,
-    beard: !!race.beard,
+    beard: spec.beard ?? (race.beard ? 'corta' : false),
     tusks: !!race.tusks,
     // El enano es más bajo y ancho; el orco, más corpulento.
-    short: raceId === 'enano' ? 3 : 0,
-    bulk: raceId === 'orco' ? 1 : raceId === 'enano' ? 1 : 0,
+    short: spec.race === 'enano' ? 3 : 0,
+    bulk: spec.bulk ?? (spec.race === 'orco' || spec.race === 'enano' ? 1 : 0),
   };
+}
+
+export function heroLook(raceId, classId) {
+  const look = CLASS_LOOK[classId] || CLASS_LOOK.guerrero;
+  return buildLook({ ...look, race: raceId });
+}
+
+// ---- NPCs ----
+// Cada uno con una silueta que se reconoce de lejos: es lo que hace que la
+// Ciudadela se sienta habitada por gente concreta y no por maniquíes.
+const NPC_LOOKS = {
+  aldric:   { race: 'humano', main: 0x4a3a7a, armor: 'tunica', head: 'pelo', hair: 0xe8e4dc, beard: 'larga', weapon: 'baculo', glow: 0xc9a4f0 },
+  bramm:    { race: 'humano', main: 0x5c3a26, armor: 'delantal', head: 'calvo', hair: 0x3a2416, beard: 'corta', weapon: 'martillo', bulk: 1, leather: 0x4a2e1c },
+  lyra:     { race: 'humano', main: 0x8a6a2a, armor: 'cuero', head: 'pelo_largo', hair: 0xb04a2a, leather: 0x6a4428 },
+  toran:    { race: 'humano', main: 0x3a4a5c, armor: 'placas', head: 'yelmo', weapon: 'lanza', offhand: 'escudo' },
+  mira:     { race: 'elfo', main: 0xd8d0e8, armor: 'tunica', head: 'diadema', hair: 0xe8d8a8, weapon: 'baculo' },
+  baldur:   { race: 'humano', main: 0x4a5a3a, armor: 'tunica', head: 'capucha', hair: 0xd8d4cc, beard: 'larga', beardColor: 0xd8d4cc, weapon: 'baculo', glow: 0xb8f070 },
+  nyra:     { race: 'elfo', main: 0x7a5a3a, armor: 'cuero', head: 'capucha', weapon: 'arco', cloak: true },
+  ysra:     { race: 'humano', main: 0x4a5a6a, armor: 'tunica', head: 'capucha', weapon: 'baculo', glow: 0x9fe8c8 },
+  skadi:    { race: 'humano', main: 0xb8c8d4, armor: 'cuero', head: 'capucha', weapon: 'arco', cloak: true, leather: 0x8a7a6a },
+  establo:  { race: 'humano', main: 0x6a5238, armor: 'cuero', head: 'sombrero', hair: 0x5a3a22, leather: 0x5a3a24 },
+  subastas: { race: 'humano', main: 0x4a4a6a, armor: 'tunica', head: 'pelo', hair: 0x9a9aa0, beard: 'corta', beardColor: 0x9a9aa0 },
+};
+
+export function npcLook(id) {
+  return buildLook(NPC_LOOKS[id] || { race: 'humano', main: 0x6a6a7a, armor: 'cuero', head: 'pelo' });
 }
 
 // Pinta un fotograma. dir: 'S' | 'N' | 'E'. anim: 'idle' | 'walk' | 'attack'.
@@ -224,7 +256,7 @@ function paintHero(L, dir, anim, f) {
     g.rect(tx - 1, 28 + Math.min(0, -top), tw + 2, 1, L.gold.d);
   } else {
     g.block(tx, 12 + y0, tw, 9, L.main);
-    if (L.weapon === 'espada') {
+    if (L.armor === 'placas') {
       // Peto metálico bajo el tabardo, y tabardo con la cruz de Valdoria.
       g.rect(tx, 12 + y0, tw, 2, L.metal.b);
       g.rect(tx, 12 + y0, 1, 2, L.metal.l);
@@ -233,6 +265,10 @@ function paintHero(L, dir, anim, f) {
       g.rect(13, 14 + y0, 1, 11 - top, L.main.d);
       g.rect(11, 16 + y0, 2, 4, L.gold.b);
       g.rect(10, 17 + y0, 4, 1, L.gold.b);
+    } else if (L.armor === 'delantal') {
+      // Delantal de cuero de la forja, del pecho a las rodillas
+      g.block(tx + 2, 13 + y0, tw - 4, 11 - top, L.leather);
+      g.set(tx + 2, 12 + y0, L.leather.d); g.set(tx + tw - 3, 12 + y0, L.leather.d);
     } else {
       // Jubón de cuero con correa cruzada
       for (let j = 0; j < 8; j++) g.set(tx + 1 + j, 12 + y0 + j, L.leather.b);
@@ -244,8 +280,8 @@ function paintHero(L, dir, anim, f) {
   }
 
   // --- capa (de espaldas se ve entera)
-  if (!front && L.weapon !== 'espada') {
-    g.block(tx, 12 + y0, tw, 15 - top, L.main);
+  if (!front && L.cloak) {
+    g.block(tx, 12 + y0, tw, 15 - top, L.cape || L.main);
   }
 
   // --- brazos y manos (se balancean al andar)
@@ -253,12 +289,12 @@ function paintHero(L, dir, anim, f) {
   const armL = { x: tx - 2, y: 13 + y0 - swing };
   const armR = { x: tx + tw, y: 13 + y0 + swing };
   for (const a of [armL, armR]) {
-    g.block(a.x, a.y, 2, 6, L.robe ? L.main : (L.weapon === 'espada' ? L.metal : L.main));
+    g.block(a.x, a.y, 2, 6, L.armor === 'placas' ? L.metal : L.main);
     g.rect(a.x, a.y + 6, 2, 2, L.skin.b);
     g.set(a.x + 1, a.y + 7, L.skin.d);
   }
-  // Hombreras del guerrero
-  if (L.weapon === 'espada') {
+  // Hombreras de la armadura de placas
+  if (L.armor === 'placas') {
     g.block(tx - 3, 11 + y0, 4, 3, L.metal);
     g.block(tx + tw - 1, 11 + y0, 4, 3, L.metal);
   }
@@ -285,10 +321,17 @@ function paintHero(L, dir, anim, f) {
     g.set(hx + 5, hy + 7, '#efe6d2');
   }
   if (L.beard && front) {
-    g.rect(hx, hy + 5, 8, 3, L.hair.b);
-    g.rect(hx + 1, hy + 8, 6, 2, L.hair.b);
-    g.rect(hx + 2, hy + 10, 4, 1, L.hair.d);
-    g.set(hx + 3, hy + 6, L.hair.d); g.set(hx + 4, hy + 6, L.hair.d);
+    const barba = L.beardColor || L.hair;
+    g.rect(hx, hy + 5, 8, 3, barba.b);
+    g.rect(hx + 1, hy + 8, 6, 2, barba.b);
+    g.rect(hx + 2, hy + 10, 4, 1, barba.d);
+    g.set(hx + 3, hy + 6, barba.d); g.set(hx + 4, hy + 6, barba.d);
+    if (L.beard === 'larga') {
+      // Barba de anciano que baja por el pecho
+      g.rect(hx + 2, hy + 10, 4, 4, barba.b);
+      g.rect(hx + 3, hy + 14, 2, 2, barba.l);
+      g.set(hx + 2, hy + 11, barba.l);
+    }
   }
 
   // Tocado de clase
@@ -325,8 +368,25 @@ function paintHero(L, dir, anim, f) {
     g.set(hx + 3, hy + 1, L.glow.l);
     g.set(hx + 4, hy + 1, L.glow.b);
   }
-  if (L.head !== 'yelmo' && L.head !== 'capucha' && L.head !== 'diadema') {
-    g.rect(hx, hy, 8, 2, L.hair.b);
+  else if (L.head === 'pelo' || L.head === 'pelo_largo') {
+    g.rect(hx, hy - 1, 8, 3, L.hair.b);
+    g.rect(hx, hy - 1, 8, 1, L.hair.l);
+    g.set(hx, hy + 2, L.hair.b); g.set(hx + 7, hy + 2, L.hair.d);
+    if (!front) g.rect(hx, hy, 8, 7, L.hair.b);
+    if (L.head === 'pelo_largo') {
+      // Melena que cae por los hombros
+      g.rect(hx - 1, hy + 1, 2, 9, L.hair.b);
+      g.rect(hx + 7, hy + 1, 2, 9, L.hair.d);
+      if (!front) g.rect(hx, hy + 6, 8, 5, L.hair.b);
+    }
+  } else if (L.head === 'calvo') {
+    g.set(hx + 2, hy, L.skin.h); g.set(hx + 3, hy, L.skin.h);   // brillo de la calva
+    g.rect(hx, hy + 2, 1, 3, L.hair.d); g.rect(hx + 7, hy + 2, 1, 3, L.hair.d);
+  } else if (L.head === 'sombrero') {
+    g.rect(hx - 2, hy + 1, 12, 1, L.leather.d);            // ala
+    g.rect(hx, hy - 2, 8, 3, L.leather.b);                 // copa
+    g.rect(hx, hy - 2, 8, 1, L.leather.l);
+    g.rect(hx, hy, 8, 1, L.gold.d);                        // cinta
   }
 
   // --- arma y mano secundaria. De frente, la mano derecha del héroe queda a
@@ -382,6 +442,14 @@ function paintWeapon(g, L, mano, lado, atk) {
       g.set(bx + lado * (curva - ext), hy + j - 2, L.wood.b);
     }
     for (let j = -6; j <= 3; j++) g.set(bx + lado * (2 - ext), hy + j - 2, '#e8e0d0');
+  } else if (L.weapon === 'martillo') {
+    for (let j = 1; j < 9; j++) g.set(hx, hy - j, L.wood.b);
+    const my = hy - (atk === 0 ? 12 : 10);
+    g.block(hx - 2, my, 5, 3, L.metal);                    // cabeza del martillo
+  } else if (L.weapon === 'lanza') {
+    for (let j = -12; j < 9; j++) g.set(hx, hy + j, j % 5 === 0 ? L.wood.d : L.wood.b);
+    g.set(hx, hy - 13, L.metal.l); g.set(hx, hy - 14, L.metal.h);
+    g.set(hx - 1, hy - 12, L.metal.d); g.set(hx + 1, hy - 12, L.metal.d);
   } else if (L.weapon === 'baculo') {
     for (let j = -14; j < 9; j++) g.set(hx, hy + j, j % 4 === 0 ? L.wood.d : L.wood.b);
     // Orbe brillante en la punta
@@ -408,7 +476,7 @@ function paintHeroSide(g, L, top, bob, anim, f, atk) {
     g.rect(10 + Math.max(0, paso), 28, 4, 2, L.boots.b);
   }
   // Capa por detrás
-  if (L.weapon !== 'espada' || L.robe) g.block(7, 12 + y0, 3, L.robe ? 16 - top : 13 - top, L.main);
+  if (L.cloak || L.robe) g.block(7, 12 + y0, 3, L.robe ? 16 - top : 13 - top, L.cape || L.main);
   // Torso
   if (L.robe) {
     for (let j = 0; j < 17 - top; j++) {
@@ -420,7 +488,7 @@ function paintHeroSide(g, L, top, bob, anim, f, atk) {
     for (let j = 13; j < 28; j++) g.set(14, j + y0, L.gold.b);
   } else {
     g.block(9 - B, 12 + y0, 7 + B, 9, L.main);
-    if (L.weapon === 'espada') {
+    if (L.armor === 'placas') {
       g.rect(9 - B, 12 + y0, 7 + B, 2, L.metal.b);
       g.block(9, 11 + y0, 5, 3, L.metal);   // hombrera
     }
@@ -434,7 +502,10 @@ function paintHeroSide(g, L, top, bob, anim, f, atk) {
   g.set(hx + 5, hy + 4, '#1a1014');         // ojo
   if (L.ears) { g.set(hx + 1, hy + 3, L.skin.b); g.set(hx, hy + 2, L.skin.l); }
   if (L.tusks) g.set(hx + 6, hy + 7, '#efe6d2');
-  if (L.beard) { g.rect(hx + 3, hy + 5, 5, 4, L.hair.b); g.rect(hx + 4, hy + 9, 3, 1, L.hair.d); }
+  if (L.beard) {
+    const barba = L.beardColor || L.hair;
+    g.rect(hx + 3, hy + 5, 5, 4, barba.b); g.rect(hx + 4, hy + 9, 3, 1, barba.d);
+  }
   if (L.head === 'yelmo') {
     g.rect(hx - 1, hy - 1, 9, 4, L.metal.b);
     g.rect(hx - 1, hy - 1, 9, 1, L.metal.l);
@@ -449,11 +520,26 @@ function paintHeroSide(g, L, top, bob, anim, f, atk) {
     g.rect(hx, hy, 7, 2, L.hair.b);
     g.rect(hx, hy + 2, 3, 5, L.hair.b);
     g.rect(hx, hy + 1, 7, 1, L.gold.b);
+  } else if (L.head === 'pelo' || L.head === 'pelo_largo') {
+    g.rect(hx, hy - 1, 7, 3, L.hair.b);
+    g.rect(hx, hy - 1, 7, 1, L.hair.l);
+    g.rect(hx, hy + 2, 3, L.head === 'pelo_largo' ? 10 : 4, L.hair.b);
+  } else if (L.head === 'calvo') {
+    g.set(hx + 3, hy, L.skin.h);
+    g.rect(hx, hy + 2, 2, 3, L.hair.d);
+  } else if (L.head === 'sombrero') {
+    g.rect(hx - 2, hy + 1, 11, 1, L.leather.d);
+    g.rect(hx, hy - 2, 7, 3, L.leather.b);
+    g.rect(hx, hy, 7, 1, L.gold.d);
+  }
+  if (L.beard === 'larga') {
+    const barba = L.beardColor || L.hair;
+    g.rect(hx + 4, hy + 9, 3, 4, barba.b);
   }
   // Brazo delantero con el arma
   const swing = anim === 'walk' ? [0, -1, 0, 1][f] : 0;
   const arm = { x: 12 + swing, y: 13 + y0 };
-  g.block(arm.x, arm.y, 2, 6, L.weapon === 'espada' ? L.metal : L.main);
+  g.block(arm.x, arm.y, 2, 6, L.armor === 'placas' ? L.metal : L.main);
   g.rect(arm.x, arm.y + 6, 2, 2, L.skin.b);
   paintWeapon(g, L, arm, 1, atk);
   if (L.weapon === 'arco') g.block(6, 10 + y0, 3, 8, L.leather);   // carcaj
@@ -468,9 +554,16 @@ const sheetCache = new Map();
 
 // Hoja de fotogramas de un héroe (raza × clase). Se pinta una vez y se reutiliza.
 export function heroSheet(raceId, classId) {
-  const key = `${raceId}:${classId}`;
+  return sheetFor(`heroe:${raceId}:${classId}`, () => heroLook(raceId, classId));
+}
+
+export function npcSheet(id) {
+  return sheetFor(`npc:${id}`, () => npcLook(id));
+}
+
+function sheetFor(key, lookFn) {
   if (sheetCache.has(key)) return sheetCache.get(key);
-  const L = heroLook(raceId, classId);
+  const L = lookFn();
   const canvas = document.createElement('canvas');
   canvas.width = FRAME_W * COLS;
   canvas.height = FRAME_H * ROWS;

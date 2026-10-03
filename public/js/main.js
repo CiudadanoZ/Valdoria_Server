@@ -7,7 +7,7 @@ import { buildWorld, animateWorld, isInCrypt, isInDepths } from './world.js';
 import { heightAt } from './terrain.js';
 import { LocalPlayer, RemotePlayers } from './entities.js';
 import { RACES, CLASSES } from './races.js';
-import { spawnNPCs, updateQuestMarkers } from './npcs.js';
+import { spawnNPCs, updateQuestMarkers, animateNPCs } from './npcs.js';
 import { Mobs, spawnFloatText } from './enemies.js';
 import {
   connect, sendMove, sendChat, sendAttack, sendSaveState, sendSkillHits, sendHealAlly,
@@ -1106,6 +1106,7 @@ function loop() {
   updateMinimap();
   animateWorld(worldRefs, time);
   updateQuestMarkers(npcs, time);
+  animateNPCs(npcs, dt);
   // El cielo acompaña al jugador para que el horizonte nunca se acabe
   worldRefs.sky?.position.set(player.mesh.position.x, 0, player.mesh.position.z);
   // La sacudida usa el tiempo real: sigue viva durante el hit-stop y remata el golpe
