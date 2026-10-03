@@ -78,16 +78,19 @@ export function ramp(hex) {
 
 // ---------------------------------------------------------------- lienzo
 
-class Grid {
-  constructor() { this.c = new Array(FRAME_W * FRAME_H).fill(null); }
+export class Grid {
+  constructor(w = FRAME_W, h = FRAME_H) {
+    this.w = w; this.h = h;
+    this.c = new Array(w * h).fill(null);
+  }
   set(x, y, col) {
     x = Math.round(x); y = Math.round(y);
-    if (x < 0 || y < 0 || x >= FRAME_W || y >= FRAME_H || !col) return;
-    this.c[y * FRAME_W + x] = col;
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h || !col) return;
+    this.c[y * this.w + x] = col;
   }
   get(x, y) {
-    if (x < 0 || y < 0 || x >= FRAME_W || y >= FRAME_H) return null;
-    return this.c[y * FRAME_W + x];
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return null;
+    return this.c[y * this.w + x];
   }
   rect(x, y, w, h, col) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, col); }
   // Rectángulo con volumen: luz a la izquierda, sombra a la derecha y abajo.
@@ -97,12 +100,24 @@ class Grid {
     if (top) for (let i = 0; i < w - 1; i++) this.set(x + i, y, r.l);
     for (let i = 1; i < w; i++) this.set(x + i, y + h - 1, r.d);
   }
+  // Óvalo con volumen: la luz viene de arriba a la izquierda, como en todo el
+  // juego. Con cuatro tonos basta para que un cuerpo parezca redondo.
+  blob(cx, cy, rx, ry, r) {
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+      for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+        const nx = (x - cx) / rx, ny = (y - cy) / ry;
+        if (nx * nx + ny * ny > 1) continue;
+        const luz = -nx * 0.55 - ny * 0.83;
+        this.set(x, y, luz > 0.72 ? r.h : luz > 0.32 ? r.l : luz < -0.42 ? r.d : r.b);
+      }
+    }
+  }
   // Contorno selectivo: cada hueco vacío junto a un píxel lleno toma una
   // versión oscura del color de su vecino.
   outline(outlineOf) {
     const add = [];
-    for (let y = 0; y < FRAME_H; y++) {
-      for (let x = 0; x < FRAME_W; x++) {
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
         if (this.get(x, y)) continue;
         const n = this.get(x, y - 1) || this.get(x - 1, y) || this.get(x + 1, y) || this.get(x, y + 1);
         if (n) add.push([x, y, outlineOf(n)]);
@@ -110,15 +125,10 @@ class Grid {
     }
     for (const [x, y, c] of add) this.set(x, y, c);
   }
-  flipX() {
-    const g = new Grid();
-    for (let y = 0; y < FRAME_H; y++) for (let x = 0; x < FRAME_W; x++) g.set(FRAME_W - 1 - x, y, this.get(x, y));
-    return g;
-  }
   drawTo(ctx, ox, oy) {
-    for (let y = 0; y < FRAME_H; y++) {
-      for (let x = 0; x < FRAME_W; x++) {
-        const col = this.c[y * FRAME_W + x];
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const col = this.c[y * this.w + x];
         if (!col) continue;
         ctx.fillStyle = col;
         ctx.fillRect(ox + x, oy + y, 1, 1);
@@ -129,7 +139,7 @@ class Grid {
 
 // El contorno de cada color se calcula una vez: oscuro y algo más frío.
 const outlineCache = new Map();
-function darkOf(css) {
+export function darkOf(css) {
   if (outlineCache.has(css)) return outlineCache.get(css);
   const m = css.match(/\d+/g).map(Number);
   const hex = (m[0] << 16) | (m[1] << 8) | m[2];
@@ -562,15 +572,22 @@ export function npcSheet(id) {
 }
 
 function sheetFor(key, lookFn) {
+  return buildSheet(key, FRAME_W, FRAME_H, (dir, anim, f) => paintHero(lookFn.cached ??= lookFn(), dir, anim, f));
+}
+
+// Monta una hoja completa llamando a `paint(dir, anim, f)` para cada
+// fotograma. La usan héroes, NPCs y criaturas; cada uno con su tamaño.
+export function buildSheet(key, fw, fh, paint) {
   if (sheetCache.has(key)) return sheetCache.get(key);
-  const L = lookFn();
   const canvas = document.createElement('canvas');
-  canvas.width = FRAME_W * COLS;
-  canvas.height = FRAME_H * ROWS;
+  canvas.width = fw * COLS;
+  canvas.height = fh * ROWS;
+  canvas.frameW = fw;
+  canvas.frameH = fh;
   const ctx = canvas.getContext('2d');
   for (const [dir, row] of Object.entries(DIRS)) {
     for (const [anim, cols] of Object.entries(ANIMS)) {
-      cols.forEach((col, f) => paintHero(L, dir, anim, f).drawTo(ctx, col * FRAME_W, row * FRAME_H));
+      cols.forEach((col, f) => paint(dir, anim, f).drawTo(ctx, col * fw, row * fh));
     }
   }
   sheetCache.set(key, canvas);
@@ -595,7 +612,8 @@ export class SpriteSkin {
     this.sprite = new THREE.Sprite(this.material);
     // Anclado por los pies: así pisa el suelo donde pisaba el muñeco 3D.
     this.sprite.center.set(0.5, 0.02);
-    this.sprite.scale.set(height * FRAME_W / FRAME_H, height, 1);
+    const fw = sheetCanvas.frameW || FRAME_W, fh = sheetCanvas.frameH || FRAME_H;
+    this.sprite.scale.set(height * fw / fh, height, 1);
     this.t = 0;
     this.anim = 'idle';
     this.dir = 'S';
@@ -732,5 +750,6 @@ export function applyArt(root) {
   if (shadow) shadow.visible = artState.sprites;
   // El cuerpo 3D se oculta pero sigue ahí: el raycaster de Three ignora la
   // visibilidad, así que continúa sirviendo de zona de clic.
-  if (body) body.visible = !artState.sprites;
+  if (Array.isArray(body)) for (const b of body) b.visible = !artState.sprites;
+  else if (body) body.visible = !artState.sprites;
 }

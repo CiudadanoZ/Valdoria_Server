@@ -3,6 +3,8 @@
 // ven y cazan las mismas criaturas.
 import * as THREE from 'three';
 import { asOverlay, drawLabel } from './pixel.js';
+import { dressWithSprite, applyArt, artState, placeLabelAbove, HERO_HEIGHT } from './pixelsprites.js';
+import { creatureSheet } from './pixelcreatures.js';
 import { makeNameSprite } from './entities.js';
 import { heightAt } from './terrain.js';
 
@@ -414,8 +416,24 @@ export class Mobs {
       : makeBeast(info);
     mesh.scale.setScalar(info.scale);
     mesh.position.set(x, heightAt(x, z), z);
+
+    // Piel de pixel art. Todas las criaturas se dibujan a la misma densidad de
+    // píxel que los héroes (32 px = 3,4 unidades), así que su tamaño NO sale de
+    // info.scale: una rata ya está pintada pequeña en su hoja. Solo los jefes y
+    // élites (escala > 1,2) se agrandan, y algo menos que su malla 3D para que
+    // sus píxeles no se vuelvan bloques enormes.
+    const piezas = [...mesh.children];
+    const agranda = info.scale > 1.2 ? 1 + (info.scale - 1) * 0.75 : 1;
+    const altoMundo = HERO_HEIGHT * agranda;
+    const ancho = info.kind === 'skeleton' || info.kind === 'drowned' ? 0.6 : 1.0;
+    dressWithSprite(mesh, piezas, creatureSheet(type, info), {
+      height: altoMundo / info.scale,              // el grupo ya va escalado
+      shadow: (ancho * agranda) / info.scale,
+    });
+
+    let label = null;
     if (info.label) {
-      const label = makeNameSprite(info.name, '#ff8866');
+      label = makeNameSprite(info.name, '#ff8866');
       label.position.y = 3.2;
       mesh.add(label);
     }
@@ -429,7 +447,10 @@ export class Mobs {
     mesh.traverse((o) => { if (o.isMesh && o.material?.emissive) mats.push(o.material); });
 
     const mob = {
-      id, type, info, mesh, bar,
+      id, type, info, mesh, bar, label,
+      // Alturas, en unidades LOCALES del grupo, del nombre y la barra sobre el sprite
+      alturaNombre: (altoMundo + 0.75) / info.scale,
+      alturaBarra: (altoMundo + 0.2) / info.scale,
       hp, target: { x, z, rot: 0 },
       chasing: false,
       dead: !!dead,
@@ -520,6 +541,7 @@ export class Mobs {
     m.mesh.visible = true;
     m.flash = 0;
     m.punch = 0;
+    m.mesh.userData.skin?.setTint(1, 1, 1);
     m.deathT = 0;
     for (const mat of m.mats) mat.emissive.setRGB(0, 0, 0);
     m.bar.sprite.visible = false;
@@ -542,6 +564,10 @@ export class Mobs {
             m.mesh.scale.multiplyScalar(Math.max(0, 1 - dt * 5));
             if (m.mesh.scale.x < 0.05 * m.info.scale) m.mesh.visible = false;
           }
+          // El sprite no se tumba (los sprites encaran siempre a la cámara):
+          // se apaga hacia un rojo oscuro mientras se encoge.
+          const k = Math.max(0.25, 1 - t);
+          m.mesh.userData.skin?.setTint(k, k * 0.55, k * 0.55);
         }
         continue;
       }
@@ -587,6 +613,27 @@ export class Mobs {
       while (dr > Math.PI) dr -= Math.PI * 2;
       while (dr < -Math.PI) dr += Math.PI * 2;
       m.mesh.rotation.y += dr * Math.min(1, dt * 10);
+
+      this.animateSkin(m, dt, distSq > 0.002);
+    }
+  }
+
+  // Fotograma, destello y posición del nombre y la barra sobre el sprite.
+  animateSkin(m, dt, moving) {
+    const skin = m.mesh.userData.skin;
+    if (!skin) return;
+    applyArt(m.mesh);
+    skin.update(dt, m.mesh.rotation.y, moving);
+    // El destello del golpe, ahora como tinte del sprite: un fogonazo cálido
+    // que se apaga en FLASH_DUR (antes iba en el emisivo de las mallas).
+    const k = m.flash / FLASH_DUR;
+    skin.setTint(1 + 1.6 * k, 1 + 0.7 * k, 1 + 0.35 * k);
+    if (artState.sprites) {
+      placeLabelAbove(m.bar.sprite, m.mesh.rotation.y, m.alturaBarra);
+      if (m.label) placeLabelAbove(m.label, m.mesh.rotation.y, m.alturaNombre);
+    } else {
+      m.bar.sprite.position.set(0, 2.6, 0);
+      m.label?.position.set(0, 3.2, 0);
     }
   }
 }
