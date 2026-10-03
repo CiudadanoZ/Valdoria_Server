@@ -8,8 +8,10 @@
 import * as THREE from 'three';
 import { Grid, ramp, darkOf, profundidadDePies, texturaDe } from './pixelsprites.js';
 
-// Mismo tamaño de píxel que todo lo demás: 32 px = 3,4 unidades.
-const UNIDADES_POR_PX = 3.4 / 32;
+// Mismo tamaño de píxel que todo lo demás: 48 px = 3,4 unidades. Los árboles
+// se diseñaron a 48x64 y se pintan a 1,5x (72x96) para casar.
+const UNIDADES_POR_PX = 3.4 / 48;
+const ESC = 1.5;
 
 const cache = new Map();
 
@@ -23,7 +25,7 @@ function rnd(seed) {
 // Copa redonda de hoja ancha. `oscuro`: los del bosque espeso, más sombríos.
 function paintRoble(variante, oscuro) {
   const W = 48, H = 64;
-  const g = new Grid(W, H);
+  const g = new Grid(W, H, ESC);
   const r = rnd(variante * 977 + (oscuro ? 31 : 7));
   const hoja = ramp(oscuro ? 0x2e4a24 : 0x41662e);
   const hojaHonda = ramp(oscuro ? 0x203a1c : 0x2e5024);

@@ -2,7 +2,8 @@
 // (movimiento por clic estilo Diablo) y jugadores remotos interpolados.
 import * as THREE from 'three';
 import { asOverlay, drawLabel } from './pixel.js';
-import { heroSheet, dressWithSprite, applyArt, HERO_HEIGHT, artState, placeLabelAbove } from './pixelsprites.js';
+import { dressWithSprite, applyArt, HERO_HEIGHT, artState, placeLabelAbove } from './pixelsprites.js';
+import { heroSheet } from './pixelfiguras.js';
 
 // Altura del nombre sobre un héroe: justo por encima del sprite.
 const NAME_ABOVE_HERO = 3.1;

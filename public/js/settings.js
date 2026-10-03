@@ -32,7 +32,9 @@ export function pixelEnabled() {
 
 export function pixelSize() {
   const n = Number(leer(PIXEL_SIZE_KEY));
-  return n >= 2 && n <= 5 ? n : 3;
+  // 2 por defecto: con él, cada píxel de un sprite de 48 px cae en un píxel
+  // de pantalla. Más grande se ve más tosco y los sprites pierden detalle.
+  return n >= 2 && n <= 5 ? n : 2;
 }
 
 export function initSettings({ onShadows, onPixel } = {}) {

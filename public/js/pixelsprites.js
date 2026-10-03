@@ -16,10 +16,9 @@
 // el que lleva posición, rotación y animación. El sprite solo es la piel, así
 // que ninguna mecánica cambia.
 import * as THREE from 'three';
-import { RACES, CLASSES } from './races.js';
 
-export const FRAME_W = 24;
-export const FRAME_H = 32;
+export const FRAME_W = 36;
+export const FRAME_H = 48;
 
 // Columnas de la hoja: 2 de reposo, 4 de paso, 2 de ataque.
 export const ANIMS = {
@@ -79,20 +78,36 @@ export function ramp(hex) {
 // ---------------------------------------------------------------- lienzo
 
 export class Grid {
-  constructor(w = FRAME_W, h = FRAME_H) {
-    this.w = w; this.h = h;
-    this.c = new Array(w * h).fill(null);
+  // `s`: escala de pintado. Los pintores dibujan en sus coordenadas de siempre
+  // y el lienzo las multiplica: así las criaturas y los árboles, diseñados a
+  // 32 px, se pintan a 48 sin redibujarlos, con los óvalos más finos y el
+  // contorno de un píxel nítido (se traza ya a la resolución final).
+  constructor(w = FRAME_W, h = FRAME_H, s = 1) {
+    this.s = s;
+    this.w = Math.round(w * s); this.h = Math.round(h * s);
+    this.c = new Array(this.w * this.h).fill(null);
   }
-  set(x, y, col) {
-    x = Math.round(x); y = Math.round(y);
+  // Píxel real del lienzo, sin escalar
+  px(x, y, col) {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h || !col) return;
     this.c[y * this.w + x] = col;
+  }
+  set(x, y, col) {
+    if (this.s === 1) this.px(Math.round(x), Math.round(y), col);
+    else this.rect(x, y, 1, 1, col);
   }
   get(x, y) {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return null;
     return this.c[y * this.w + x];
   }
-  rect(x, y, w, h, col) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, col); }
+  rect(x, y, w, h, col) {
+    if (!col) return;
+    const s = this.s;
+    const x0 = Math.round(x * s), y0 = Math.round(y * s);
+    const x1 = Math.max(x0 + 1, Math.round((x + w) * s));
+    const y1 = Math.max(y0 + 1, Math.round((y + h) * s));
+    for (let j = y0; j < y1; j++) for (let i = x0; i < x1; i++) this.px(i, j, col);
+  }
   // Rectángulo con volumen: luz a la izquierda, sombra a la derecha y abajo.
   block(x, y, w, h, r, { top = true } = {}) {
     this.rect(x, y, w, h, r.b);
@@ -102,13 +117,19 @@ export class Grid {
   }
   // Óvalo con volumen: la luz viene de arriba a la izquierda, como en todo el
   // juego. Con cuatro tonos basta para que un cuerpo parezca redondo.
-  blob(cx, cy, rx, ry, r) {
-    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
-      for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+  // `suave`: luz más plana, para caras. Con el sombreado de los cuerpos, la
+  // mitad inferior de una cara caía en sombra y se veía sucia.
+  blob(cx, cy, rx, ry, r, suave = false) {
+    const [uh, ul, ud] = suave ? [0.9, 0.6, -0.78] : [0.72, 0.32, -0.42];
+    const s = this.s;
+    // Se recorren los píxeles REALES: a escala >1 el óvalo sale más fino.
+    for (let Y = Math.floor((cy - ry) * s); Y <= Math.ceil((cy + ry + 1) * s); Y++) {
+      for (let X = Math.floor((cx - rx) * s); X <= Math.ceil((cx + rx + 1) * s); X++) {
+        const x = (X + 0.5) / s - 0.5, y = (Y + 0.5) / s - 0.5;
         const nx = (x - cx) / rx, ny = (y - cy) / ry;
         if (nx * nx + ny * ny > 1) continue;
         const luz = -nx * 0.55 - ny * 0.83;
-        this.set(x, y, luz > 0.72 ? r.h : luz > 0.32 ? r.l : luz < -0.42 ? r.d : r.b);
+        this.px(X, Y, luz > uh ? r.h : luz > ul ? r.l : luz < ud ? r.d : r.b);
       }
     }
   }
@@ -139,441 +160,27 @@ export class Grid {
 
 // El contorno de cada color se calcula una vez: oscuro y algo más frío.
 const outlineCache = new Map();
+// Acepta los dos formatos que circulan por los pintores: 'rgb(r,g,b)' (los de
+// ramp) y '#rrggbb' (ojos, dientes, brillos). Antes solo entendía el primero:
+// con '#ffffff' fallaba y con '#1a1014' sacaba un contorno de color absurdo.
+function cssAHex(css) {
+  if (css[0] === '#') return parseInt(css.slice(1, 7), 16);
+  const m = css.match(/\d+/g).map(Number);
+  return (m[0] << 16) | (m[1] << 8) | m[2];
+}
+
 export function darkOf(css) {
   if (outlineCache.has(css)) return outlineCache.get(css);
-  const m = css.match(/\d+/g).map(Number);
-  const hex = (m[0] << 16) | (m[1] << 8) | m[2];
-  const out = ramp(hex).o;
+  const out = ramp(cssAHex(css)).o;
   outlineCache.set(css, out);
   return out;
 }
 
-// ---------------------------------------------------------------- héroe
-
-// Apariencia por clase: lo que se ve de lejos es la silueta, así que cada
-// clase tiene una forma reconocible (yelmo y escudo, capucha y arco, túnica
-// larga y báculo).
-const CLASS_LOOK = {
-  guerrero: { main: 0x9a2a22, metal: 0x9aa4b4, leather: 0x5a3a24, head: 'yelmo', weapon: 'espada', offhand: 'escudo', armor: 'placas', cloak: false },
-  explorador: { main: 0x3f6b34, metal: 0x8a8070, leather: 0x6a4428, head: 'capucha', weapon: 'arco', offhand: null, armor: 'cuero', cloak: true },
-  sacerdote: { main: 0xe2d6b8, metal: 0xd9a441, leather: 0x7a5a3a, head: 'diadema', weapon: 'baculo', offhand: null, armor: 'tunica', cloak: false },
-};
-
-const HAIR = { humano: 0x5a3a22, elfo: 0xe8d088, enano: 0xa8502a, orco: 0x1e1a18 };
-
-// Construye la apariencia completa a partir de una especificación. La usan
-// los héroes (raza × clase) y los NPCs (cada uno la suya).
-function buildLook(spec) {
-  const race = RACES[spec.race] || RACES.humano;
-  const armor = spec.armor || 'cuero';
-  return {
-    race: spec.race,
-    skin: ramp(spec.skin ?? race.skin),
-    hair: ramp(spec.hair ?? HAIR[spec.race] ?? HAIR.humano),
-    beardColor: spec.beardColor ? ramp(spec.beardColor) : null,
-    main: ramp(spec.main),
-    cape: spec.cape ? ramp(spec.cape) : null,
-    metal: ramp(spec.metal ?? 0x9aa4b4),
-    leather: ramp(spec.leather ?? 0x5a3a24),
-    boots: ramp(0x3a2a20),
-    wood: ramp(0x7a5230),
-    glow: ramp(spec.glow ?? 0x9fe8ff),
-    gold: ramp(0xd9a441),
-    head: spec.head,
-    weapon: spec.weapon || null,
-    offhand: spec.offhand || null,
-    armor,
-    robe: armor === 'tunica',
-    cloak: !!spec.cloak,
-    ears: !!race.ears,
-    beard: spec.beard ?? (race.beard ? 'corta' : false),
-    tusks: !!race.tusks,
-    // El enano es más bajo y ancho; el orco, más corpulento.
-    short: spec.race === 'enano' ? 3 : 0,
-    bulk: spec.bulk ?? (spec.race === 'orco' || spec.race === 'enano' ? 1 : 0),
-  };
-}
-
-export function heroLook(raceId, classId) {
-  const look = CLASS_LOOK[classId] || CLASS_LOOK.guerrero;
-  return buildLook({ ...look, race: raceId });
-}
-
-// ---- NPCs ----
-// Cada uno con una silueta que se reconoce de lejos: es lo que hace que la
-// Ciudadela se sienta habitada por gente concreta y no por maniquíes.
-const NPC_LOOKS = {
-  aldric:   { race: 'humano', main: 0x4a3a7a, armor: 'tunica', head: 'pelo', hair: 0xe8e4dc, beard: 'larga', weapon: 'baculo', glow: 0xc9a4f0 },
-  bramm:    { race: 'humano', main: 0x5c3a26, armor: 'delantal', head: 'calvo', hair: 0x3a2416, beard: 'corta', weapon: 'martillo', bulk: 1, leather: 0x4a2e1c },
-  lyra:     { race: 'humano', main: 0x8a6a2a, armor: 'cuero', head: 'pelo_largo', hair: 0xb04a2a, leather: 0x6a4428 },
-  toran:    { race: 'humano', main: 0x3a4a5c, armor: 'placas', head: 'yelmo', weapon: 'lanza', offhand: 'escudo' },
-  mira:     { race: 'elfo', main: 0xd8d0e8, armor: 'tunica', head: 'diadema', hair: 0xe8d8a8, weapon: 'baculo' },
-  baldur:   { race: 'humano', main: 0x4a5a3a, armor: 'tunica', head: 'capucha', hair: 0xd8d4cc, beard: 'larga', beardColor: 0xd8d4cc, weapon: 'baculo', glow: 0xb8f070 },
-  nyra:     { race: 'elfo', main: 0x7a5a3a, armor: 'cuero', head: 'capucha', weapon: 'arco', cloak: true },
-  ysra:     { race: 'humano', main: 0x4a5a6a, armor: 'tunica', head: 'capucha', weapon: 'baculo', glow: 0x9fe8c8 },
-  skadi:    { race: 'humano', main: 0xb8c8d4, armor: 'cuero', head: 'capucha', weapon: 'arco', cloak: true, leather: 0x8a7a6a },
-  establo:  { race: 'humano', main: 0x6a5238, armor: 'cuero', head: 'sombrero', hair: 0x5a3a22, leather: 0x5a3a24 },
-  subastas: { race: 'humano', main: 0x4a4a6a, armor: 'tunica', head: 'pelo', hair: 0x9a9aa0, beard: 'corta', beardColor: 0x9a9aa0 },
-};
-
-export function npcLook(id) {
-  return buildLook(NPC_LOOKS[id] || { race: 'humano', main: 0x6a6a7a, armor: 'cuero', head: 'pelo' });
-}
-
-// Pinta un fotograma. dir: 'S' | 'N' | 'E'. anim: 'idle' | 'walk' | 'attack'.
-// f: índice del fotograma dentro de su animación.
-function paintHero(L, dir, anim, f) {
-  const g = new Grid();
-  const top = L.short;            // el enano empieza más abajo
-  // Bamboleo: al pisar, el cuerpo baja un píxel; al respirar, también.
-  const bob = (anim === 'walk' && (f === 1 || f === 3)) || (anim === 'idle' && f === 1) ? 1 : 0;
-  // Piernas: en el paso una se adelanta (de perfil) o se levanta (de frente).
-  const legLift = anim === 'walk' ? [0, 1, 0, -1][f] : 0;   // 1: izquierda arriba, -1: derecha arriba
-  const atk = anim === 'attack' ? f : -1;
-  const B = L.bulk;
-
-  if (dir === 'E') return paintHeroSide(g, L, top, bob, anim, f, atk);
-
-  const front = dir === 'S';
-  const y0 = top + bob;           // desplazamiento vertical de cuerpo y cabeza
-
-  // --- piernas y botas
-  if (!L.robe) {
-    for (const [lx, lift] of [[8 - B, legLift === 1 ? 1 : 0], [13, legLift === -1 ? 1 : 0]]) {
-      const lw = 3 + B;
-      g.block(lx, 21 + top, lw, 5 - lift, L.leather, { top: false });
-      g.block(lx, 26 + top - lift, lw, 4 - Math.max(0, top - 0), L.boots, { top: false });
-    }
-  } else {
-    // Túnica hasta el suelo: solo asoman las puntas de las botas.
-    g.rect(8, 28, 3, 2, L.boots.b);
-    g.rect(13, 28, 3, 2, L.boots.b);
-  }
-
-  // --- torso
-  const tx = 7 - B, tw = 10 + B * 2;
-  if (L.robe) {
-    // Túnica acampanada
-    for (let j = 0; j < 17 - top; j++) {
-      const ens = Math.floor(j / 6);
-      g.rect(tx - ens + 1, 12 + y0 + j, tw + ens * 2 - 2, 1, L.main.b);
-      g.set(tx - ens + 1, 12 + y0 + j, L.main.l);
-      g.set(tx + tw + ens - 2, 12 + y0 + j, L.main.d);
-    }
-    // Ribete dorado central y en el bajo
-    for (let j = 13; j < 28; j++) g.set(11, j + y0 - (j > 26 ? 0 : 0), L.gold.b);
-    for (let j = 13; j < 28; j++) g.set(12, j + y0, L.gold.d);
-    g.rect(tx - 1, 28 + Math.min(0, -top), tw + 2, 1, L.gold.d);
-  } else {
-    g.block(tx, 12 + y0, tw, 9, L.main);
-    if (L.armor === 'placas') {
-      // Peto metálico bajo el tabardo, y tabardo con la cruz de Valdoria.
-      g.rect(tx, 12 + y0, tw, 2, L.metal.b);
-      g.rect(tx, 12 + y0, 1, 2, L.metal.l);
-      g.rect(10, 14 + y0, 4, 11 - top, L.main.b);
-      g.rect(10, 14 + y0, 1, 11 - top, L.main.l);
-      g.rect(13, 14 + y0, 1, 11 - top, L.main.d);
-      g.rect(11, 16 + y0, 2, 4, L.gold.b);
-      g.rect(10, 17 + y0, 4, 1, L.gold.b);
-    } else if (L.armor === 'delantal') {
-      // Delantal de cuero de la forja, del pecho a las rodillas
-      g.block(tx + 2, 13 + y0, tw - 4, 11 - top, L.leather);
-      g.set(tx + 2, 12 + y0, L.leather.d); g.set(tx + tw - 3, 12 + y0, L.leather.d);
-    } else {
-      // Jubón de cuero con correa cruzada
-      for (let j = 0; j < 8; j++) g.set(tx + 1 + j, 12 + y0 + j, L.leather.b);
-    }
-    // Cinturón
-    g.rect(tx, 20 + y0, tw, 1, L.leather.d);
-    g.set(11, 20 + y0, L.gold.l);
-    g.set(12, 20 + y0, L.gold.b);
-  }
-
-  // --- capa (de espaldas se ve entera)
-  if (!front && L.cloak) {
-    g.block(tx, 12 + y0, tw, 15 - top, L.cape || L.main);
-  }
-
-  // --- brazos y manos (se balancean al andar)
-  const swing = anim === 'walk' ? [0, 1, 0, -1][f] : 0;
-  const armL = { x: tx - 2, y: 13 + y0 - swing };
-  const armR = { x: tx + tw, y: 13 + y0 + swing };
-  for (const a of [armL, armR]) {
-    g.block(a.x, a.y, 2, 6, L.armor === 'placas' ? L.metal : L.main);
-    g.rect(a.x, a.y + 6, 2, 2, L.skin.b);
-    g.set(a.x + 1, a.y + 7, L.skin.d);
-  }
-  // Hombreras de la armadura de placas
-  if (L.armor === 'placas') {
-    g.block(tx - 3, 11 + y0, 4, 3, L.metal);
-    g.block(tx + tw - 1, 11 + y0, 4, 3, L.metal);
-  }
-
-  // --- cabeza
-  const hx = 8, hy = 3 + y0;
-  g.rect(11, 11 + y0, 2, 1, L.skin.d);                // cuello
-  g.block(hx, hy, 8, 8, L.skin);
-  if (front) {
-    // Ojos y algo de expresión
-    g.set(hx + 2, hy + 4, '#1a1014');
-    g.set(hx + 5, hy + 4, '#1a1014');
-    g.set(hx + 2, hy + 3, L.skin.d);
-    g.set(hx + 5, hy + 3, L.skin.d);
-    g.set(hx + 3, hy + 6, L.skin.d);
-    g.set(hx + 4, hy + 6, L.skin.d);
-  }
-  if (L.ears) {
-    g.set(hx - 1, hy + 3, L.skin.b); g.set(hx - 2, hy + 2, L.skin.l);
-    g.set(hx + 8, hy + 3, L.skin.d); g.set(hx + 9, hy + 2, L.skin.b);
-  }
-  if (L.tusks && front) {
-    g.set(hx + 2, hy + 7, '#efe6d2');
-    g.set(hx + 5, hy + 7, '#efe6d2');
-  }
-  if (L.beard && front) {
-    const barba = L.beardColor || L.hair;
-    g.rect(hx, hy + 5, 8, 3, barba.b);
-    g.rect(hx + 1, hy + 8, 6, 2, barba.b);
-    g.rect(hx + 2, hy + 10, 4, 1, barba.d);
-    g.set(hx + 3, hy + 6, barba.d); g.set(hx + 4, hy + 6, barba.d);
-    if (L.beard === 'larga') {
-      // Barba de anciano que baja por el pecho
-      g.rect(hx + 2, hy + 10, 4, 4, barba.b);
-      g.rect(hx + 3, hy + 14, 2, 2, barba.l);
-      g.set(hx + 2, hy + 11, barba.l);
-    }
-  }
-
-  // Tocado de clase
-  if (L.head === 'yelmo') {
-    g.rect(hx - 1, hy - 1, 10, 4, L.metal.b);
-    g.rect(hx - 1, hy - 1, 10, 1, L.metal.l);
-    g.rect(hx - 1, hy + 3, 1, 4, L.metal.b);
-    g.rect(hx + 8, hy + 3, 1, 4, L.metal.d);
-    if (front) {
-      g.rect(hx + 3, hy + 2, 2, 4, L.metal.d);   // nasal
-    } else {
-      g.rect(hx - 1, hy + 2, 10, 5, L.metal.b);
-      g.rect(hx + 6, hy + 2, 3, 5, L.metal.d);
-    }
-    // Penacho rojo
-    g.rect(hx + 3, hy - 3, 2, 2, L.main.l);
-    g.set(hx + 4, hy - 4, L.main.b);
-  } else if (L.head === 'capucha') {
-    g.rect(hx - 1, hy - 1, 10, 3, L.main.b);
-    g.rect(hx - 1, hy - 1, 10, 1, L.main.l);
-    g.rect(hx - 1, hy + 2, 2, 7, L.main.b);
-    g.rect(hx + 7, hy + 2, 2, 7, L.main.d);
-    g.set(hx + 4, hy - 2, L.main.b);
-    if (!front) g.rect(hx - 1, hy + 1, 10, 8, L.main.b);
-    if (front) {
-      // La cara queda en sombra bajo la capucha
-      g.rect(hx + 1, hy + 2, 6, 1, L.skin.d);
-    }
-  } else if (L.head === 'diadema') {
-    g.rect(hx, hy, 8, 2, L.hair.b);
-    g.rect(hx, hy, 8, 1, L.hair.l);
-    if (!front) g.rect(hx, hy, 8, 6, L.hair.b);
-    g.rect(hx, hy + 1, 8, 1, L.gold.b);
-    g.set(hx + 3, hy + 1, L.glow.l);
-    g.set(hx + 4, hy + 1, L.glow.b);
-  }
-  else if (L.head === 'pelo' || L.head === 'pelo_largo') {
-    g.rect(hx, hy - 1, 8, 3, L.hair.b);
-    g.rect(hx, hy - 1, 8, 1, L.hair.l);
-    g.set(hx, hy + 2, L.hair.b); g.set(hx + 7, hy + 2, L.hair.d);
-    if (!front) g.rect(hx, hy, 8, 7, L.hair.b);
-    if (L.head === 'pelo_largo') {
-      // Melena que cae por los hombros
-      g.rect(hx - 1, hy + 1, 2, 9, L.hair.b);
-      g.rect(hx + 7, hy + 1, 2, 9, L.hair.d);
-      if (!front) g.rect(hx, hy + 6, 8, 5, L.hair.b);
-    }
-  } else if (L.head === 'calvo') {
-    g.set(hx + 2, hy, L.skin.h); g.set(hx + 3, hy, L.skin.h);   // brillo de la calva
-    g.rect(hx, hy + 2, 1, 3, L.hair.d); g.rect(hx + 7, hy + 2, 1, 3, L.hair.d);
-  } else if (L.head === 'sombrero') {
-    g.rect(hx - 2, hy + 1, 12, 1, L.leather.d);            // ala
-    g.rect(hx, hy - 2, 8, 3, L.leather.b);                 // copa
-    g.rect(hx, hy - 2, 8, 1, L.leather.l);
-    g.rect(hx, hy, 8, 1, L.gold.d);                        // cinta
-  }
-
-  // --- arma y mano secundaria. De frente, la mano derecha del héroe queda a
-  // la IZQUIERDA de la pantalla; de espaldas, al revés.
-  const manoArma = front ? armL : armR;
-  const manoOtra = front ? armR : armL;
-  paintWeapon(g, L, manoArma, front ? -1 : 1, atk);
-  if (L.offhand === 'escudo') {
-    const sx = manoOtra.x + (front ? 1 : -4);
-    const sy = manoOtra.y + 1;
-    g.block(sx, sy, 5, 7, L.leather);
-    g.rect(sx, sy, 5, 1, L.metal.l);
-    g.rect(sx, sy + 6, 5, 1, L.metal.d);
-    if (front) {
-      g.rect(sx + 2, sy + 2, 1, 3, L.gold.b);
-      g.rect(sx + 1, sy + 3, 3, 1, L.gold.b);
-    }
-  }
-  if (L.weapon === 'arco' && !front) {
-    // Carcaj a la espalda
-    g.block(14, 10 + y0, 3, 8, L.leather);
-    g.set(14, 9 + y0, '#d8d0c0'); g.set(16, 9 + y0, '#d8d0c0');
-  }
-
-  g.outline(darkOf);
-  return g;
-}
-
-function paintWeapon(g, L, mano, lado, atk) {
-  const hx = mano.x + (lado < 0 ? -1 : 2);
-  const hy = mano.y + 6;
-  if (L.weapon === 'espada') {
-    if (atk === 0) {
-      // Espada alzada por encima del hombro
-      for (let j = 0; j < 10; j++) g.set(hx + lado * Math.floor(j / 3), hy - 7 - j, j < 9 ? L.metal.h : L.metal.l);
-      g.rect(hx - 1, hy - 7, 3, 1, L.gold.b);
-    } else if (atk === 1) {
-      // Tajo en diagonal hacia abajo
-      for (let j = 0; j < 9; j++) g.set(hx - lado * j, hy + 1 + Math.floor(j / 2), L.metal.h);
-      g.set(hx, hy, L.gold.b);
-    } else {
-      for (let j = 1; j < 12; j++) { g.set(hx, hy - j, L.metal.l); g.set(hx + lado, hy - j, L.metal.d); }
-      g.set(hx, hy - 12, L.metal.h);
-      g.rect(hx - 1, hy, 3, 1, L.gold.b);       // guarda
-      g.set(hx, hy + 1, L.leather.d);            // empuñadura
-      g.set(hx, hy + 2, L.gold.l);               // pomo
-    }
-  } else if (L.weapon === 'arco') {
-    const bx = hx + lado;
-    const ext = atk === 0 ? 1 : 0;              // al tensar, el arco se adelanta
-    for (let j = -7; j <= 4; j++) {
-      const curva = Math.round(Math.abs(j + 1.5) / 3.5);
-      g.set(bx + lado * (curva - ext), hy + j - 2, L.wood.b);
-    }
-    for (let j = -6; j <= 3; j++) g.set(bx + lado * (2 - ext), hy + j - 2, '#e8e0d0');
-  } else if (L.weapon === 'martillo') {
-    for (let j = 1; j < 9; j++) g.set(hx, hy - j, L.wood.b);
-    const my = hy - (atk === 0 ? 12 : 10);
-    g.block(hx - 2, my, 5, 3, L.metal);                    // cabeza del martillo
-  } else if (L.weapon === 'lanza') {
-    for (let j = -12; j < 9; j++) g.set(hx, hy + j, j % 5 === 0 ? L.wood.d : L.wood.b);
-    g.set(hx, hy - 13, L.metal.l); g.set(hx, hy - 14, L.metal.h);
-    g.set(hx - 1, hy - 12, L.metal.d); g.set(hx + 1, hy - 12, L.metal.d);
-  } else if (L.weapon === 'baculo') {
-    for (let j = -14; j < 9; j++) g.set(hx, hy + j, j % 4 === 0 ? L.wood.d : L.wood.b);
-    // Orbe brillante en la punta
-    const oy = hy - 17 + (atk === 0 ? -1 : 0);
-    g.rect(hx - 1, oy, 3, 3, L.glow.b);
-    g.set(hx - 1, oy, L.glow.h);
-    g.set(hx, oy - 1, L.glow.l);
-    if (atk >= 0) { g.set(hx - 2, oy + 1, L.glow.h); g.set(hx + 2, oy + 1, L.glow.h); g.set(hx, oy - 2, L.glow.h); }
-  }
-}
-
-// Perfil derecho. El izquierdo es su espejo.
-function paintHeroSide(g, L, top, bob, anim, f, atk) {
-  const y0 = top + bob;
-  const B = L.bulk;
-  // Piernas en tijera al andar
-  const paso = anim === 'walk' ? [0, 2, 0, -2][f] : 0;
-  if (!L.robe) {
-    g.block(10 + paso, 21 + top, 3 + B, 5, L.leather, { top: false });
-    g.block(10 + paso, 26 + top, 4 + B, 4 - top, L.boots, { top: false });
-    g.block(11 - paso, 21 + top, 3 + B, 5, L.leather, { top: false });
-    g.block(11 - paso, 26 + top, 4 + B, 4 - top, L.boots, { top: false });
-  } else {
-    g.rect(10 + Math.max(0, paso), 28, 4, 2, L.boots.b);
-  }
-  // Capa por detrás
-  if (L.cloak || L.robe) g.block(7, 12 + y0, 3, L.robe ? 16 - top : 13 - top, L.cape || L.main);
-  // Torso
-  if (L.robe) {
-    for (let j = 0; j < 17 - top; j++) {
-      const ens = Math.floor(j / 7);
-      g.rect(9 - ens, 12 + y0 + j, 7 + ens * 2, 1, L.main.b);
-      g.set(9 - ens, 12 + y0 + j, L.main.l);
-      g.set(15 + ens, 12 + y0 + j, L.main.d);
-    }
-    for (let j = 13; j < 28; j++) g.set(14, j + y0, L.gold.b);
-  } else {
-    g.block(9 - B, 12 + y0, 7 + B, 9, L.main);
-    if (L.armor === 'placas') {
-      g.rect(9 - B, 12 + y0, 7 + B, 2, L.metal.b);
-      g.block(9, 11 + y0, 5, 3, L.metal);   // hombrera
-    }
-    g.rect(9 - B, 20 + y0, 7 + B, 1, L.leather.d);
-  }
-  // Cabeza de perfil
-  const hx = 9, hy = 3 + y0;
-  g.rect(11, 11 + y0, 3, 1, L.skin.d);
-  g.block(hx, hy, 7, 8, L.skin);
-  g.set(hx + 7, hy + 5, L.skin.b);          // nariz
-  g.set(hx + 5, hy + 4, '#1a1014');         // ojo
-  if (L.ears) { g.set(hx + 1, hy + 3, L.skin.b); g.set(hx, hy + 2, L.skin.l); }
-  if (L.tusks) g.set(hx + 6, hy + 7, '#efe6d2');
-  if (L.beard) {
-    const barba = L.beardColor || L.hair;
-    g.rect(hx + 3, hy + 5, 5, 4, barba.b); g.rect(hx + 4, hy + 9, 3, 1, barba.d);
-  }
-  if (L.head === 'yelmo') {
-    g.rect(hx - 1, hy - 1, 9, 4, L.metal.b);
-    g.rect(hx - 1, hy - 1, 9, 1, L.metal.l);
-    g.rect(hx - 1, hy + 3, 3, 4, L.metal.d);
-    g.rect(hx + 3, hy - 3, 2, 2, L.main.l);
-  } else if (L.head === 'capucha') {
-    g.rect(hx - 1, hy - 1, 8, 3, L.main.b);
-    g.rect(hx - 1, hy - 1, 8, 1, L.main.l);
-    g.rect(hx - 1, hy + 2, 4, 7, L.main.b);
-    g.set(hx - 2, hy + 1, L.main.d);
-  } else if (L.head === 'diadema') {
-    g.rect(hx, hy, 7, 2, L.hair.b);
-    g.rect(hx, hy + 2, 3, 5, L.hair.b);
-    g.rect(hx, hy + 1, 7, 1, L.gold.b);
-  } else if (L.head === 'pelo' || L.head === 'pelo_largo') {
-    g.rect(hx, hy - 1, 7, 3, L.hair.b);
-    g.rect(hx, hy - 1, 7, 1, L.hair.l);
-    g.rect(hx, hy + 2, 3, L.head === 'pelo_largo' ? 10 : 4, L.hair.b);
-  } else if (L.head === 'calvo') {
-    g.set(hx + 3, hy, L.skin.h);
-    g.rect(hx, hy + 2, 2, 3, L.hair.d);
-  } else if (L.head === 'sombrero') {
-    g.rect(hx - 2, hy + 1, 11, 1, L.leather.d);
-    g.rect(hx, hy - 2, 7, 3, L.leather.b);
-    g.rect(hx, hy, 7, 1, L.gold.d);
-  }
-  if (L.beard === 'larga') {
-    const barba = L.beardColor || L.hair;
-    g.rect(hx + 4, hy + 9, 3, 4, barba.b);
-  }
-  // Brazo delantero con el arma
-  const swing = anim === 'walk' ? [0, -1, 0, 1][f] : 0;
-  const arm = { x: 12 + swing, y: 13 + y0 };
-  g.block(arm.x, arm.y, 2, 6, L.armor === 'placas' ? L.metal : L.main);
-  g.rect(arm.x, arm.y + 6, 2, 2, L.skin.b);
-  paintWeapon(g, L, arm, 1, atk);
-  if (L.weapon === 'arco') g.block(6, 10 + y0, 3, 8, L.leather);   // carcaj
-  if (L.offhand === 'escudo') { g.block(7, 14 + y0, 2, 7, L.leather); g.set(7, 14 + y0, L.metal.l); }
-  g.outline(darkOf);
-  return g;
-}
-
 // ---------------------------------------------------------------- hojas
+// Las figuras humanas (héroes y NPCs) se pintan en pixelfiguras.js; las
+// criaturas en pixelcreatures.js; los árboles en pixelprops.js.
 
 const sheetCache = new Map();
-
-// Hoja de fotogramas de un héroe (raza × clase). Se pinta una vez y se reutiliza.
-export function heroSheet(raceId, classId) {
-  return sheetFor(`heroe:${raceId}:${classId}`, () => heroLook(raceId, classId));
-}
-
-export function npcSheet(id) {
-  return sheetFor(`npc:${id}`, () => npcLook(id));
-}
-
-function sheetFor(key, lookFn) {
-  return buildSheet(key, FRAME_W, FRAME_H, (dir, anim, f) => paintHero(lookFn.cached ??= lookFn(), dir, anim, f));
-}
 
 // Monta una hoja completa llamando a `paint(dir, anim, f)` para cada
 // fotograma. La usan héroes, NPCs y criaturas; cada uno con su tamaño.
@@ -675,13 +282,23 @@ export class SpriteSkin {
   setTint(r, g, b) { this.material.color.setRGB(r, g, b); }
 }
 
-// ---- Profundidad por los pies ----
+// ---- Profundidad de figura en pie ----
 // La cámara mira hacia abajo a 60°, y un sprite que la encara no está de pie:
-// está recostado hacia atrás, con la cabeza casi tres unidades al norte de los
-// pies. Con la profundidad normal, cualquier muro que el héroe tuviera DETRÁS
-// le cortaría la cabeza. El remedio clásico de los juegos 2.5D: el sprite
-// entero usa la profundidad de sus pies. Lo que está delante de los pies lo
-// tapa; lo de detrás, no. Exactamente como se espera en un juego cenital.
+// está recostado hacia atrás. Con su profundidad natural, cualquier muro que
+// tuviera DETRÁS le cortaría la cabeza.
+//
+// Primer remedio (el clásico 2.5D): todo el sprite a la profundidad de sus
+// pies. Funcionaba con los muros, pero fallaba con lo ELEVADO que queda
+// detrás: el toldo de Lyra, un alero, una copa. Al estar en alto, su
+// profundidad es menor que la de los pies aunque esté detrás, y tapaba al
+// personaje que tenía delante.
+//
+// Remedio de verdad: cada píxel del sprite toma la profundidad que tendría si
+// la figura estuviera DE PIE, vertical, sobre sus pies. Así se ordena igual que
+// un cuerpo real: lo que está delante lo tapa, lo de detrás no, esté a la
+// altura que esté. La figura vertical equivalente es más alta que el sprite
+// (la cámara acorta las verticales), y se calcula para que ocupe exactamente
+// lo mismo en pantalla.
 export function profundidadDePies(material) {
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -690,15 +307,22 @@ export function profundidadDePies(material) {
         'vec4 pie = modelViewMatrix[ 3 ];',
         // Un pelo hacia la cámara: que el suelo bajo los pies no lo tape.
         'pie.z += 0.6;',
-        'vec4 pieClip = projectionMatrix * pie;',
-        'vProfPie = pieClip.z / pieClip.w;',
+        // El "arriba" del mundo visto desde la cámara, y cuánto mide en pantalla.
+        'vec3 arribaMundo = ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz;',
+        'float enPantalla = max( 0.2, length( arribaMundo.xy ) );',
+        // Altura de este vértice dentro del sprite (0 en los pies, 1 arriba)
+        // y su punto equivalente en la figura vertical.
+        'float t = position.y + 0.5 - center.y;',
+        'vec4 punto = pie + vec4( arribaMundo * ( t * scale.y / enPantalla ), 0.0 );',
+        'vec4 puntoClip = projectionMatrix * punto;',
+        'vProfPie = puntoClip.z / puntoClip.w;',
         'mvPosition.xy += rotatedPosition;',
       ].join('\n'));
     shader.fragmentShader = shader.fragmentShader
       .replace('void main() {', 'varying float vProfPie;\nvoid main() {')
-      .replace(/}\s*$/, 'gl_FragDepth = vProfPie * 0.5 + 0.5;\n}');
+      .replace(/}\s*$/, 'gl_FragDepth = clamp( vProfPie * 0.5 + 0.5, 0.0, 1.0 );\n}');
   };
-  material.customProgramCacheKey = () => 'sprite-profundidad-pies';
+  material.customProgramCacheKey = () => 'sprite-figura-en-pie';
 }
 
 // Dirección "arriba" en pantalla, expresada en el mundo. Depende de la cámara
@@ -738,10 +362,10 @@ export const artState = { sprites: true };
 
 // Viste una entidad 3D con su piel de sprite. `root` es el grupo raíz (el que
 // se mueve y gira); `body` el subgrupo de mallas que hasta ahora se veía.
-// Altura en el mundo de un fotograma de héroe. Calibrada para que, con el
-// píxel de 3 y la cámara del juego, cada píxel del dibujo caiga en UN píxel de
-// pantalla: más pequeño, el sprite se encoge y pierde líneas; más grande, se
-// emborrona en bloques de 2.
+// Altura en el mundo de un fotograma de héroe (48 px). Calibrada para que, con
+// el píxel de render de 2 y la cámara del juego, cada píxel del dibujo caiga en
+// UN píxel de pantalla: más pequeño, el sprite pierde líneas; más grande, se
+// emborrona en bloques. Todo el pixel art del juego usa esta misma escala.
 export const HERO_HEIGHT = 3.4;
 
 export function dressWithSprite(root, body, sheet, { height = HERO_HEIGHT, shadow = 0.6 } = {}) {

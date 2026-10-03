@@ -34,10 +34,14 @@ export const FISHING_SPOTS = [Math.PI * 0.15, Math.PI * 0.75, Math.PI * 1.35].ma
 // Dónde hay que estar para usar cada servicio (validación de cercanía)
 export const NPC_SPOTS = {
   lyra: [-16, 9.5],   // tienda
-  bramm: [16.5, -14.5], // forja
-  mira: [-3, -22],    // curación y bendiciones
-  establo: [24, 8],   // Establero (monturas)
-  subastas: [-24, 10], // Subastador (casa de subastas)
+  // Delante de sus edificios y fuera de los aleros (los tejados sobresalen
+  // 1-2 u de las paredes). Con sprites altos, un NPC pegado al muro se metía
+  // en la fachada o quedaba cortado por el alero; el Establero estaba dentro
+  // del almacén.
+  bramm: [14, -12],    // forja, junto a su yunque
+  mira: [-4, -19.5],   // curación y bendiciones, ante la capilla
+  establo: [21, 14.5], // Establero (monturas)
+  subastas: [-24, 12.5], // Subastador (casa de subastas)
 };
 // Tablón de Encargos de la plaza (aceptar y cobrar encargos)
 export const BOARD_SPOT = [8, 6];

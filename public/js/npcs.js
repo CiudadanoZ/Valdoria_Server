@@ -1,7 +1,8 @@
 // NPCs de la Ciudadela. El Maestre Aldric entrega las misiones de Bienvenida;
 // el resto son ciudadanos con los que hay que hablar en la misión 3.
 import { makeCharacter, makeNameSprite, makeQuestMarker } from './entities.js';
-import { npcSheet, dressWithSprite, applyArt, artState, placeLabelAbove, HERO_HEIGHT } from './pixelsprites.js';
+import { dressWithSprite, applyArt, artState, placeLabelAbove, HERO_HEIGHT } from './pixelsprites.js';
+import { npcSheet } from './pixelfiguras.js';
 import { heightAt } from './terrain.js';
 import { aldricMarker, toranMarker, baldurMarker, nyraMarker, ysraMarker, skadiMarker } from './quests.js';
 
@@ -19,7 +20,7 @@ export const NPC_DATA = [
     id: 'bramm',
     name: 'Bramm el Herrero',
     title: 'Maestro de la Forja',
-    pos: [16.5, -14.5],
+    pos: [14, -12],
     rot: -Math.PI * 0.3,
     bodyColor: 0x5c3a26,
     dialog: '¡Cuidado con las chispas, forastero! Soy Bramm. Si el Maestre te envió, bienvenido seas. Cuando consigas mejor acero, tráemelo: te forjaré algo digno de un campeón.',
@@ -46,7 +47,7 @@ export const NPC_DATA = [
     id: 'mira',
     name: 'Sacerdotisa Mira',
     title: 'Guardiana de la Capilla',
-    pos: [-3, -22],
+    pos: [-4, -19.5],
     rot: Math.PI * 0.1,
     bodyColor: 0xd8d0e8,
     dialog: 'La Luz te acompañe, viajero. Si tus heridas sangran, ven a la capilla: aquí siempre hallarás descanso. Reza conmigo cuando la oscuridad pese demasiado.',
@@ -91,7 +92,7 @@ export const NPC_DATA = [
     id: 'establo',
     name: 'Establero Cort',
     title: 'Maestro de Cuadras',
-    pos: [24, 8],
+    pos: [21, 14.5],
     rot: Math.PI * 1.1,
     bodyColor: 0x6a5238,
     dialog: '', // abre el establo (monturas) desde main.js
@@ -100,7 +101,7 @@ export const NPC_DATA = [
     id: 'subastas',
     name: 'Subastador Vell',
     title: 'Casa de Subastas',
-    pos: [-24, 10],
+    pos: [-24, 12.5],
     rot: Math.PI * 0.9,
     bodyColor: 0x4a4a6a,
     dialog: '', // abre la casa de subastas desde main.js

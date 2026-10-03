@@ -7,6 +7,7 @@ import { startServer } from './helpers/server.mjs';
 import { spawnBot, wait } from './helpers/bot.mjs';
 import { RESOURCES } from '../public/js/skills-data.js';
 import { xpForLevel } from '../public/js/talents-data.js';
+import { NPC_SPOTS } from '../server/world-map.js';
 
 let server;
 before(async () => { server = await startServer(); });
@@ -225,9 +226,9 @@ test('Mira purga el Alma Debilitada por oro y no deja purgar dos veces', async (
   const lejos = await victima.waitFor('rpc_fail');
   assert.match(lejos.reason, /lejos de la Sacerdotisa/i);
 
-  // Junto a Mira ([-3,-22]) sí purga y cobra
+  // Junto a Mira sí purga y cobra
   await victima.walkTo(0, 20);
-  await victima.walkTo(-3, -22);
+  await victima.walkTo(...NPC_SPOTS.mira);
   const oroAntes = victima.sync.inventory.gold;
   victima.clear();
   victima.send({ type: 'mira', service: 'cleanse' });

@@ -5,8 +5,9 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer } from './helpers/server.mjs';
 import { spawnBot, wait } from './helpers/bot.mjs';
+import { NPC_SPOTS } from '../server/world-map.js';
 
-const SUBASTAS = [-24, 10]; // Subastador Vell
+const SUBASTAS = NPC_SPOTS.subastas; // Subastador Vell
 
 // Cada test estrena sus cuentas: el servidor rechaza entrar dos veces con el
 // mismo personaje («ya está dentro del mundo») y, además, el oro y la bolsa que

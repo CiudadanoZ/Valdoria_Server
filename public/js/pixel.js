@@ -3,8 +3,8 @@
 // El mundo sigue siendo 3D: la misma geometría, la misma cámara, los mismos
 // clics. Lo que cambia es CÓMO se pinta:
 //
-//   1. La escena se renderiza a baja resolución (1/3 de la pantalla, por
-//      ejemplo) en una textura propia.
+//   1. La escena se renderiza a baja resolución (la mitad de la pantalla por
+//      defecto: píxel de 2) en una textura propia.
 //   2. Esa textura se lleva a pantalla SIN suavizar: cada píxel del juego es un
 //      cuadrado nítido de 3×3.
 //   3. Por el camino, un sombreador reduce los colores (cada canal a 7 niveles,
@@ -162,7 +162,7 @@ const FRAG = /* glsl */ `
 `;
 
 export class PixelPipeline {
-  constructor(renderer, { pixelSize = 3 } = {}) {
+  constructor(renderer, { pixelSize = 2 } = {}) {
     this.renderer = renderer;
     this.pixelSize = pixelSize;
     this.target = null;

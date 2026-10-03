@@ -123,7 +123,7 @@ const mat = (color, opts = {}) => {
 //   - Tejado (inclinado): hileras de tejas con su sombra.
 // Sale de la posición en el mundo, así que no hay que tocar las decenas de
 // construcciones una por una, y el tamaño de cada "píxel" del dibujo es el de
-// un píxel del render (0,106 u: 32 px de sprite = 3,4 u), así casan.
+// un píxel del render (0,0708 u: 48 px de sprite = 3,4 u), así casan.
 const DETALLE = { value: 1 };
 const MODOS = { auto: 0, suelo: 1, roca: 2, ninguno: 3 };
 
@@ -151,7 +151,7 @@ varying vec3 vPosMundo;
 varying vec3 vNormMundo;
 float hashPx(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float patronPixel(vec3 p, vec3 n) {
-  const float T = 0.106;
+  const float T = 0.0708;   // un píxel del render: 48 px de sprite = 3,4 u
   float ny = abs(n.y);
   if (uModo == 2) {
     // Roca: grano grueso, sin juntas

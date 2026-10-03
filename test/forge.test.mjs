@@ -8,13 +8,14 @@ import { spawnBot } from './helpers/bot.mjs';
 import { retemper, reforge, forgeCost, AFFIXES, POWERS } from '../public/js/affixes.js';
 import { ITEMS } from '../public/js/items.js';
 import { buildDepthMobs } from '../server/depths.js';
+import { NPC_SPOTS } from '../server/world-map.js';
 
 function seeded(seed) {
   let s = seed >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
 }
 
-const FORJA = [16.5, -14.5];   // NPC_SPOTS.bramm
+const FORJA = NPC_SPOTS.bramm;
 const reliquia = () => ({ tier: 16, grade: 3, affixes: [{ id: 'dmg', v: 8 }, { id: 'hp', v: 30 }], power: 'sed' });
 
 let server;

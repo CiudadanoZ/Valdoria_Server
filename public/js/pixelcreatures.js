@@ -10,6 +10,10 @@
 // ataque), así que las anima el mismo SpriteSkin.
 import { Grid, ramp, darkOf, buildSheet } from './pixelsprites.js';
 
+// Se pintan a 1,5x su diseño (32 px → 48) para casar con la definición de
+// héroes y NPCs: con el píxel de render a 2, 48 px de sprite = 3,4 unidades.
+const ESC = 1.5;
+
 const OJO_ROJO = '#ff3a24';
 const OJO_AMARILLO = '#f2d23a';
 const OJO_HIELO = '#8ff4ff';
@@ -39,7 +43,7 @@ const BESTIAS = {
 };
 
 function paintBestia(B, c, dir, anim, f) {
-  const g = new Grid(32, 32);
+  const g = new Grid(32, 32, ESC);
   const p = paso(anim, f);
   const b = bote(anim, f);
   const ataque = anim === 'attack' ? f : -1;
@@ -156,7 +160,7 @@ function astas(g, cx, top, c, frente) {
 // No-muertos: huesos, y sobre ellos lo que los distingue (yelmo oxidado,
 // corona, capa raída, armadura de hielo o de bronce).
 function paintNoMuerto(c, dir, anim, f) {
-  const g = new Grid(24, 32);
+  const g = new Grid(24, 32, ESC);
   const b = bote(anim, f);
   const p = anim === 'walk' ? [0, 1, 0, -1][f] : 0;
   const ataque = anim === 'attack' ? f : -1;
@@ -246,7 +250,7 @@ function paintNoMuerto(c, dir, anim, f) {
 // Ahogados: encorvados, harapientos y chorreando. El chamán lleva capucha y
 // báculo; el aparecido helado no tiene piernas: flota y se deshace en jirones.
 function paintAhogado(c, dir, anim, f) {
-  const g = new Grid(24, 32);
+  const g = new Grid(24, 32, ESC);
   const b = bote(anim, f) + (c.flota ? Math.round(Math.sin(f * 1.6)) : 0);
   const p = anim === 'walk' ? [0, 1, 0, -1][f] : 0;
   const ataque = anim === 'attack' ? f : -1;
@@ -314,7 +318,7 @@ function paintAhogado(c, dir, anim, f) {
 // Troll: espaldas enormes, cabeza pequeña hundida entre los hombros, brazos
 // que llegan a las rodillas y un garrote de hielo.
 function paintTroll(c, dir, anim, f) {
-  const g = new Grid(24, 32);
+  const g = new Grid(24, 32, ESC);
   const b = bote(anim, f);
   const p = anim === 'walk' ? [0, 1, 0, -1][f] : 0;
   const ataque = anim === 'attack' ? f : -1;
@@ -357,7 +361,7 @@ function paintTroll(c, dir, anim, f) {
 // Sanguijuela gigante: un gusano de segmentos que ondula al avanzar y abre una
 // boca circular llena de dientes.
 function paintSanguijuela(c, dir, anim, f) {
-  const g = new Grid(32, 32);
+  const g = new Grid(32, 32, ESC);
   const piel = c.piel;
   const ataque = anim === 'attack' ? f : -1;
   if (dir === 'E') {
@@ -386,7 +390,7 @@ function paintSanguijuela(c, dir, anim, f) {
 
 // Rey del Fango: un montículo de lodo con brazos, corona y ojos encendidos.
 function paintReyFango(c, dir, anim, f) {
-  const g = new Grid(32, 32);
+  const g = new Grid(32, 32, ESC);
   const b = bote(anim, f);
   const ataque = anim === 'attack' ? f : -1;
   const lodo = c.piel;
@@ -473,5 +477,5 @@ export function creatureSheet(type, info) {
   const r = receta(type, info);
   const pintar = PINTORES[r.pintor];
   const ancho = r.pintor === 'bestia' || r.pintor === 'sanguijuela' || r.pintor === 'reyFango' ? 32 : 24;
-  return buildSheet(`criatura:${type}`, ancho, 32, (dir, anim, f) => pintar(r, dir, anim, f));
+  return buildSheet(`criatura:${type}`, ancho * ESC, 32 * ESC, (dir, anim, f) => pintar(r, dir, anim, f));
 }
