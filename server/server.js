@@ -858,10 +858,37 @@ function killMob(realm, m, killerId) {
   }
 }
 
+// ---- Interés por cercanía ----
+// Antes se mandaban las 99 criaturas del reino a cada jugador diez veces por
+// segundo, estuvieran a tres metros o a trescientos, y aunque no se movieran:
+// ~25 KB/s por jugador. Ahora:
+//   - solo viaja lo que cambió;
+//   - lo cercano, a 10 Hz (lo que se ve y con lo que se pelea);
+//   - lo lejano, a 1 Hz: no se puede callar del todo porque el mapa grande y
+//     el minimapa las enseñan, pero ahí un segundo de retraso no se nota.
+const RADIO_CERCA = 70;           // la cámara ve ~30 u; hay margen para llegar corriendo
+const CADA_LEJOS = 10;            // ticks entre envíos de lo lejano (1 s)
+let numTick = 0;
+
+function enviarCriaturas(mobs, jugadores, tocaLejos) {
+  const r2 = RADIO_CERCA * RADIO_CERCA;
+  for (const [, p] of jugadores) {
+    const lista = [];
+    for (const m of mobs.values()) {
+      if (m.state === 'dead' || !m.ultimaEnviada) continue;   // las muertes van por mob_dead
+      const dx = m.x - p.x, dz = m.z - p.z;
+      if (dx * dx + dz * dz <= r2) { if (m.sucia) lista.push(m.ultimaEnviada); }
+      else if (tocaLejos && m.pendienteLejos) lista.push(m.ultimaEnviada);
+    }
+    if (lista.length) send(p.ws, { type: 'mobs', m: lista });
+  }
+}
+
 // ---- Bucle de IA (10 Hz) por reino ----
 const TICK = 0.1;
 setInterval(() => {
   const now = Date.now();
+  const tocaLejos = (numTick++ % CADA_LEJOS) === 0;
 
   // Los reinos fijos más las instancias de Las Profundidades que estén vivas.
   for (const realmId of [...realmMobs.keys()]) {
@@ -870,8 +897,6 @@ setInterval(() => {
     const realmPlayers = [...players.entries()].filter(([, p]) => p.realm === realmId);
     // Una instancia sin nadie dentro se desmonta: no tiene sentido simularla.
     if (isDepthRealm(realmId) && realmPlayers.length === 0) { realmMobs.delete(realmId); continue; }
-    const changed = [];
-
     for (const m of mobs.values()) {
       if (m.state === 'dead') {
         if (now >= m.deadUntil) {
@@ -945,13 +970,17 @@ setInterval(() => {
         }
       }
 
-      changed.push([m.id, +m.x.toFixed(2), +m.z.toFixed(2), +m.rot.toFixed(2), m.hp, m.state === 'chase' ? 1 : 0]);
+      // Solo se marca si algo cambió de verdad: una criatura quieta no tiene
+      // por qué viajar por la red diez veces por segundo.
+      const e = [m.id, +m.x.toFixed(2), +m.z.toFixed(2), +m.rot.toFixed(2), m.hp, m.state === 'chase' ? 1 : 0];
+      const prev = m.ultimaEnviada;
+      m.sucia = !prev || prev[1] !== e[1] || prev[2] !== e[2] || prev[3] !== e[3] || prev[4] !== e[4] || prev[5] !== e[5];
+      if (m.sucia) { m.ultimaEnviada = e; m.pendienteLejos = true; }
     }
 
-    if (realmPlayers.length > 0 && changed.length > 0) {
-      broadcast(realm.id, { type: 'mobs', m: changed });
-    }
+    if (realmPlayers.length > 0) enviarCriaturas(mobs, realmPlayers, tocaLejos);
   }
+  if (tocaLejos) for (const mobs of realmMobs.values()) for (const m of mobs.values()) m.pendienteLejos = false;
 
   // Regeneración de vida y recurso + sincronización acotada
   for (const [, p] of players) {

@@ -6,7 +6,7 @@
 // selectivo) y la misma profundidad por los pies: un héroe que pasa por
 // detrás de un tronco queda tapado por la copa; por delante, no.
 import * as THREE from 'three';
-import { Grid, ramp, darkOf, profundidadDePies } from './pixelsprites.js';
+import { Grid, ramp, darkOf, profundidadDePies, texturaDe } from './pixelsprites.js';
 
 // Mismo tamaño de píxel que todo lo demás: 32 px = 3,4 unidades.
 const UNIDADES_POR_PX = 3.4 / 32;
@@ -75,15 +75,17 @@ export function treeSheet(variante = 0, oscuro = false) {
   return canvas;
 }
 
-// Sprite estático anclado por la base, con profundidad por los pies.
+// Sprite estático anclado por la base, con profundidad por los pies. Los
+// árboles de una misma variante comparten textura Y material: no se animan ni
+// se tiñen, así que no hay nada que tenga que ser propio de cada uno.
+const materiales = new WeakMap();
 export function makePropSprite(canvas, escala = 1) {
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const material = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.5 });
-  profundidadDePies(material);
+  let material = materiales.get(canvas);
+  if (!material) {
+    material = new THREE.SpriteMaterial({ map: texturaDe(canvas), alphaTest: 0.5 });
+    profundidadDePies(material);
+    materiales.set(canvas, material);
+  }
   const sprite = new THREE.Sprite(material);
   sprite.center.set(0.5, 0.02);
   sprite.scale.set(canvas.width * UNIDADES_POR_PX * escala, canvas.height * UNIDADES_POR_PX * escala, 1);

@@ -598,13 +598,27 @@ export function buildSheet(key, fw, fh, paint) {
 
 // Sprite animado que hace de "piel" de una entidad 3D. Lee la rotación del
 // cuerpo para elegir orientación y si se mueve para elegir animación.
+// Una textura base por hoja. Cada entidad necesita su propia textura (cada una
+// muestra un fotograma distinto: offset y repeat son por textura), pero los
+// clones comparten la imagen, y Three la sube a la tarjeta gráfica UNA vez.
+// Sin esto, cada lobo y cada árbol subían su propia copia de la misma hoja.
+const texturasBase = new WeakMap();
+export function texturaDe(canvas) {
+  let base = texturasBase.get(canvas);
+  if (!base) {
+    base = new THREE.CanvasTexture(canvas);
+    base.magFilter = THREE.NearestFilter;
+    base.minFilter = THREE.NearestFilter;
+    base.generateMipmaps = false;
+    base.colorSpace = THREE.SRGBColorSpace;
+    texturasBase.set(canvas, base);
+  }
+  return base;
+}
+
 export class SpriteSkin {
   constructor(sheetCanvas, { height = 2.6 } = {}) {
-    const tex = new THREE.CanvasTexture(sheetCanvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.colorSpace = THREE.SRGBColorSpace;
+    const tex = texturaDe(sheetCanvas).clone();
     tex.repeat.set(1 / COLS, 1 / ROWS);
     this.tex = tex;
     this.material = new THREE.SpriteMaterial({ map: tex, alphaTest: 0.5, transparent: false });
