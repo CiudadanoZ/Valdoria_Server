@@ -3,7 +3,7 @@
 // (inventario, equipo, misiones, bendiciones, vida, posición) vive en el
 // servidor y se sincroniza continuamente.
 import * as THREE from 'three';
-import { buildWorld, animateWorld, isInCrypt, isInDepths } from './world.js';
+import { buildWorld, animateWorld, isInCrypt, isInDepths, setWorldDetail } from './world.js';
 import { heightAt } from './terrain.js';
 import { LocalPlayer, RemotePlayers } from './entities.js';
 import { RACES, CLASSES } from './races.js';
@@ -157,11 +157,13 @@ let pixelPipe = null;
 let pixelOn = pixelEnabled();
 document.body.classList.toggle('pixel', pixelOn);
 artState.sprites = pixelOn;   // personajes dibujados con el estilo píxel, muñecos 3D sin él
+setWorldDetail(pixelOn);      // y el escenario con su textura de píxel
 initSettings({
   onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; },
   onPixel: ({ enabled, size }) => {
     pixelOn = enabled;
     artState.sprites = enabled;
+    setWorldDetail(enabled);
     document.body.classList.toggle('pixel', enabled);
     pixelPipe?.setPixelSize(size);
   },

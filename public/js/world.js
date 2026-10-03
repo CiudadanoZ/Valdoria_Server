@@ -3,6 +3,7 @@
 // (llanuras al este, bosque al oeste y sur profundo, camino de tierra).
 import * as THREE from 'three';
 import { asOverlay } from './pixel.js';
+import { treeSheet, makePropSprite } from './pixelprops.js';
 import { WAYSTONES } from './world-data.js';
 import { heightAt, colorAt, biomeAt, WORLD_RADIUS } from './terrain.js';
 
@@ -108,7 +109,116 @@ export function isBlocked(x, z) {
 
 // Facetas planas por defecto: el low-poly con sombreado suave parece plástico;
 // con facetas se ve estilizado e intencionado. Es la seña del estilo del juego.
-const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, ...opts });
+const mat = (color, opts = {}) => {
+  const { detalle = 'auto', ...resto } = opts;
+  return conDetalle(new THREE.MeshStandardMaterial({ color, flatShading: true, ...resto }), detalle);
+};
+
+// ============================================================ textura de píxel
+// Con el estilo píxel, las superficies dejan de ser color plano: cada cara
+// recibe un dibujo según hacia dónde mira, calculado en el sombreador a partir
+// de su posición en el mundo.
+//   - Suelo (mira arriba): grano fino y alguna mata de hierba.
+//   - Pared (vertical): sillares con sus juntas, cada uno de un tono.
+//   - Tejado (inclinado): hileras de tejas con su sombra.
+// Sale de la posición en el mundo, así que no hay que tocar las decenas de
+// construcciones una por una, y el tamaño de cada "píxel" del dibujo es el de
+// un píxel del render (0,106 u: 32 px de sprite = 3,4 u), así casan.
+const DETALLE = { value: 1 };
+const MODOS = { auto: 0, suelo: 1, roca: 2, ninguno: 3 };
+
+// Lo enciende y apaga el estilo píxel (main.js): sin él, el aspecto clásico.
+// También alterna los árboles entre su sprite dibujado y su modelo 3D.
+export function setWorldDetail(on) {
+  DETALLE.value = on ? 1 : 0;
+  for (const a of arbolesArte) aplicarArteArbol(a);
+}
+
+// Árboles con dos versiones: el modelo 3D de siempre y el sprite dibujado.
+const arbolesArte = [];
+function aplicarArteArbol(a) {
+  const pixel = DETALLE.value > 0.5;
+  for (const m of a.modelo) m.visible = !pixel;
+  a.sprite.visible = pixel;
+  a.sombra.visible = pixel;
+}
+let sombraArbolGeo = null, sombraArbolMat = null;
+
+const DETALLE_GLSL = `
+uniform float uDetalle;
+uniform int uModo;
+varying vec3 vPosMundo;
+varying vec3 vNormMundo;
+float hashPx(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float patronPixel(vec3 p, vec3 n) {
+  const float T = 0.106;
+  float ny = abs(n.y);
+  if (uModo == 2) {
+    // Roca: grano grueso, sin juntas
+    vec2 c = floor((p.xz + p.y) / (T * 2.0));
+    return 0.9 + hashPx(c) * 0.16;
+  }
+  // Solo es suelo lo casi plano: los tejados de la Ciudadela son poco
+  // inclinados (~31°) y con un umbral más bajo se tomaban por suelo.
+  if (uModo == 1 || ny > 0.94) {
+    vec2 c = floor(p.xz / T);
+    float v = 0.94 + hashPx(c) * 0.11;
+    // Matas: en una de cada pocas celdas de 6x6, unos píxeles más claros
+    vec2 celda = floor(c / 6.0);
+    vec2 loc = mod(c, 6.0);
+    if (hashPx(celda + 7.3) > 0.7) {
+      if (loc.y == 2.0 && (loc.x == 2.0 || loc.x == 4.0)) v = 1.16;
+      if (loc.y == 3.0 && loc.x == 3.0) v = 1.16;
+      if (loc.y == 4.0 && loc.x == 3.0) v = 0.86;
+    }
+    return v;
+  }
+  if (ny < 0.35) {
+    // Sillares: 8x4 píxeles, a matajunta
+    float u = abs(n.x) > abs(n.z) ? p.z : p.x;
+    vec2 c = floor(vec2(u, p.y) / T);
+    float fila = floor(c.y / 4.0);
+    float desf = mod(fila, 2.0) * 4.0;
+    float col = mod(c.x + desf, 8.0);
+    float filaLoc = mod(c.y, 4.0);
+    if (filaLoc == 0.0 || col == 0.0) return 0.74;
+    float r = hashPx(vec2(floor((c.x + desf) / 8.0), fila));
+    return 0.93 + r * 0.13 + (filaLoc == 3.0 ? -0.05 : 0.0);
+  }
+  // Tejas: hileras a lo largo de la pendiente
+  vec3 baja = normalize(vec3(n.x, 0.0, n.z) + 1e-5);
+  vec3 lado = vec3(-baja.z, 0.0, baja.x);
+  vec2 c = floor(vec2(dot(p, lado), dot(p, baja)) / T);
+  float hilera = floor(c.y / 3.0);
+  float desf = mod(hilera, 2.0) * 2.0;
+  float loc = mod(c.y, 3.0);
+  if (mod(c.x + desf, 4.0) == 0.0) return 0.82;
+  return loc == 2.0 ? 0.8 : (loc == 0.0 ? 1.08 : 0.97);
+}
+`;
+
+function conDetalle(material, modo = 'auto') {
+  if (modo === 'ninguno') return material;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uDetalle = DETALLE;
+    shader.uniforms.uModo = { value: MODOS[modo] ?? 0 };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vPosMundo;\nvarying vec3 vNormMundo;')
+      .replace('#include <project_vertex>', [
+        '#include <project_vertex>',
+        'vPosMundo = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+        'vNormMundo = normalize(mat3(modelMatrix) * objectNormal);',
+      ].join('\n'));
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + DETALLE_GLSL)
+      .replace('#include <color_fragment>', [
+        '#include <color_fragment>',
+        'if (uDetalle > 0.5) diffuseColor.rgb *= patronPixel(vPosMundo, normalize(vNormMundo));',
+      ].join('\n'));
+  };
+  material.customProgramCacheKey = () => 'detalle-pixel';
+  return material;
+}
 
 // Cúpula de cielo: degradado de brasa en el horizonte a violeta nocturno en el
 // cénit. Sustituye al fondo de color sólido, que hacía flotar el mundo en un
@@ -170,7 +280,10 @@ function buildTerrainMesh() {
 
   // Facetas planas también en el terreno: cada triángulo capta la luz por su
   // cara y el relieve se lee como esculpido (el look low-poly clásico).
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+  const mesh = new THREE.Mesh(geo, conDetalle(
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }),
+    'suelo',   // también en las laderas: si no, el patrón las tomaría por tejados
+  ));
   mesh.position.y = -0.05;
   mesh.receiveShadow = true;
   return mesh;
@@ -189,7 +302,9 @@ function addGroundPatch(scene, geo, x, z, color, opts = {}) {
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, mat(color, { roughness: 1, ...matOpts }));
+  // Caminos y claros con grano de suelo; el agua y el hielo, lisos.
+  const detalle = matOpts.transparent ? 'ninguno' : 'suelo';
+  const mesh = new THREE.Mesh(geo, mat(color, { roughness: 1, detalle, ...matOpts }));
   mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
@@ -231,10 +346,27 @@ function addTree(scene, x, z, scale = 1, dark = false) {
   crown.scale.y = 1.2;
   crown.castShadow = true;
   scene.add(crown);
+
+  // Versión dibujada: una de cuatro copas, para que el bosque no sea un sello.
+  const sprite = makePropSprite(treeSheet(Math.floor(Math.random() * 4), dark), scale);
+  sprite.position.set(x, g, z);
+  scene.add(sprite);
+  // Sin el modelo 3D no hay sombra proyectada: una mancha bajo la copa.
+  sombraArbolGeo ??= new THREE.CircleGeometry(2.4, 14);
+  sombraArbolMat ??= new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false });
+  const sombra = new THREE.Mesh(sombraArbolGeo, sombraArbolMat);
+  sombra.rotation.x = -Math.PI / 2;
+  sombra.scale.setScalar(scale);
+  sombra.position.set(x, g + 0.06, z);
+  scene.add(sombra);
+
+  const arte = { modelo: [trunk, crown], sprite, sombra };
+  arbolesArte.push(arte);
+  aplicarArteArbol(arte);
 }
 
 function addRock(scene, x, z, scale = 1) {
-  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(scale, 0), mat(0x5a5650, { roughness: 1 }));
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(scale, 0), mat(0x5a5650, { roughness: 1, detalle: 'roca' }));
   rock.position.set(x, heightAt(x, z) + scale * 0.5, z);
   rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
   rock.castShadow = rock.receiveShadow = true;

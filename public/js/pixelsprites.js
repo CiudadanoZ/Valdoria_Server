@@ -668,7 +668,7 @@ export class SpriteSkin {
 // le cortaría la cabeza. El remedio clásico de los juegos 2.5D: el sprite
 // entero usa la profundidad de sus pies. Lo que está delante de los pies lo
 // tapa; lo de detrás, no. Exactamente como se espera en un juego cenital.
-function profundidadDePies(material) {
+export function profundidadDePies(material) {
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('void main() {', 'varying float vProfPie;\nvoid main() {')
