@@ -370,7 +370,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Protección básica con el emblema de la Ciudadela grabado. Reduce el daño recibido.',
     slot: 'cabeza',
-    armor: 1,
+    armor: 2,
     sell: 18,
   },
   armadura_pieles: {
@@ -382,7 +382,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Pieles de lobo curtidas y cosidas por Bramm. Abriga y amortigua los golpes.',
     slot: 'torso',
-    armor: 3,
+    armor: 5,
     sell: 40,
   },
   escudo_roble: {
@@ -394,7 +394,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Tallado del roble más viejo del bosque oeste. Reduce el daño recibido.',
     slot: 'escudo',
-    armor: 2,
+    armor: 3,
     sell: 30,
   },
   escudo_hueso: {
@@ -406,7 +406,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Placas de hueso de la cripta remachadas por Bramm. Más duro que el roble.',
     slot: 'escudo',
-    armor: 4,
+    armor: 5,
     sell: 60,
   },
   capa_oso: {
@@ -418,7 +418,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Cosida por Bramm con pieles de los osos del norte. Abriga hasta en la cripta más fría.',
     slot: 'espalda',
-    armor: 2,
+    armor: 3,
     sell: 45,
   },
   capa_exploradora: {
@@ -430,7 +430,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Otorgada por la guardia a quien domó al Alfa Sombrío. Abriga y protege en la espesura.',
     slot: 'espalda',
-    armor: 1,
+    armor: 2,
     sell: 60,
   },
   anillo_valdoria: {
@@ -479,7 +479,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Cosido con la pelambre del Alfa Sombrío. Impone respeto entre los lobos.',
     slot: 'espalda',
-    armor: 4,
+    armor: 5,
     sell: 130,
   },
   corona_cripta: {
@@ -491,7 +491,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'La corona que ceñía el primer guardián corrupto. Fría al tacto, pero indestructible.',
     slot: 'cabeza',
-    armor: 6,
+    armor: 8,
     sell: 250,
   },
   guadana_espectral: {
@@ -528,6 +528,153 @@ export const ITEMS = {
     stackable: true,
     desc: 'Un fragmento de piedra que solo existe bajo la Ciudadela, donde la roca recuerda lo que fue. Bramm la usa para volver a templar el acero encantado.',
     sell: 30,
+  },
+
+  // ================================================================
+  // Ampliación del catálogo: seis piezas por casilla repartidas por toda la
+  // curva, del arranque a Las Profundidades. Antes había nueve armas y un solo
+  // peto en todo el juego: los afijos no tenían dónde caer.
+  // ================================================================
+
+  // ---- Material de la forja ----
+  hierro_viejo: {
+    id: 'hierro_viejo', name: 'Hierro Viejo', icon: '🔩', type: 'Material', rarity: 'common', stackable: true,
+    desc: 'Restos de armaduras y armas de los guardianes muertos. Bramm sabe fundirlo y darle otra vida.',
+    sell: 6,
+  },
+
+  // ---- Consumibles ----
+  tonico_vigor: {
+    id: 'tonico_vigor', name: 'Tónico de Vigor', icon: '🧃', type: 'Consumible', rarity: 'common', stackable: true,
+    desc: 'Un trago amargo que despierta la furia, el vigor o el maná: devuelve 40 de tu recurso de clase.',
+    use: 'Clic para beber', resource: 40, price: 25, sell: 8,
+  },
+  elixir_mayor: {
+    id: 'elixir_mayor', name: 'Elixir Mayor', icon: '🍷', type: 'Consumible', rarity: 'rare', stackable: true,
+    desc: 'Destilado de corazón helado. Restaura 120 de vida de un solo trago.',
+    use: 'Clic para beber', heal: 120, sell: 40,
+  },
+
+  // ---- Armas ----
+  hacha_lenador: {
+    id: 'hacha_lenador', name: 'Hacha de Leñador', icon: '🪓', type: 'Arma · Hacha', rarity: 'uncommon', stackable: false,
+    desc: 'Hecha para talar robles, no hombres. Pero no hace distinciones.',
+    slot: 'arma', dmg: 7, price: 45, sell: 18,
+  },
+  maza_guardia: {
+    id: 'maza_guardia', name: 'Maza de la Guardia', icon: '🔨', type: 'Arma · Maza', rarity: 'uncommon', stackable: false,
+    desc: 'Arma reglamentaria de la guardia antigua. Los esqueletos de las criptas aún la empuñan.',
+    slot: 'arma', dmg: 12, sell: 35,
+  },
+  lanza_centinela: {
+    id: 'lanza_centinela', name: 'Lanza del Centinela', icon: '🔱', type: 'Arma · Lanza', rarity: 'rare', stackable: false,
+    desc: 'La lanza del Centinela Óseo. Su punta conserva el brillo frío de la cripta de la colina.',
+    slot: 'arma', dmg: 16, sell: 90,
+  },
+  espada_bastarda: {
+    id: 'espada_bastarda', name: 'Espada Bastarda', icon: '⚔️', type: 'Arma · Espada', rarity: 'rare', stackable: false,
+    desc: 'Forjada por Bramm con hierro viejo de las criptas y esencia espectral. Pesada y honesta.',
+    slot: 'arma', dmg: 20, sell: 140,
+  },
+  hoja_abisal: {
+    id: 'hoja_abisal', name: 'Hoja Abisal', icon: '🗡️', type: 'Arma · Legendaria', rarity: 'legendary', stackable: false,
+    desc: 'Una hoja de piedra negra que solo existe bajo la Ciudadela. Corta como si odiara lo que toca.',
+    slot: 'arma', dmg: 32, sell: 420,
+  },
+
+  // ---- Cabeza ----
+  capucha_viajero: {
+    id: 'capucha_viajero', name: 'Capucha de Viajero', icon: '🧢', type: 'Armadura · Cabeza', rarity: 'common', stackable: false,
+    desc: 'Lana gruesa que quita la lluvia de los ojos. Poco más.',
+    slot: 'cabeza', armor: 1, price: 20, sell: 6,
+  },
+  yelmo_hierro: {
+    id: 'yelmo_hierro', name: 'Yelmo de Hierro', icon: '⛑️', type: 'Armadura · Cabeza', rarity: 'uncommon', stackable: false,
+    desc: 'Hierro de las criptas, refundido y remachado. Pesa, pero aguanta un hachazo.',
+    slot: 'cabeza', armor: 4, sell: 40,
+  },
+  yelmo_escarcha: {
+    id: 'yelmo_escarcha', name: 'Yelmo de Escarcha', icon: '⛑️', type: 'Armadura · Cabeza', rarity: 'rare', stackable: false,
+    desc: 'Arrancado a los aparecidos de las cumbres. Por dentro siempre está frío.',
+    slot: 'cabeza', armor: 7, sell: 110,
+  },
+  yelmo_abisal: {
+    id: 'yelmo_abisal', name: 'Yelmo Abisal', icon: '🪖', type: 'Armadura · Legendaria (Cabeza)', rarity: 'legendary', stackable: false,
+    desc: 'Forjado en una oscuridad que no es la de la noche. Quien lo lleva oye las profundidades.',
+    slot: 'cabeza', armor: 11, sell: 380,
+  },
+
+  // ---- Torso ----
+  jubon_acolchado: {
+    id: 'jubon_acolchado', name: 'Jubón Acolchado', icon: '👕', type: 'Armadura · Torso', rarity: 'common', stackable: false,
+    desc: 'Capas de lino cosidas una sobre otra. Mejor que nada, y bastante mejor que la camisa.',
+    slot: 'torso', armor: 3, price: 35, sell: 10,
+  },
+  cota_malla: {
+    id: 'cota_malla', name: 'Cota de Malla', icon: '🦺', type: 'Armadura · Torso', rarity: 'uncommon', stackable: false,
+    desc: 'Miles de anillas de hierro entrelazadas. Detiene filos; no tanto las mazas.',
+    slot: 'torso', armor: 8, sell: 60,
+  },
+  coraza_hierro: {
+    id: 'coraza_hierro', name: 'Coraza de Hierro', icon: '🛡️', type: 'Armadura · Torso', rarity: 'rare', stackable: false,
+    desc: 'Placas de hierro viejo forjadas por Bramm sobre un acolchado de piel de oso.',
+    slot: 'torso', armor: 11, sell: 120,
+  },
+  coraza_escarcha: {
+    id: 'coraza_escarcha', name: 'Coraza de Escarcha', icon: '🧊', type: 'Armadura · Torso', rarity: 'rare', stackable: false,
+    desc: 'Hielo eterno tallado en placas. Los trolls de las cumbres la llevan por piel.',
+    slot: 'torso', armor: 14, sell: 200,
+  },
+  coraza_abisal: {
+    id: 'coraza_abisal', name: 'Coraza Abisal', icon: '🦾', type: 'Armadura · Legendaria (Torso)', rarity: 'legendary', stackable: false,
+    desc: 'Piedra de las profundidades que se dobla como el cuero y para el golpe como el muro.',
+    slot: 'torso', armor: 18, sell: 480,
+  },
+
+  // ---- Escudo ----
+  rodela_cuero: {
+    id: 'rodela_cuero', name: 'Rodela de Cuero', icon: '🥏', type: 'Armadura · Escudo', rarity: 'common', stackable: false,
+    desc: 'Un escudo pequeño de cuero endurecido. Para desviar, no para parar.',
+    slot: 'escudo', armor: 2, price: 30, sell: 9,
+  },
+  escudo_hierro: {
+    id: 'escudo_hierro', name: 'Escudo de Hierro', icon: '🛡️', type: 'Armadura · Escudo', rarity: 'rare', stackable: false,
+    desc: 'Hierro viejo de las criptas sobre un alma de hueso. Bramm lo garantiza.',
+    slot: 'escudo', armor: 7, sell: 90,
+  },
+  escudo_abisal: {
+    id: 'escudo_abisal', name: 'Escudo Abisal', icon: '🛡️', type: 'Armadura · Legendaria (Escudo)', rarity: 'legendary', stackable: false,
+    desc: 'Lo que golpea esta piedra parece hundirse en ella, y no volver.',
+    slot: 'escudo', armor: 13, sell: 400,
+  },
+
+  // ---- Espalda ----
+  capa_lana: {
+    id: 'capa_lana', name: 'Capa de Lana', icon: '🧣', type: 'Armadura · Espalda', rarity: 'common', stackable: false,
+    desc: 'Abriga en el camino y poco más. Todos empiezan con una.',
+    slot: 'espalda', armor: 1, price: 15, sell: 5,
+  },
+  manto_cienaga: {
+    id: 'manto_cienaga', name: 'Manto de la Ciénaga', icon: '🧥', type: 'Armadura · Espalda', rarity: 'rare', stackable: false,
+    desc: 'Tejido con juncos y limo endurecido. Huele a pantano y no se rasga.',
+    slot: 'espalda', armor: 6, sell: 130,
+  },
+  capa_abisal: {
+    id: 'capa_abisal', name: 'Capa Abisal', icon: '🦇', type: 'Armadura · Legendaria (Espalda)', rarity: 'legendary', stackable: false,
+    desc: 'Una capa que no refleja la luz. A su paso, las antorchas parecen arder menos.',
+    slot: 'espalda', armor: 8, sell: 360,
+  },
+
+  // ---- Accesorios ----
+  talisman_colmillo: {
+    id: 'talisman_colmillo', name: 'Talismán de Colmillos', icon: '📿', type: 'Accesorio · Amuleto', rarity: 'uncommon', stackable: false,
+    desc: 'Colmillos de lobo ensartados en cuero. Los cazadores juran que trae suerte.',
+    slot: 'accesorio', armor: 1, sell: 20,
+  },
+  amuleto_abisal: {
+    id: 'amuleto_abisal', name: 'Amuleto Abisal', icon: '🔮', type: 'Accesorio · Legendario', rarity: 'legendary', stackable: false,
+    desc: 'Una esquirla abisal engarzada en hierro negro. Late al ritmo del corazón de quien la lleva.',
+    slot: 'accesorio', armor: 6, sell: 340,
   },
 
   // ---- Cumbres Heladas ----
@@ -582,7 +729,7 @@ export const ITEMS = {
     stackable: false,
     desc: 'Un escudo de hielo compacto tan duro como el acero. Detiene el golpe y el gélido viento de las cumbres.',
     slot: 'escudo',
-    armor: 7,
+    armor: 10,
     sell: 300,
   },
   anillo_helado: {

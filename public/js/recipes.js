@@ -9,6 +9,13 @@ export const CRAFT_RECIPES = [
   { result: 'hoja_cazador', mats: { colmillo_lobo: 6, piel_lobo: 2 }, gold: 60 },
   { result: 'escudo_hueso', mats: { hueso_antiguo: 6 }, gold: 40 },
   { result: 'espada_espectral', mats: { esencia_espectral: 4, hueso_antiguo: 6 }, gold: 100 },
+  // Con el hierro viejo de las criptas: la armadura pesada de la mitad de la curva
+  { result: 'talisman_colmillo', mats: { colmillo_lobo: 3 }, gold: 10 },
+  { result: 'yelmo_hierro', mats: { hierro_viejo: 4 }, gold: 45 },
+  { result: 'cota_malla', mats: { hierro_viejo: 6, piel_lobo: 2 }, gold: 70 },
+  { result: 'escudo_hierro', mats: { hierro_viejo: 6, hueso_antiguo: 2 }, gold: 80 },
+  { result: 'coraza_hierro', mats: { hierro_viejo: 10, piel_oso: 2 }, gold: 140 },
+  { result: 'espada_bastarda', mats: { hierro_viejo: 8, esencia_espectral: 3 }, gold: 160 },
 ];
 
 // Cocina en las hogueras: crudo -> asado
@@ -24,7 +31,12 @@ export const COOK_XP = 3;
 export const FISHING_XP = 5;
 
 // Qué vende Lyra
-export const SHOP_BUY_LIST = ['pocion_vida', 'pocion_vida_mayor', 'pan_centeno', 'espada_acero'];
+export const SHOP_BUY_LIST = [
+  'pocion_vida', 'pocion_vida_mayor', 'tonico_vigor', 'pan_centeno',
+  // Equipo de arranque: que nadie salga de la Ciudadela con una sola casilla llena
+  'capucha_viajero', 'jubon_acolchado', 'rodela_cuero', 'capa_lana', 'hacha_lenador',
+  'espada_acero',
+];
 
 // Servicios de Mira
 export const MIRA_HEAL_PRICE = 15;

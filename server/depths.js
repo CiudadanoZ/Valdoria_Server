@@ -27,6 +27,14 @@ export const HATCH_RANGE = 6;
 
 export const MAX_DEPTH = 999;
 
+// El set abisal: lo mejor del juego en cada casilla, y SOLO lo sueltan los
+// guardianes del umbral. Es lo que da a Las Profundidades un botín propio que
+// perseguir, y con el tier del piso sale con mejores afijos cuanto más hondo.
+export const SET_ABISAL = [
+  ['hoja_abisal', 0.06], ['yelmo_abisal', 0.07], ['coraza_abisal', 0.06],
+  ['escudo_abisal', 0.07], ['capa_abisal', 0.07], ['amuleto_abisal', 0.07],
+];
+
 // Generador determinista: la misma semilla da la misma sala en cualquier
 // servidor y en cualquier momento.
 function rng(seed) {
@@ -103,7 +111,7 @@ export function buildDepthMobs(depth, nextId, week = thisWeekNumber()) {
       // La Esquirla Abisal solo cae aquí abajo: es la moneda con la que Bramm
       // vuelve a templar el equipo, y lo que da sentido a bajar hondo aunque ya
       // tengas la pieza que querías.
-      drops: [...base.drops, ['esquirla_abisal', isGuardian ? 1 : 0.22]],
+      drops: [...base.drops, ['esquirla_abisal', isGuardian ? 1 : 0.22], ...(isGuardian ? SET_ABISAL : [])],
     };
     mobs.push({
       id: nextId(), type, def,

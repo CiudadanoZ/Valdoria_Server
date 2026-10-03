@@ -322,7 +322,10 @@ connect({
   item_used(msg) {
     const item = ITEMS[msg.itemId];
     setVitals(msg);
-    ui.toast(`${item?.icon || ''} +${msg.heal} de vida`);
+    const partes = [];
+    if (msg.heal > 0) partes.push(`+${msg.heal} de vida`);
+    if (msg.resource > 0) partes.push(`+${msg.resource} de ${msg.resourceName?.toLowerCase() || 'recurso'}`);
+    ui.toast(`${item?.icon || ''} ${partes.join(' · ') || 'Usado'}`);
     play('potion');
   },
   skill_heal_ok(msg) {

@@ -1335,12 +1335,22 @@ wss.on('connection', (ws) => {
       case 'use_item': {
         if (!st) return;
         const item = ITEMS[msg.itemId];
-        if (!item?.heal) return;
-        if (p.hp >= computeMaxHp(p.character)) { fail(p, 'Ya tienes la vida al máximo'); return; }
+        // Consumibles de vida (pociones, comida) y de recurso (el Tónico).
+        if (!item?.heal && !item?.resource) return;
+        if (!item.resource && p.hp >= computeMaxHp(p.character)) { fail(p, 'Ya tienes la vida al máximo'); return; }
+        if (!item.heal && p.mp >= computeMaxResource(p.character)) {
+          fail(p, `Ya tienes la ${resourceDef(p.character).name.toLowerCase()} al máximo`); return;
+        }
         if (!bagRemove(st, item.id, 1)) { fail(p, 'No llevas ese objeto'); return; }
-        const healed = healPlayer(p, Math.round(item.heal * computeHealMul(p.character)));
+        const healed = item.heal ? healPlayer(p, Math.round(item.heal * computeHealMul(p.character))) : 0;
+        const antes = p.mp;
+        if (item.resource) addResource(p, item.resource);
         sendSync(p);
-        send(ws, { type: 'item_used', itemId: item.id, heal: healed, ...vitals(p) });
+        send(ws, {
+          type: 'item_used', itemId: item.id, heal: healed,
+          resource: Math.round(p.mp - antes), resourceName: resourceDef(p.character).name,
+          ...vitals(p),
+        });
         break;
       }
       case 'equip': {
