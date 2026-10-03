@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { asOverlay, drawLabel } from './pixel.js';
 import { dressWithSprite, applyArt, HERO_HEIGHT, artState, placeLabelAbove } from './pixelsprites.js';
 import { heroSheet } from './pixelfiguras.js';
+import { mountSheet } from './pixelcreatures.js';
 
 // Altura del nombre sobre un héroe: justo por encima del sprite.
 const NAME_ABOVE_HERO = 3.1;
@@ -36,6 +37,9 @@ export function makeMount(mountId) {
   }
   g.position.y = -MOUNT_LIFT; // el héroe se eleva; la montura queda en el suelo
   g.name = 'mount';
+  // Versión dibujada: el modelo 3D queda solo para el aspecto clásico.
+  const modelo = g.children.slice();
+  dressWithSprite(g, modelo, mountSheet(mountId), { shadow: 1.1 });
   return g;
 }
 import { RACES, CLASSES } from './races.js';
@@ -51,12 +55,26 @@ export function makeHero(raceId, classId) {
   return g;
 }
 
+// La montura cuelga del héroe, en el mismo sitio: sus sprites empatarían en
+// profundidad. Se aleja un pelo de la cámara SOBRE la visual (así no se mueve
+// en pantalla) y el jinete queda siempre delante.
+const MONTURA_ATRAS = new THREE.Vector3(0, -26, -15).normalize().multiplyScalar(0.35);
+const EJE_VERTICAL = new THREE.Vector3(0, 1, 0);
+
 // Pasa el sprite al fotograma que toca según hacia dónde mira y si anda.
 function animateSkin(mesh, dt, walking) {
   const skin = mesh.userData.skin;
   if (!skin) return;
   applyArt(mesh);
   skin.update(dt, mesh.rotation.y, walking);
+  const montura = mesh.children.find((c) => c.name === 'mount');
+  if (montura?.userData.skin) {
+    applyArt(montura);
+    montura.userData.skin.update(dt, mesh.rotation.y, walking);
+    montura.userData.skin.sprite.position.copy(MONTURA_ATRAS).applyAxisAngle(EJE_VERTICAL, -mesh.rotation.y);
+    // Montado, la sombra es la de la montura: la del héroe flotaría en el aire
+    if (mesh.userData.shadow) mesh.userData.shadow.visible = false;
+  }
   const etiqueta = mesh.userData.label;
   if (etiqueta) {
     if (artState.sprites) placeLabelAbove(etiqueta, mesh.rotation.y, HERO_HEIGHT + 0.5);

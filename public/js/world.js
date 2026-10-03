@@ -3,7 +3,7 @@
 // (llanuras al este, bosque al oeste y sur profundo, camino de tierra).
 import * as THREE from 'three';
 import { asOverlay } from './pixel.js';
-import { treeSheet, makePropSprite } from './pixelprops.js';
+import { treeSheet, propSheet, makePropSprite, makeFlameSprite, animateFlame } from './pixelprops.js';
 import { WAYSTONES } from './world-data.js';
 import { heightAt, colorAt, biomeAt, WORLD_RADIUS } from './terrain.js';
 
@@ -128,21 +128,65 @@ const DETALLE = { value: 1 };
 const MODOS = { auto: 0, suelo: 1, roca: 2, ninguno: 3 };
 
 // Lo enciende y apaga el estilo píxel (main.js): sin él, el aspecto clásico.
-// También alterna los árboles entre su sprite dibujado y su modelo 3D.
+// También alterna el atrezo (árboles, farolas, rocas...) entre su sprite
+// dibujado y su modelo 3D.
 export function setWorldDetail(on) {
   DETALLE.value = on ? 1 : 0;
-  for (const a of arbolesArte) aplicarArteArbol(a);
+  for (const a of artes) aplicarArte(a);
 }
 
-// Árboles con dos versiones: el modelo 3D de siempre y el sprite dibujado.
-const arbolesArte = [];
-function aplicarArteArbol(a) {
+// Objetos con dos versiones: el modelo 3D de siempre y el sprite dibujado.
+// Los edificios, murallas y la fuente siguen siendo volúmenes 3D (con la
+// textura de píxel encima): es lo que da la perspectiva y las sombras.
+const artes = [];
+function aplicarArte(a) {
   const pixel = DETALLE.value > 0.5;
   for (const m of a.modelo) m.visible = !pixel;
-  a.sprite.visible = pixel;
-  a.sombra.visible = pixel;
+  for (const s of a.sprites) s.visible = pixel;
 }
-let sombraArbolGeo = null, sombraArbolMat = null;
+function conArte(modelo, sprites) {
+  const a = { modelo: [].concat(modelo), sprites: [].concat(sprites) };
+  artes.push(a);
+  aplicarArte(a);
+  return a;
+}
+// En los grupos con lógica (hierbas, piedras rúnicas, tablón, hogueras) solo
+// se cambian las mallas visibles: la zona de clic invisible, las luces y los
+// iconos flotantes se quedan como estaban, y el clic sigue funcionando igual.
+function vestirGrupo(group, sprites) {
+  const modelo = group.children.filter((c) => c.isMesh && c.material.visible !== false);
+  for (const s of [].concat(sprites)) group.add(s);
+  return conArte(modelo, sprites);
+}
+// Sin el modelo 3D no hay sombra proyectada: una mancha en el suelo.
+let sombraGeo = null, sombraMat = null;
+function sombraPlana(x, y, z, radio, achata = 1) {
+  sombraGeo ??= new THREE.CircleGeometry(1, 14);
+  sombraMat ??= new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false });
+  const s = new THREE.Mesh(sombraGeo, sombraMat);
+  s.rotation.x = -Math.PI / 2;
+  s.scale.set(radio, radio * achata, 1);
+  s.position.set(x, y + 0.06, z);
+  return s;
+}
+// Antorcha de pie dibujada con su llama animada del color de la cripta. La
+// llama va un pelo hacia la cámara para quedar delante del brasero.
+function antorchaEn(scene, modelo, x, z, color) {
+  const llama = makeFlameSprite(0.5, color);
+  llama.position.set(x, 2.45, z + 0.15);
+  scene.add(llama);
+  conArte(modelo, [...propEn(scene, 'antorcha', 0, x, 0, z, 0.75, 0.4), llama]);
+  return llama;
+}
+// Sprite del atrezo apoyado en (x, y, z) con su sombra, ya en la escena.
+function propEn(parent, tipo, variante, x, y, z, escala = 1, sombra = 0) {
+  const sprite = makePropSprite(propSheet(tipo, variante), escala);
+  sprite.position.set(x, y, z);
+  parent.add(sprite);
+  const out = [sprite];
+  if (sombra) { const s = sombraPlana(x, y, z, sombra, 0.6); parent.add(s); out.push(s); }
+  return out;
+}
 
 const DETALLE_GLSL = `
 uniform float uDetalle;
@@ -352,25 +396,21 @@ function addTree(scene, x, z, scale = 1, dark = false) {
   sprite.position.set(x, g, z);
   scene.add(sprite);
   // Sin el modelo 3D no hay sombra proyectada: una mancha bajo la copa.
-  sombraArbolGeo ??= new THREE.CircleGeometry(2.4, 14);
-  sombraArbolMat ??= new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false });
-  const sombra = new THREE.Mesh(sombraArbolGeo, sombraArbolMat);
-  sombra.rotation.x = -Math.PI / 2;
-  sombra.scale.setScalar(scale);
-  sombra.position.set(x, g + 0.06, z);
+  const sombra = sombraPlana(x, g, z, 2.4 * scale);
   scene.add(sombra);
 
-  const arte = { modelo: [trunk, crown], sprite, sombra };
-  arbolesArte.push(arte);
-  aplicarArteArbol(arte);
+  conArte([trunk, crown], [sprite, sombra]);
 }
 
-function addRock(scene, x, z, scale = 1) {
+// `parent`/`base`: dentro de una zona (zoneAt) la altura ya la pone el
+// contenedor; en la escena, la del relieve.
+function addRock(scene, x, z, scale = 1, base = heightAt(x, z)) {
   const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(scale, 0), mat(0x5a5650, { roughness: 1, detalle: 'roca' }));
-  rock.position.set(x, heightAt(x, z) + scale * 0.5, z);
+  rock.position.set(x, base + scale * 0.5, z);
   rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
   rock.castShadow = rock.receiveShadow = true;
   scene.add(rock);
+  conArte(rock, propEn(scene, 'roca', Math.floor(Math.random() * 4), x, base, z, scale * 0.75, scale * 1.2));
 }
 
 export function buildWorld(scene) {
@@ -564,6 +604,8 @@ export function buildWorld(scene) {
   const anvilBase = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.7, 8), mat(0x4a3628));
   anvilBase.position.set(15, 0.35, -13);
   scene.add(anvilBase);
+  // Dibujado, el yunque deja de ser un bloque negro junto a Bramm
+  conArte([anvil, anvilBase], propEn(scene, 'yunque', 0, 15, 0, -13, 0.7, 0.9));
 
   // ---- Antorchas ----
   const torchPositions = [
@@ -587,6 +629,8 @@ export function buildWorld(scene) {
     const light = new THREE.PointLight(0xff8830, 25, 16, 2);
     light.position.set(x, 3.8, z);
     scene.add(light);
+    // Farola dibujada: poste de hierro y farol encendido (el parpadeo lo da la luz)
+    conArte([pole, flame], propEn(scene, 'farola', 0, x, 0, z, 0.85, 0.5));
     torchLights.push({ light, flame, base: 25, seed: Math.random() * 10 });
   }
 
@@ -631,6 +675,7 @@ export function buildWorld(scene) {
     tuft.position.set(x, 0.5, z);
     tuft.rotation.y = Math.random() * Math.PI;
     scene.add(tuft);
+    conArte(tuft, propEn(scene, 'mata', i % 3, x, heightAt(x, z), z, 1.6));
   }
   for (const [x, z, s] of [[30, 60, 1.6], [-25, 58, 1.2], [60, 30, 2.2], [-60, 70, 1.8], [45, 95, 1.4], [-15, 105, 1.3], [75, -20, 2.0], [-75, 30, 1.5]]) {
     addRock(scene, x, z, s);
@@ -667,6 +712,7 @@ export function buildWorld(scene) {
     );
     hitbox.position.y = 1;
     group.add(hitbox);
+    vestirGrupo(group, makePropSprite(propSheet('hierba'), 1.1));
     group.position.set(x, heightAt(x, z), z);
     group.userData.isHerb = true;
     scene.add(group);
@@ -1044,7 +1090,8 @@ function buildCrypt(scene, portals, torchLights) {
     const light = new THREE.PointLight(0x44eeaa, 20, 14, 2);
     light.position.set(X + tx, 3, tz);
     scene.add(light);
-    torchLights.push({ light, flame, base: 20, seed: Math.random() * 10 });
+    const llama = antorchaEn(scene, [pole, flame], X + tx, tz, 0x44eeaa);
+    torchLights.push({ light, flame, llama, base: 20, seed: Math.random() * 10 });
   }
 }
 
@@ -1072,6 +1119,7 @@ function buildLake(scene, fishingSpots) {
     reed.position.set(cx + Math.cos(a) * d, 0.7, cz + Math.sin(a) * d);
     reed.rotation.z = (Math.random() - 0.5) * 0.3;
     scene.add(reed);
+    conArte(reed, propEn(scene, 'junco', i % 4, reed.position.x, 0, reed.position.z, 1));
   }
   addRock(scene, cx - 14, cz + 12, 1.2);
   addRock(scene, cx + 15, cz - 8, 1.5);
@@ -1152,12 +1200,15 @@ function buildSwamp(scene, torchLights) {
     trunk.rotation.z = (Math.random() - 0.5) * 0.3;
     trunk.castShadow = true;
     scene.add(trunk);
+    const modelo = [trunk];
     for (let b = 0; b < 2; b++) {
       const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 1.4, 5), deadMat);
       branch.position.set(x + (Math.random() - 0.5), g + h * 0.7, z + (Math.random() - 0.5));
       branch.rotation.z = (Math.random() - 0.5) * 2;
       scene.add(branch);
+      modelo.push(branch);
     }
+    conArte(modelo, propEn(scene, 'arbolMuerto', Math.floor(Math.random() * 4), x, g, z, h / 4.6, 1.2));
   });
 
   // Juncos
@@ -1166,6 +1217,7 @@ function buildSwamp(scene, torchLights) {
     const reed = new THREE.Mesh(new THREE.ConeGeometry(0.08, 1 + Math.random(), 4), reedMat);
     reed.position.set(x, g + 0.5, z);
     scene.add(reed);
+    conArte(reed, propEn(scene, 'junco', Math.floor(Math.random() * 4), x, g, z, 0.9));
   });
 
   // Fuegos fatuos: luces verdosas flotantes (animadas como antorchas)
@@ -1214,6 +1266,7 @@ function buildFrostPeaks(scene, torchLights) {
     shard.rotation.z = (Math.random() - 0.5) * 0.2;
     shard.castShadow = true;
     scene.add(shard);
+    conArte(shard, propEn(scene, 'cristalHielo', Math.floor(Math.random() * 4), x, g, z, h / 3.4, 0.8));
   });
 
   // Pinos escarchados (tronco oscuro, copa nevada)
@@ -1222,12 +1275,15 @@ function buildFrostPeaks(scene, torchLights) {
     trunk.position.set(x, g + 1.2, z);
     trunk.castShadow = true;
     scene.add(trunk);
+    const modelo = [trunk];
     for (let c = 0; c < 3; c++) {
       const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5 - c * 0.35, 1.4, 7), mat(0xeaf2f8));
       cone.position.set(x, g + 2.4 + c * 0.9, z);
       cone.castShadow = true;
       scene.add(cone);
+      modelo.push(cone);
     }
+    conArte(modelo, propEn(scene, 'pinoNevado', Math.floor(Math.random() * 4), x, g, z, 0.8 + Math.random() * 0.4, 1.6));
   });
 
   // Rocas nevadas
@@ -1291,6 +1347,7 @@ function buildWaystone(scene, w) {
   hitbox.position.y = 2.5;
   group.add(hitbox);
 
+  vestirGrupo(group, makePropSprite(propSheet('piedraRunica'), 1));
   group.position.set(w.x, heightAt(w.x, w.z), w.z);
   group.userData.waystoneId = w.id;
   scene.add(group);
@@ -1341,6 +1398,7 @@ function buildBountyBoard(scene, x, z) {
   group.add(marker);
   group.userData.marker = marker;
 
+  vestirGrupo(group, makePropSprite(propSheet('tablon'), 1));
   group.position.set(x, heightAt(x, z), z);
   group.rotation.y = -Math.PI / 4;
   group.userData.isBoard = true;
@@ -1382,7 +1440,11 @@ function addCampfire(scene, torchLights, campfires, fx, fz) {
   const light = new THREE.PointLight(0xff8830, 18, 14, 2);
   light.position.y = 1.2;
   group.add(light);
-  torchLights.push({ light, flame, base: 18, seed: Math.random() * 10 });
+  // La llama va un pelo hacia la cámara para quedar delante de los troncos
+  const llama = makeFlameSprite(0.6);
+  llama.position.set(0, 0.1, 0.3);
+  vestirGrupo(group, [makePropSprite(propSheet('hoguera'), 0.75), llama]);
+  torchLights.push({ light, flame, llama, base: 18, seed: Math.random() * 10 });
 
   const hitbox = new THREE.Mesh(
     new THREE.CylinderGeometry(1.3, 1.3, 1.6, 8),
@@ -1404,6 +1466,7 @@ function buildCamp(scene, torchLights, campfires, x, z, rotY) {
   tent.rotation.y = rotY;
   tent.castShadow = true;
   scene.add(tent);
+  conArte(tent, propEn(scene, 'tienda', 0, x, 0, z, 1, 2.2));
 
   const fx = x + Math.sin(rotY) * 4, fz = z + Math.cos(rotY) * 4;
   addCampfire(scene, torchLights, campfires, fx, fz);
@@ -1474,7 +1537,8 @@ function buildMiniCrypt(scene, portals, torchLights, cfg) {
     const light = new THREE.PointLight(cfg.flame, 20, 14, 2);
     light.position.set(X + tx, 3, tz);
     scene.add(light);
-    torchLights.push({ light, flame, base: 20, seed: Math.random() * 10 });
+    const llama = antorchaEn(scene, [pole, flame], X + tx, tz, cfg.flame);
+    torchLights.push({ light, flame, llama, base: 20, seed: Math.random() * 10 });
   }
 
   // Tumbas y huesos
@@ -1520,6 +1584,7 @@ export function animateWorld({ torchLights, herbs, fishingSpots, waystones, boar
     // No toda luz parpadeante tiene llama visible (la trampilla, los fuegos de
     // Las Profundidades): sin esta guarda, una sola rompía todo el bucle.
     if (t.flame) t.flame.scale.setScalar(1 + flicker * 0.15);
+    if (t.llama?.visible) animateFlame(t.llama, time);
   }
   for (const h of herbs) {
     if (h.visible) h.children.forEach((c, i) => {

@@ -40,6 +40,8 @@ const BESTIAS = {
   rata:  { cuerpo: [16, 26, 5, 2.5], cabeza: [22, 26, 2.5, 2], hocico: 2, orejas: 'redonda', cola: 'fina', patas: [13, 15, 18, 19], pataW: 1, alto: 28 },
   ciervo: { cuerpo: [15, 17, 7, 3.5], cabeza: [24, 9, 2.5, 2], hocico: 3, orejas: 'punta', cola: 'rabito', patas: [10, 12, 19, 21], pataW: 1, alto: 20, cuello: true, astas: true },
   oso:   { cuerpo: [15, 18, 10, 6], cabeza: [25, 17, 4.5, 4], hocico: 3, orejas: 'redonda', cola: 'rabito', patas: [8, 12, 19, 23], pataW: 3, alto: 23 },
+  // Monturas: el caballo es un ciervo sin astas, más ancho, con crin y cola larga
+  caballo: { cuerpo: [15, 17, 8, 4], cabeza: [25, 9, 2.5, 2.2], hocico: 3, orejas: 'punta', cola: 'larga', patas: [9, 12, 19, 22], pataW: 2, alto: 20, cuello: true, crin: true },
 };
 
 function paintBestia(B, c, dir, anim, f) {
@@ -63,6 +65,12 @@ function paintBestia(B, c, dir, anim, f) {
     g.rect(x, alto - 1, 1, suelo - alto + 1 - sube, c.piel.b);
   }
   g.blob(16, cy + b - 1, rx * 0.72, ry + 0.5, c.piel);
+  if (c.silla) {
+    const sy = cy - ry + b - 1;
+    g.rect(16 - Math.round(rx * 0.72) - 1, sy + 2, Math.round(rx * 1.44) + 2, 3, c.manta.b);
+    g.rect(13, sy, 7, 2, c.silla.b);
+    for (const l of [-1, 1]) { g.rect(16 + l * (Math.round(rx * 0.72) + 1), sy + 4, 1, 4, c.silla.d); g.set(16 + l * (Math.round(rx * 0.72) + 1), sy + 8, c.metal); }
+  }
   if (frente) {
     // Cabeza grande en primer plano
     const [, hy, hrx, hry] = B.cabeza;
@@ -70,6 +78,7 @@ function paintBestia(B, c, dir, anim, f) {
     if (B.astas) astas(g, 16, cabezaY - hry - 1, c, true);
     orejasFrente(g, B, 16, cabezaY, hrx, hry, c);
     g.blob(16, cabezaY, hrx + 0.6, hry + 0.6, c.piel);
+    if (B.crin) { g.rect(16, cabezaY - hry - 1, 1, 3, c.crin.b); g.set(15, cabezaY - hry, c.crin.l); }
     g.blob(16, cabezaY + hry * 0.7, hrx * 0.55, hry * 0.5, c.vientre);
     g.set(16, cabezaY + Math.round(hry * 0.5), '#1a1014');                 // nariz
     g.set(16 - Math.round(hrx * 0.5), cabezaY - 1, ojo);
@@ -105,6 +114,13 @@ function paintBestiaPerfil(g, B, c, p, b, ataque, ojo) {
   if (B.cuello) {
     for (let j = 0; j < 7; j++) g.rect(bx + rx - 3 + Math.round(j * 0.5) + embiste, by - 2 - j + b, 3, 1, j < 3 ? c.piel.b : c.piel.l);
   }
+  if (B.crin) for (let j = 0; j < 8; j++) g.set(bx + rx - 4 + Math.round(j * 0.5) + embiste, by - 2 - j + b, c.crin.b);
+  if (c.silla) {
+    const sx = bx - 2 + embiste, sy = by - ry + b;
+    g.rect(sx - 2, sy + 1, 8, 3, c.manta.b); g.rect(sx - 2, sy + 3, 8, 1, c.manta.d);   // manta
+    g.rect(sx - 1, sy - 1, 6, 2, c.silla.b); g.set(sx - 1, sy - 2, c.silla.l); g.set(sx + 4, sy - 2, c.silla.d);
+    g.rect(sx + 1, sy + 4, 1, 4, c.silla.d); g.set(sx + 1, sy + 8, c.metal);      // estribo
+  }
   // Patas del lado cercano
   pata(g, pt1 + embiste, top, suelo, B.pataW, p, c.piel);
   pata(g, pd1 + embiste, top, suelo, B.pataW, -p, c.piel);
@@ -138,6 +154,9 @@ function cola(g, B, x, y, c, centrada) {
   if (B.cola === 'poblada') {
     if (centrada) { g.blob(x, y - 2, 1.6, 3, c.piel); g.set(x, y - 5, c.vientre.l); }
     else for (let i = 0; i < 6; i++) g.rect(x - i, y - Math.round(i * 0.6), 2, 2, i > 3 ? c.vientre.l : c.piel.b);
+  } else if (B.cola === 'larga') {
+    if (centrada) { for (let j = 0; j < 8; j++) g.rect(x - 1 + (j > 5 ? (j % 2) : 0), y + j - 1, 2, 1, j % 3 ? c.crin.b : c.crin.l); }
+    else for (let i = 0; i < 9; i++) g.rect(x - 1 - Math.round(i * 0.35), y + i - 1, 2, 1, i % 3 ? c.crin.b : c.crin.l);
   } else if (B.cola === 'fina') {
     for (let i = 0; i < 9; i++) g.set(x - i, y + 2 + Math.round(Math.sin(i * 0.7)), c.rosa?.b || c.piel.l);
   } else {
@@ -471,6 +490,23 @@ const PINTORES = {
   sanguijuela: (r, dir, anim, f) => paintSanguijuela(r.c, dir, anim, f),
   reyFango: (r, dir, anim, f) => paintReyFango(r.c, dir, anim, f),
 };
+
+// ============================================================ monturas
+// Van bajo el jinete: con silla, manta y estribos. El jinete se pinta delante.
+const MONTURAS = {
+  corcel:   { B: BESTIAS.caballo, piel: 0x8a6a4a, vientre: 0xb89a78, crin: 0x2a2320, manta: 0x7a1e1e, ojo: '#1a1014' },
+  huargo:   { B: BESTIAS.lobo,    piel: 0x5a5a66, vientre: 0x9a9aa6, crin: 0x3a3a44, manta: 0x2a4a6a, ojo: OJO_AMARILLO },
+  espectro: { B: BESTIAS.caballo, piel: 0x7ab8a8, vientre: 0xb8f0e0, crin: 0xd8fff4, manta: 0x3a2a5a, ojo: '#eaffff' },
+};
+
+export function mountSheet(id) {
+  const m = MONTURAS[id] || MONTURAS.corcel;
+  const c = {
+    piel: ramp(m.piel), vientre: ramp(m.vientre), crin: ramp(m.crin), ojo: m.ojo,
+    silla: ramp(0x5a3a22), manta: ramp(m.manta), metal: '#c8c8d0',
+  };
+  return buildSheet(`montura:${id}`, 32 * ESC, 32 * ESC, (dir, anim, f) => paintBestia(m.B, c, dir, anim, f));
+}
 
 // Hoja de fotogramas de una criatura. `info` es su entrada de MOB_INFO.
 export function creatureSheet(type, info) {
