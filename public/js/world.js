@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import { asOverlay } from './pixel.js';
 import { treeSheet, propSheet, makePropSprite, makeFlameSprite, animateFlame } from './pixelprops.js';
 import { WAYSTONES } from './world-data.js';
-import { heightAt, colorAt, biomeAt, WORLD_RADIUS } from './terrain.js';
+import { heightAt, colorAt, biomeAt, WORLD_RADIUS, costaDist, enTierra } from './terrain.js';
+import { buildSea, buildCaminos, poblarContinente } from './continente.js';
+import { decorSheet } from './pixeldecor.js';
 
 export { WORLD_RADIUS };            // el límite del mundo lo define terrain.js
 export const CITADEL_RADIUS = 38;   // radio interior de la plaza
@@ -100,7 +102,8 @@ export function isBlocked(x, z) {
     return !region || !inRooms(region.rooms, x - region.origin, z);
   }
   const r = Math.hypot(x, z);
-  if (r > WORLD_RADIUS) return true;
+  // Fuera del continente está el mar (la orilla se pisa hasta mojarse los pies)
+  if (r > 150 && costaDist(x, z) < 2.5) return true;
   if (r < FOUNTAIN_RADIUS) return true;
   const inGate = Math.abs(x) < 5.0 && z > 34;
   if (r > 40.0 && r < 44.0 && !inGate) return true;
@@ -291,15 +294,24 @@ function buildSky(scene) {
   return sky;
 }
 
+// Los colores de vértice Three los toma como LINEALES, pero colorAt los da en
+// sRGB (como los de los materiales). Sin convertirlos, cada verde salía lavado
+// hacia el gris. Se pasan a lineal y se compensa el brillo con una curva suave
+// que sube los tonos oscuros sin quemar la arena ni la nieve.
+function aLineal(c) {
+  const lin = Math.pow(Math.max(0, c), 2.2);
+  return 1 - Math.exp(-lin * 2.7);
+}
+
 // Malla del terreno: una rejilla cuyos vértices siguen la altura de terrain.js y
 // se tiñen del color de su comarca. Es lo que convierte el mundo de un disco
 // verde plano en regiones con laderas.
 function buildTerrainMesh() {
-  const SIZE = (WORLD_RADIUS + 30) * 2;   // cubre el mundo con algo de margen
+  const SIZE = (WORLD_RADIUS + 40) * 2;   // cubre el continente y su fondo marino
   // Malla deliberadamente basta (~5,4 unidades por celda): con facetas planas,
   // los triángulos grandes son los que dan el aspecto esculpido del low-poly.
   // Con una malla fina las facetas eran tan pequeñas que el suelo parecía liso.
-  const SEGS = 86;
+  const SEGS = 128;
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGS, SEGS);
   geo.rotateX(-Math.PI / 2);              // tumbarla al plano XZ del mundo
 
@@ -314,9 +326,9 @@ function buildTerrainMesh() {
     // Sombreado por altura: las cimas se aclaran y las hondonadas se oscurecen,
     // lo que da volumen incluso con luz plana.
     const tint = 1 + Math.max(-0.32, Math.min(0.30, h * 0.022));
-    colors[i * 3] = Math.min(1, r * tint);
-    colors[i * 3 + 1] = Math.min(1, g * tint);
-    colors[i * 3 + 2] = Math.min(1, b * tint);
+    colors[i * 3] = aLineal(r * tint);
+    colors[i * 3 + 1] = aLineal(g * tint);
+    colors[i * 3 + 2] = aLineal(b * tint);
   }
   pos.needsUpdate = true;
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -363,7 +375,7 @@ function scatterInBiome(biomeId, n, fn, { rMin = 62, rMax = WORLD_RADIUS - 12 } 
     const a = Math.random() * Math.PI * 2;
     const r = rMin + Math.random() * (rMax - rMin);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (biomeAt(x, z).id !== biomeId) continue;
+    if (biomeAt(x, z).id !== biomeId || !enTierra(x, z, 8)) continue;
     fn(x, z, heightAt(x, z));
     puestos++;
   }
@@ -451,6 +463,10 @@ export function buildWorld(scene) {
   // de su comarca. Sustituye al antiguo disco plano de un solo verde: ahora el
   // mundo tiene laderas y regiones que se distinguen a simple vista.
   scene.add(buildTerrainMesh());
+
+  // ---- El continente: el mar alrededor y los caminos que lo cruzan ----
+  const sea = buildSea(scene);
+  buildCaminos(scene, mat);
 
   // Camino de tierra: de la puerta sur hacia el sur, con claro final
   // Camino y claro del exterior: amoldados al relieve (antes eran planos rígidos
@@ -552,6 +568,12 @@ export function buildWorld(scene) {
   const orbLight = new THREE.PointLight(0x7ec8e3, 30, 20);
   orbLight.position.y = 4.6;
   scene.add(orbLight);
+  // En pixel art, el pilar con la bola es la Guardiana de Valdoria alzando el
+  // orbe de luz sobre su pedestal
+  const estatua = makePropSprite(decorSheet('estatua'), 0.95);
+  estatua.position.set(0, 1.1, 0);
+  scene.add(estatua);
+  conArte([pillar, orb], estatua);
 
   // ---- Edificios ----
   // [x, z, ancho, fondo, alto, colorMuro, colorTejado, rotY]
@@ -652,7 +674,7 @@ export function buildWorld(scene) {
       const d = Math.sqrt(Math.random()) * zone.r;
       const x = zone.cx + Math.cos(a) * d;
       const z = zone.cz + Math.sin(a) * d;
-      if (Math.hypot(x, z) < 48 || Math.hypot(x, z) > WORLD_RADIUS - 5) continue;
+      if (Math.hypot(x, z) < 48 || !enTierra(x, z, 6)) continue;
       if (Math.abs(x) < 6 && z > 40 && z < 115) continue; // no invadir el camino
       addTree(scene, x, z, 0.8 + Math.random() * 0.7, true);
     }
@@ -662,7 +684,7 @@ export function buildWorld(scene) {
   for (let i = 0; i < 14; i++) {
     const x = 50 + Math.random() * 75;
     const z = -60 + Math.random() * 140;
-    if (Math.hypot(x, z) > WORLD_RADIUS - 5 || Math.hypot(x, z) < 48) continue;
+    if (!enTierra(x, z, 6) || Math.hypot(x, z) < 48) continue;
     addTree(scene, x, z, 0.7 + Math.random() * 0.5, false);
   }
   const grassMat = mat(0x4a6b35);
@@ -670,9 +692,9 @@ export function buildWorld(scene) {
     const a = Math.random() * Math.PI * 2;
     const d = 48 + Math.random() * (WORLD_RADIUS - 55);
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
-    if (Math.abs(x) < 6 && z > 40) continue;
+    if ((Math.abs(x) < 6 && z > 40) || !enTierra(x, z, 4)) continue;
     const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1 + Math.random() * 0.8, 4), grassMat);
-    tuft.position.set(x, 0.5, z);
+    tuft.position.set(x, heightAt(x, z) + 0.5, z);
     tuft.rotation.y = Math.random() * Math.PI;
     scene.add(tuft);
     conArte(tuft, propEn(scene, 'mata', i % 3, x, heightAt(x, z), z, 1.6));
@@ -738,7 +760,7 @@ export function buildWorld(scene) {
     const x = -40 + Math.random() * 80;
     const z = -110 + Math.random() * 45;
     const r = Math.hypot(x, z);
-    if (r < 48 || r > WORLD_RADIUS - 5) continue;
+    if (r < 48 || !enTierra(x, z, 6)) continue;
     if (Math.hypot(x - 0, z + 85) < 14) continue;   // no invadir las ruinas
     if (Math.hypot(x - 62, z + 52) < 20) continue;  // ni el lago
     addTree(scene, x, z, 0.7 + Math.random() * 0.6, Math.random() < 0.5);
@@ -766,9 +788,12 @@ export function buildWorld(scene) {
   const hatch = buildDepthsHatch(scene, torchLights);
   const depthsRoom = buildDepthsRoom(scene, torchLights);
 
+  // ---- Lo que crece, se cae y se abandona por todo el continente ----
+  const decor = poblarContinente(scene);
+
   return {
     torchLights, herbs, portals, fishingSpots, campfires, board, waystones,
-    hatch, depthsRoom, sky, lights: { ambient, hemi, sun },
+    hatch, depthsRoom, sky, lights: { ambient, hemi, sun }, sea, decor,
   };
 }
 
@@ -1187,8 +1212,27 @@ function buildSwamp(scene, torchLights) {
   // Charcas de agua turbia amoldadas al relieve, repartidas por la comarca
   scatterInBiome('cienaga', 14, (x, z) => {
     const r = 4 + Math.random() * 7;
-    addGroundPatch(scene, new THREE.CircleGeometry(r, 18), x, z, 0x2d3a2a,
+    addGroundPatch(scene, new THREE.CircleGeometry(r, 18), x, z, 0x2d4a3a,
       { yOffset: 0.10, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.3 });
+    // Nenúfares flotando en la charca y espadañas en su orilla
+    const nenufares = [];
+    for (let i = 0; i < 2 + Math.floor(r / 3); i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * r * 0.7;
+      const nx = x + Math.cos(a) * d, nz = z + Math.sin(a) * d;
+      const sp = makePropSprite(decorSheet('nenufar', i % 2), 1);
+      sp.position.set(nx, heightAt(nx, nz) + 0.1, nz);
+      scene.add(sp);
+      nenufares.push(sp);
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const nx = x + Math.cos(a) * (r + 0.6), nz = z + Math.sin(a) * (r + 0.6);
+      const sp = makePropSprite(decorSheet('junquera', i % 3), 1);
+      sp.position.set(nx, heightAt(nx, nz), nz);
+      scene.add(sp);
+      nenufares.push(sp);
+    }
+    conArte([], nenufares);
   });
 
   // Árboles muertos retorcidos
@@ -1560,7 +1604,10 @@ function buildMiniCrypt(scene, portals, torchLights, cfg) {
 }
 
 // Animación por frame: parpadeo de antorchas, balanceo de hierbas y ondas de pesca.
-export function animateWorld({ torchLights, herbs, fishingSpots, waystones, board, hatch }, time) {
+export function animateWorld({ torchLights, herbs, fishingSpots, waystones, board, hatch, sea, decor }, time) {
+  // Oleaje, espuma y viento entre la hierba
+  if (sea) sea.tiempo.value = time;
+  decor?.animar(time);
   // El pergamino del Tablón flota para llamar la atención
   const bm = board?.userData?.marker;
   if (bm) bm.position.y = 3.6 + Math.sin(time * 2.2) * 0.16;

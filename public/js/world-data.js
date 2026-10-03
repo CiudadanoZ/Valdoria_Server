@@ -14,6 +14,21 @@ export const WAYSTONES = [
   { id: 'cumbres', name: 'Cumbres Heladas', x: 66, z: 68 },
 ];
 
+// Caminos de tierra del continente. Todos salen del camino de la puerta sur
+// (la única salida de la Ciudadela) y llevan a cada comarca y a sus piedras
+// rúnicas. Son polilíneas que el mundo 3D suaviza en curvas; el mapa los
+// dibuja y el atrezo los respeta (no crece nada encima).
+export const CAMINOS = [
+  { id: 'oeste',   ancho: 4.5, puntos: [[0, 64], [-18, 67], [-38, 61], [-52, 48], [-58, 45]] },
+  { id: 'cienaga', ancho: 4,   puntos: [[-56, 42], [-68, 24], [-78, 4], [-83, -16], [-83, -30]] },
+  { id: 'este',    ancho: 4.5, puntos: [[0, 64], [20, 65], [40, 55], [54, 38], [62, 27]] },
+  { id: 'colina',  ancho: 3.5, puntos: [[62, 27], [68, 29], [72, 30]] },
+  { id: 'lago',    ancho: 4,   puntos: [[62, 27], [60, 8], [64, -12], [57, -34]] },
+  { id: 'ruinas',  ancho: 4,   puntos: [[57, -34], [44, -56], [24, -69], [6, -72], [0, -76]] },
+  { id: 'cumbres', ancho: 4,   puntos: [[20, 65], [40, 74], [56, 74], [62, 86]] },
+  { id: 'cabo',    ancho: 4,   puntos: [[0, 125], [5, 136], [0, 150], [-7, 172], [0, 198], [6, 228]] },
+];
+
 export function waystoneById(id) {
   return WAYSTONES.find((w) => w.id === id) || null;
 }

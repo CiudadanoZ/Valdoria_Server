@@ -2,14 +2,19 @@
 // pueda caminar. Es geometría pura (sin servidor), así que corre en milisegundos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { heightAt, slopeAt, biomeAt, COMARCAS, WORLD_RADIUS } from '../public/js/terrain.js';
+import { heightAt, slopeAt, biomeAt, COMARCAS, WORLD_RADIUS, costaDist, enTierra, contornoCosta, NIVEL_MAR } from '../public/js/terrain.js';
+import { SPAWNS, COLOSO_SPOT } from '../server/mobs-data.js';
+import { WAYSTONES } from '../public/js/world-data.js';
+import { NPC_SPOTS, CAMPFIRE_SPOTS, PORTAL_JUMPS } from '../server/world-map.js';
 
-// Recorre el mundo en polares y devuelve una muestra por punto.
+// Recorre el continente en polares y devuelve una muestra por punto de TIERRA
+// (el fondo del mar no cuenta para pendientes ni alturas).
 function barrido(fn, { from = 55, to = WORLD_RADIUS, paso = 3, dAng = 0.02 } = {}) {
   const out = [];
   for (let a = -Math.PI; a < Math.PI; a += dAng) {
     for (let r = from; r < to; r += paso) {
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!enTierra(x, z)) continue;
       out.push(fn(x, z, r));
     }
   }
@@ -25,6 +30,7 @@ test('el relieve entra sin escalones al salir de la muralla', () => {
   let maxSalto = 0;
   for (let a = -Math.PI; a < Math.PI; a += 0.05) {
     for (let r = 45; r < WORLD_RADIUS - 2; r += 2) {
+      if (!enTierra(Math.cos(a) * (r + 2), Math.sin(a) * (r + 2))) break;
       const h1 = heightAt(Math.cos(a) * r, Math.sin(a) * r);
       const h2 = heightAt(Math.cos(a) * (r + 2), Math.sin(a) * (r + 2));
       maxSalto = Math.max(maxSalto, Math.abs(h2 - h1));
@@ -76,4 +82,38 @@ test('el mundo se camina llano y lo escarpado es la montaña', () => {
     .map(([id, arr]) => [id, arr.reduce((a, b) => a + b, 0) / arr.length])
     .sort((a, b) => b[1] - a[1]);
   assert.equal(rank[0][0], 'cumbres', `la comarca más escarpada debe ser la montañosa: ${rank.map(([i, m]) => i + ' ' + m.toFixed(2)).join(' · ')}`);
+});
+
+// ---- El continente ----
+
+test('el mundo es un continente, no un disco: la costa entra y sale', () => {
+  const radios = contornoCosta(720).map(([x, z]) => Math.hypot(x, z));
+  const min = Math.min(...radios), max = Math.max(...radios);
+  assert.ok(max - min > 80, `la costa debe tener cabos y bahías (radio ${min.toFixed(0)}..${max.toFixed(0)})`);
+  // Los fiordos y estuarios entran hondo, pero lejos de todo lo que hay en
+  // el mundo (eso lo vigila la prueba siguiente)
+  assert.ok(min > 150, `la costa más cercana no puede comerse el mundo de siempre (${min.toFixed(0)})`);
+});
+
+test('todo lo que hay en el mundo queda tierra adentro', () => {
+  const puntos = [
+    ...WAYSTONES.map((w) => [w.id, w.x, w.z]),
+    ...Object.entries(NPC_SPOTS).map(([k, [x, z]]) => [k, x, z]),
+    ...CAMPFIRE_SPOTS.map(([x, z], i) => ['hoguera' + i, x, z]),
+    ...PORTAL_JUMPS.filter((j) => j.from[0] < 400).map((j, i) => ['portal' + i, ...j.from]),
+    ['coloso', ...COLOSO_SPOT],
+    ...SPAWNS.filter(([, x]) => x < 400),
+  ];
+  for (const [id, x, z] of puntos) {
+    assert.ok(costaDist(x, z) > 20, `${id} (${x}, ${z}) está a ${costaDist(x, z).toFixed(1)} u de la costa`);
+  }
+});
+
+test('la orilla baja al mar y el mar no se pisa', () => {
+  for (const [x, z] of contornoCosta(90)) {
+    const fuera = 1.08;   // antes de los islotes, que asoman más lejos
+    assert.ok(heightAt(x * fuera, z * fuera) < NIVEL_MAR, 'mar adentro, el fondo queda bajo el agua');
+    assert.ok(!enTierra(x * fuera, z * fuera));
+    assert.ok(enTierra(x * 0.9, z * 0.9));
+  }
 });

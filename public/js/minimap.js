@@ -2,8 +2,9 @@
 // Dibuja el mundo en 2D: terreno, Ciudadela, caminos, lago, ruinas, portales,
 // NPCs con sus marcadores de misión, objetivos de misiones activas, criaturas
 // y jugadores. Dentro de una cripta muestra el plano de sus salas.
-import { WORLD_RADIUS, CRYPT_REGIONS, isInCrypt } from './world.js';
-import { COMARCAS } from './terrain.js';
+import { CRYPT_REGIONS, isInCrypt } from './world.js';
+import { COMARCAS, colorAt, heightAt, costaDist, biomeAt, contornoCosta, radioCosta, NIVEL_MAR } from './terrain.js';
+import { CAMINOS } from './world-data.js';
 import { questState } from './quests.js';
 
 let deps = null; // { getPlayerPos, getPlayerRot, npcs, remotes, mobs, portals }
@@ -132,25 +133,107 @@ function drawMap(ctx, W, H, s, cx, cz, big) {
   drawPlayerArrow(ctx, px(playerPos.x), py(playerPos.z), deps.getPlayerRot(), big ? 9 : 7);
 }
 
-function drawOverworld(ctx, px, py, s, big) {
-  // ---- Comarcas: sectores grandes, no manchas ----
-  // Cada región ocupa su porción del anillo, igual que en el mundo 3D, así que
-  // el mapa se lee como un reino con comarcas que se tocan.
-  const cx = px(0), cy = py(0);
-  const R = (WORLD_RADIUS + 12) * s;
-  for (const c of COMARCAS) {
-    // El canvas mide los ángulos igual que atan2(z, x): se puede usar tal cual.
-    let from = c.from, to = c.to;
-    if (from > to) to += Math.PI * 2;     // sector que cruza ±π
-    ctx.fillStyle = '#' + c.color.toString(16).padStart(6, '0');
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, R, from, to);
-    ctx.closePath();
-    ctx.fill();
+// ---- El continente, pintado una vez ----
+// Se muestrea el terreno de verdad (color de cada comarca, sombreado del
+// relieve con luz del noroeste, playa, fondo marino) en una imagen que luego
+// solo se copia. Así el mapa enseña la costa con sus cabos y bahías, y no una
+// tarta de colores.
+const MAPA_L = 330;            // semilado del área pintada (u)
+const MAPA_PX = 440;           // resolución de la imagen
+let mapaBase = null;
+let centrosComarca = null;
+
+function pintarContinente() {
+  const c = document.createElement('canvas');
+  c.width = c.height = MAPA_PX;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(MAPA_PX, MAPA_PX);
+  const u = (2 * MAPA_L) / MAPA_PX;
+  const suma = {};
+  for (let j = 0; j < MAPA_PX; j++) {
+    for (let i = 0; i < MAPA_PX; i++) {
+      const x = -MAPA_L + (i + 0.5) * u, z = -MAPA_L + (j + 0.5) * u;
+      const o = (j * MAPA_PX + i) * 4;
+      const h = heightAt(x, z);
+      let r, g, b;
+      // Mar es lo que queda FUERA de la costa y bajo el agua (los islotes
+      // asoman); las hondonadas del interior, aunque bajen del nivel del mar,
+      // son tierra: el mar 3D solo rodea el continente.
+      if (h < NIVEL_MAR && costaDist(x, z) < 0) {
+        // Mar: claro en los bajíos, hondo y oscuro mar adentro
+        const hondo = Math.min(1, (NIVEL_MAR - h) / 6);
+        r = 52 - hondo * 30; g = 92 - hondo * 44; b = 112 - hondo * 40;
+      } else {
+        let [cr, cg, cb] = colorAt(x, z);
+        // En el mapa, cada comarca con su tinte propio: a escala de mapa los
+        // verdes del terreno se confundían entre sí
+        const tinte = TINTE_MAPA[biomeAt(x, z).id];
+        if (tinte && Math.hypot(x, z) > 46 && costaDist(x, z) > 6) {
+          cr = cr * 0.45 + tinte[0] * 0.55; cg = cg * 0.45 + tinte[1] * 0.55; cb = cb * 0.45 + tinte[2] * 0.55;
+        }
+        // Sombreado: laderas que miran al noroeste, más claras
+        const dx = heightAt(x + u, z) - heightAt(x - u, z);
+        const dz = heightAt(x, z + u) - heightAt(x, z - u);
+        const luz = 1 + Math.max(-0.35, Math.min(0.35, (-dx - dz) * 0.22)) + h * 0.012;
+        // La nieve, un punto más apagada: a pleno blanco deslumbraba el mapa
+        const nieve = (cr + cg + cb) / 3 > 0.75 ? 0.82 : 1;
+        r = cr * 255 * luz * nieve; g = cg * 255 * luz * nieve; b = cb * 255 * luz * nieve;
+        const rr = Math.hypot(x, z);
+        if (rr > 70 && costaDist(x, z) > 12) {
+          const id = biomeAt(x, z).id;
+          const acc = (suma[id] ||= [0, 0, 0]);
+          acc[0] += x; acc[1] += z; acc[2]++;
+        }
+      }
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
   }
-  // El entorno de la Ciudadela es llano y verde: suaviza el centro de la tarta
-  circle(ctx, cx, cy, 62 * s, COLORS.hierba);
+  ctx.putImageData(img, 0, 0);
+  // Línea de costa, para que el contorno se lea a cualquier escala
+  ctx.strokeStyle = 'rgba(20, 16, 12, 0.75)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  contornoCosta(360).forEach(([x, z], k) => {
+    const X = (x + MAPA_L) / u, Y = (z + MAPA_L) / u;
+    if (k === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+  centrosComarca = Object.fromEntries(Object.entries(suma).map(([id, [sx, sz, n]]) => [id, [sx / n, sz / n]]));
+  return c;
+}
+
+const TINTE_MAPA = {
+  llanura: [0.36, 0.48, 0.24], praderas: [0.50, 0.54, 0.28], bosque: [0.16, 0.30, 0.15],
+  cienaga: [0.30, 0.30, 0.20], colinas: [0.42, 0.42, 0.30],
+};
+
+// Accidentes de la costa con nombre (ángulo, para buscar su orilla)
+const NOMBRES_COSTA = [
+  [1.62, 'Cabo del Sur'], [2.55, 'Punta de los Robles'], [-0.12, 'Bahía de las Gaviotas'],
+  [-1.05, 'Promontorio del Norte'], [-2.62, 'Estuario de la Ciénaga'], [0.88, 'Espolón Helado'],
+  [0.66, 'Fiordo del Jarl'], [2.12, 'Golfo de los Robles'], [3.05, 'Lengua de Fango'],
+];
+const LUGARES = [
+  [-30, -102, 'Cementerio'], [32, 52, 'Caravana asaltada'], [-30, 104, 'Granja abandonada'],
+  [-122, 70, 'Campamento de cazadores'], [-62, -128, 'Círculo de menhires'], [134, 150, 'Santuario del hielo'],
+];
+
+function drawOverworld(ctx, px, py, s, big) {
+  mapaBase ||= pintarContinente();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(mapaBase, px(-MAPA_L), py(-MAPA_L), 2 * MAPA_L * s, 2 * MAPA_L * s);
+
+  // Caminos de tierra
+  ctx.strokeStyle = COLORS.camino;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const c of CAMINOS) {
+    ctx.lineWidth = Math.max(1.5, c.ancho * s * 0.8);
+    ctx.beginPath();
+    c.puntos.forEach(([x, z], k) => (k ? ctx.lineTo(px(x), py(z)) : ctx.moveTo(px(x), py(z))));
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
 
   // Lago y claro del Alfa
   circle(ctx, px(62), py(-52), 16 * s, COLORS.agua);
@@ -182,16 +265,22 @@ function drawOverworld(ctx, px, py, s, big) {
   dot(ctx, px(0), py(0), 4.5 * s, COLORS.agua);
 
   if (big) {
-    label(ctx, px(0), py(-46), 'CIUDADELA DE VALDORIA', '#8a7a5a', 12);
-    label(ctx, px(62), py(-72), 'Lago de los Ciervos', '#5a8aa8', 11);
-    label(ctx, px(0), py(-98), 'Ruinas del norte', '#7a756a', 11);
-    label(ctx, px(0), py(128), 'Círculo de piedras', '#7a6a4d', 11);
-    // Nombre de cada comarca, colocado en el centro de su sector
+    label(ctx, px(0), py(-46), 'CIUDADELA DE VALDORIA', '#d8c8a0', 12);
+    label(ctx, px(62), py(-72), 'Lago de los Ciervos', '#9ac8e8', 11);
+    label(ctx, px(0), py(-98), 'Ruinas del norte', '#c8c0b0', 11);
+    label(ctx, px(0), py(128), 'Círculo de piedras', '#c8b890', 11);
+    // Nombre de cada comarca, en el centro de lo que ocupa de verdad
     for (const c of COMARCAS) {
-      let mid = c.from + (c.to - c.from) / 2;
-      if (c.from > c.to) mid = c.from + ((c.to + Math.PI * 2) - c.from) / 2;
-      const rr = 148;
-      label(ctx, px(Math.cos(mid) * rr), py(Math.sin(mid) * rr), c.name.toUpperCase(), '#9a9482', 11);
+      const centro = centrosComarca?.[c.id];
+      if (centro) label(ctx, px(centro[0]), py(centro[1]), c.name.toUpperCase(), '#f0e6c8', 12);
+    }
+    for (const [ang, nombre] of NOMBRES_COSTA) {
+      const R = radioCosta(ang) + 16;
+      label(ctx, px(Math.cos(ang) * R), py(Math.sin(ang) * R), nombre, '#a8d0e0', 10);
+    }
+    for (const [x, z, nombre] of LUGARES) {
+      diamond(ctx, px(x), py(z), 3, '#b8a078');
+      label(ctx, px(x), py(z) - 7, nombre, '#d8c8a8', 10);
     }
   }
 }
@@ -311,7 +400,12 @@ function drawBigMap() {
   const region = regionOf(p.x);
 
   if (!region) {
-    drawMap(bigCtx, W, H, W / ((WORLD_RADIUS + 30) * 2), 0, 0, true);
+    // Encuadre del continente entero (su caja envolvente, con margen)
+    const costa = contornoCosta(180);
+    const xs = costa.map(([x]) => x), zs = costa.map(([, z]) => z);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+    const escala = Math.min(W / (maxX - minX + 40), H / (maxZ - minZ + 40));
+    drawMap(bigCtx, W, H, escala, (minX + maxX) / 2, (minZ + maxZ) / 2, true);
   } else {
     // Encuadre de la cripta actual: caja envolvente de sus salas
     let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;

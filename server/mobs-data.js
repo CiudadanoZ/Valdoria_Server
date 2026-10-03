@@ -1,6 +1,6 @@
 // Datos de las criaturas del juego y su reparto por el mundo.
 // La simulación (IA, muerte, botín) vive en server/server.js.
-import { biomeAt } from '../public/js/terrain.js';
+import { biomeAt, costaDist } from '../public/js/terrain.js';
 
 // Evento de mundo: cada cuánto reaparece el Coloso (segundos). Configurable.
 export const EVENT_INTERVAL_S = Math.max(60, Number(process.env.EVENT_INTERVAL_S) || 900);
@@ -46,6 +46,8 @@ function rng(seed) {
 }
 
 // Siembra n criaturas de un tipo dentro de una comarca, entre rMin y rMax.
+// Solo en tierra firme y lejos de la orilla: el mundo es un continente y su
+// costa entra y sale; una criatura en la playa acabaría persiguiendo al mar.
 function scatter(type, n, biomeId, { rMin, rMax, seed }) {
   const rand = rng(seed);
   const out = [];
@@ -53,7 +55,7 @@ function scatter(type, n, biomeId, { rMin, rMax, seed }) {
     const a = rand() * Math.PI * 2;
     const r = rMin + rand() * (rMax - rMin);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (biomeAt(x, z).id !== biomeId) continue;
+    if (biomeAt(x, z).id !== biomeId || costaDist(x, z) < 24) continue;
     out.push([type, +x.toFixed(1), +z.toFixed(1)]);
   }
   return out;
@@ -67,27 +69,29 @@ export const SPAWNS = [
 
   // --- Praderas del Sur (zona de inicio: la ruta de la puerta sur) ---
   ...scatter('lobo', 9, 'praderas', { rMin: 56, rMax: 128, seed: 11 }),
+  // El Cabo del Sur, más allá del claro del Coloso
+  ...scatter('lobo', 4, 'praderas', { rMin: 165, rMax: 270, seed: 12 }),
 
-  // --- Llanura de Valdoria (este) ---
-  ...scatter('lobo', 5, 'llanura', { rMin: 56, rMax: 140, seed: 22 }),
-  ...scatter('jabali', 3, 'llanura', { rMin: 60, rMax: 140, seed: 23 }),
+  // --- Llanura de Valdoria (este, hasta la Bahía de las Gaviotas) ---
+  ...scatter('lobo', 7, 'llanura', { rMin: 56, rMax: 220, seed: 22 }),
+  ...scatter('jabali', 5, 'llanura', { rMin: 60, rMax: 220, seed: 23 }),
 
-  // --- Bosque del Oeste ---
-  ...scatter('jabali', 9, 'bosque', { rMin: 58, rMax: 152, seed: 33 }),
+  // --- Bosque del Oeste (hasta la Punta de los Robles) ---
+  ...scatter('jabali', 13, 'bosque', { rMin: 58, rMax: 235, seed: 33 }),
 
-  // --- Colinas del Norte (lago y ruinas) ---
-  ...scatter('ciervo', 6, 'colinas', { rMin: 58, rMax: 150, seed: 44 }),
-  ...scatter('oso', 5, 'colinas', { rMin: 70, rMax: 155, seed: 45 }),
+  // --- Colinas del Norte (lago, ruinas y el Promontorio) ---
+  ...scatter('ciervo', 9, 'colinas', { rMin: 58, rMax: 235, seed: 44 }),
+  ...scatter('oso', 7, 'colinas', { rMin: 70, rMax: 240, seed: 45 }),
 
   // --- Ciénaga de los Ahogados (nivel medio-alto: empieza lejos) ---
-  ...scatter('sanguijuela', 6, 'cienaga', { rMin: 82, rMax: 180, seed: 55 }),
-  ...scatter('ahogado', 7, 'cienaga', { rMin: 88, rMax: 182, seed: 56 }),
-  ...scatter('chaman_cienaga', 3, 'cienaga', { rMin: 95, rMax: 182, seed: 57 }),
+  ...scatter('sanguijuela', 8, 'cienaga', { rMin: 82, rMax: 235, seed: 55 }),
+  ...scatter('ahogado', 9, 'cienaga', { rMin: 88, rMax: 240, seed: 56 }),
+  ...scatter('chaman_cienaga', 4, 'cienaga', { rMin: 95, rMax: 240, seed: 57 }),
 
   // --- Cumbres Heladas (alto nivel: lo más lejano y duro) ---
-  ...scatter('lobo_escarcha', 8, 'cumbres', { rMin: 85, rMax: 180, seed: 66 }),
-  ...scatter('aparecido_helado', 6, 'cumbres', { rMin: 92, rMax: 182, seed: 67 }),
-  ...scatter('troll_hielo', 3, 'cumbres', { rMin: 105, rMax: 182, seed: 68 }),
+  ...scatter('lobo_escarcha', 10, 'cumbres', { rMin: 85, rMax: 250, seed: 66 }),
+  ...scatter('aparecido_helado', 8, 'cumbres', { rMin: 92, rMax: 250, seed: 67 }),
+  ...scatter('troll_hielo', 4, 'cumbres', { rMin: 105, rMax: 250, seed: 68 }),
 
   // --- Criptas: interiores de coordenadas fijas (x+500/700/900) ---
   ['rata', 500, -10], ['rata', 501, -18], ['rata', 510, -30], ['rata', 490, -42],
