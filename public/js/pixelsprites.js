@@ -144,7 +144,10 @@ export class Grid {
         if (n) add.push([x, y, outlineOf(n)]);
       }
     }
-    for (const [x, y, c] of add) this.set(x, y, c);
+    // px, no set: x e y ya son píxeles REALES del lienzo. Con set, a escala
+    // 1,5 cada punto del contorno se volvía a multiplicar y aparecía una
+    // silueta fantasma más grande y desplazada junto a árboles y criaturas.
+    for (const [x, y, c] of add) this.px(x, y, c);
   }
   drawTo(ctx, ox, oy) {
     for (let y = 0; y < this.h; y++) {

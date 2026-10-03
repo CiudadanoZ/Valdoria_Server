@@ -129,25 +129,9 @@ function pintarFigura(L, dir, anim, f) {
   const B = L.bulk;
   const tunica = L.armor === 'tunica';
 
-  // ---- capa (por detrás de todo)
-  if (L.cloak) {
-    const capa = L.cape;
-    for (let y = 17 + y0; y <= 43; y++) {
-      const t = (y - 17) / 26;
-      const hw = Math.round(7 + t * 3) + B;
-      if (frente) {
-        // De frente solo asoma por los lados, entre brazo y cuerpo
-        g.set(18 - hw - 1, y, capa.d); g.set(18 - hw, y, capa.b);
-        g.set(17 + hw, y, capa.b); g.set(18 + hw, y, capa.d);
-      } else {
-        fila(g, y, hw, capa.b);
-        g.set(18 - hw, y, capa.l);
-        g.set(17 + hw, y, capa.d);
-        if (y % 5 === 0) for (let x = 18 - hw + 3; x < 17 + hw; x += 4) g.set(x, y, capa.d);   // pliegues
-      }
-    }
-    if (!frente) for (let x = 18 - 10 - B; x < 18 + 10 + B; x += 2) g.set(x, 43, capa.d);       // bajo irregular
-  }
+  // ---- capa: de frente asoma por detrás del cuerpo; de espaldas se pinta
+  // más abajo, ENCIMA de la espalda (antes el cuerpo la tapaba entera)
+  if (L.cloak && frente) pintarCapa(g, L, true, y0, B, anim, f);
 
   // ---- piernas y botas
   const piernas = [[13 - B, paso > 0 ? 2 : 0], [19, paso < 0 ? 2 : 0]];
@@ -245,6 +229,7 @@ function pintarFigura(L, dir, anim, f) {
       g.set(a.x + 2, a.y + 13, L.skin.d);
     }
   }
+  if (L.cloak && !frente) pintarCapa(g, L, false, y0, B, anim, f);
   // Hombreras redondas de la armadura de placas
   if (L.armor === 'placas') {
     g.blob(10 - B, 18 + y0, 3, 2.4, L.metal);
@@ -283,6 +268,38 @@ function pintarFigura(L, dir, anim, f) {
 
   g.outline(darkOf);
   return g;
+}
+
+// Capa. De frente solo asoma por los lados, entre brazo y cuerpo. De espaldas
+// cubre la espalda de hombro a pantorrilla: broche en los hombros, pliegues
+// verticales que se abren hacia abajo y un bajo que ondea al andar.
+function pintarCapa(g, L, frente, y0, B, anim, f) {
+  const capa = L.cape;
+  const ondea = anim === 'walk' ? [0, 1, 0, -1][f] : 0;
+  const bajo = frente ? 43 : 41;
+  for (let y = 17 + y0; y <= bajo; y++) {
+    const t = (y - 17) / 26;
+    const hw = Math.round(7 + t * 3) + B;
+    if (frente) {
+      g.set(18 - hw - 1, y, capa.d); g.set(18 - hw, y, capa.b);
+      g.set(17 + hw, y, capa.b); g.set(18 + hw, y, capa.d);
+      continue;
+    }
+    const dx = t > 0.6 ? ondea : 0;
+    fila(g, y, hw, capa.b, 18 + dx);
+    g.set(18 - hw + dx, y, capa.l); g.set(19 - hw + dx, y, capa.l);
+    g.set(17 + hw + dx, y, capa.d); g.set(16 + hw + dx, y, capa.d);
+    // Pliegues: tres surcos que se separan al bajar, con su luz al lado
+    for (const k of [-1, 0, 1]) {
+      const x = 18 + dx + Math.round(k * (2 + t * 4));
+      if (y > 20 + y0) { g.set(x, y, capa.d); g.set(x - 1, y, capa.l); }
+    }
+  }
+  // Bajo irregular y forro asomando
+  for (let x = 18 - 10 - B; x < 18 + 10 + B; x++) g.set(x + ondea, bajo + 1, x % 3 === 0 ? capa.d : capa.o);
+  // Cuello de la capa y broches dorados en los hombros
+  fila(g, 17 + y0, 7 + B, capa.l);
+  g.set(12 - B, 17 + y0, L.gold.h); g.set(23 + B, 17 + y0, L.gold.h);
 }
 
 // Cejas, ojos con su blanco, nariz y boca.

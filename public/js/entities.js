@@ -2,7 +2,7 @@
 // (movimiento por clic estilo Diablo) y jugadores remotos interpolados.
 import * as THREE from 'three';
 import { asOverlay, drawLabel } from './pixel.js';
-import { dressWithSprite, applyArt, HERO_HEIGHT, artState, placeLabelAbove } from './pixelsprites.js';
+import { dressWithSprite, applyArt, HERO_HEIGHT, artState, placeLabelAbove, SpriteSkin } from './pixelsprites.js';
 import { heroSheet } from './pixelfiguras.js';
 import { mountSheet } from './pixelcreatures.js';
 
@@ -12,7 +12,12 @@ import { isBlocked } from './world.js';
 import { heightAt } from './terrain.js';
 import { MOUNTS } from './world-data.js';
 
-const MOUNT_LIFT = 0.75; // cuánto se eleva el héroe al ir montado
+// Cuánto se eleva el héroe al ir montado. En píxel, la cadera del jinete ha
+// de quedar EN PANTALLA a la altura de la silla (1 u por encima de los pies);
+// pero la cámara mira hacia abajo a 60° y una subida en el mundo se ve a la
+// mitad, y la cabeza del caballo de frente no debe taparle el pecho: 2,6 u.
+// El muñeco 3D clásico se sienta con 0,75.
+const liftMontura = () => (artState.sprites ? 2.6 : 0.75);
 
 // Malla sencilla de montura (cuadrúpedo) que se coloca bajo el héroe.
 export function makeMount(mountId) {
@@ -35,11 +40,17 @@ export function makeMount(mountId) {
   if (mountId === 'espectro') {
     g.traverse((o) => { if (o.material) { o.material.transparent = true; o.material.opacity = 0.75; o.material.emissive = new THREE.Color(0x3a7a6a); o.material.emissiveIntensity = 0.6; } });
   }
-  g.position.y = -MOUNT_LIFT; // el héroe se eleva; la montura queda en el suelo
+  g.position.y = -liftMontura(); // el héroe se eleva; la montura queda en el suelo
   g.name = 'mount';
   // Versión dibujada: el modelo 3D queda solo para el aspecto clásico.
   const modelo = g.children.slice();
-  dressWithSprite(g, modelo, mountSheet(mountId), { shadow: 1.1 });
+  // Alto en el mundo según sus píxeles, a la misma densidad que todo (48 px = 3,4 u)
+  const hoja = mountSheet(mountId, 'detras');
+  const alto = HERO_HEIGHT * hoja.frameH / 48;
+  dressWithSprite(g, modelo, hoja, { height: alto, shadow: 1.4 });
+  const delante = new SpriteSkin(mountSheet(mountId, 'delante'), { height: alto });
+  g.add(delante.sprite);
+  g.userData.skinDelante = delante;
   return g;
 }
 import { RACES, CLASSES } from './races.js';
@@ -56,9 +67,11 @@ export function makeHero(raceId, classId) {
 }
 
 // La montura cuelga del héroe, en el mismo sitio: sus sprites empatarían en
-// profundidad. Se aleja un pelo de la cámara SOBRE la visual (así no se mueve
-// en pantalla) y el jinete queda siempre delante.
+// profundidad. Su capa de atrás se aleja un pelo de la cámara SOBRE la visual
+// (así no se mueve en pantalla) y la de delante se acerca: el jinete queda
+// siempre entre las dos.
 const MONTURA_ATRAS = new THREE.Vector3(0, -26, -15).normalize().multiplyScalar(0.35);
+const MONTURA_DELANTE = MONTURA_ATRAS.clone().negate();
 const EJE_VERTICAL = new THREE.Vector3(0, 1, 0);
 
 // Pasa el sprite al fotograma que toca según hacia dónde mira y si anda.
@@ -72,6 +85,10 @@ function animateSkin(mesh, dt, walking) {
     applyArt(montura);
     montura.userData.skin.update(dt, mesh.rotation.y, walking);
     montura.userData.skin.sprite.position.copy(MONTURA_ATRAS).applyAxisAngle(EJE_VERTICAL, -mesh.rotation.y);
+    const delante = montura.userData.skinDelante;
+    delante.sprite.visible = artState.sprites;
+    delante.update(dt, mesh.rotation.y, walking);
+    delante.sprite.position.copy(MONTURA_DELANTE).applyAxisAngle(EJE_VERTICAL, -mesh.rotation.y);
     // Montado, la sombra es la de la montura: la del héroe flotaría en el aire
     if (mesh.userData.shadow) mesh.userData.shadow.visible = false;
   }
@@ -302,7 +319,7 @@ export class LocalPlayer {
     if (mountId) {
       this.mountMesh = makeMount(mountId);
       this.mesh.add(this.mountMesh);
-      this.mountLift = MOUNT_LIFT;
+      this.mountLift = liftMontura();
     }
   }
 }
@@ -366,7 +383,7 @@ export class RemotePlayers {
     if (mountId) {
       p.mountMesh = makeMount(mountId);
       p.mesh.add(p.mountMesh);
-      p.mountLift = MOUNT_LIFT;
+      p.mountLift = liftMontura();
     }
   }
 

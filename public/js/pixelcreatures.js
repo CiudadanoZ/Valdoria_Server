@@ -492,20 +492,142 @@ const PINTORES = {
 };
 
 // ============================================================ monturas
-// Van bajo el jinete: con silla, manta y estribos. El jinete se pinta delante.
+// Una montura va en DOS capas alrededor del jinete, como en los juegos 2D de
+// siempre: la de atrás (lomo, manta, estribos) queda detrás de él y la de
+// delante (de frente: cabeza, pecho y manos; de espaldas: grupa y cola) le
+// tapa las piernas. Con una sola capa detrás, de frente el jinete tapaba la
+// cabeza del caballo y solo asomaban cuatro patas: parecía una mesa.
 const MONTURAS = {
-  corcel:   { B: BESTIAS.caballo, piel: 0x8a6a4a, vientre: 0xb89a78, crin: 0x2a2320, manta: 0x7a1e1e, ojo: '#1a1014' },
-  huargo:   { B: BESTIAS.lobo,    piel: 0x5a5a66, vientre: 0x9a9aa6, crin: 0x3a3a44, manta: 0x2a4a6a, ojo: OJO_AMARILLO },
-  espectro: { B: BESTIAS.caballo, piel: 0x7ab8a8, vientre: 0xb8f0e0, crin: 0xd8fff4, manta: 0x3a2a5a, ojo: '#eaffff' },
+  corcel:   { B: BESTIAS.caballo, especie: 'caballo', piel: 0x8a6a4a, vientre: 0xb89a78, crin: 0x2a2320, manta: 0x7a1e1e, ojo: '#1a1014', lucero: true },
+  huargo:   { B: BESTIAS.lobo,    especie: 'lobo',    piel: 0x5a5a66, vientre: 0x9a9aa6, crin: 0x3a3a44, manta: 0x2a4a6a, ojo: OJO_AMARILLO },
+  espectro: { B: BESTIAS.caballo, especie: 'caballo', piel: 0x7ab8a8, vientre: 0xb8f0e0, crin: 0xd8fff4, manta: 0x3a2a5a, ojo: '#eaffff', aura: true },
 };
 
-export function mountSheet(id) {
+// Pata vista de frente o de espaldas, con su casco (o zarpa) al final.
+function pataFrontal(g, x, top, suelo, w, sube, piel, casco) {
+  g.rect(x, top, w, suelo - top - sube, piel.b);
+  g.rect(x, top, 1, suelo - top - sube, piel.l);
+  g.rect(x + w - 1, top, 1, suelo - top - sube, piel.d);
+  g.rect(x, suelo - sube - 1, w, 2, casco);
+}
+
+// Lomo con la manta y los estribos colgando a los lados del jinete.
+function lomoFrontal(g, c, b, cy) {
+  g.blob(16, cy + b, 7.5, 4.6, c.piel);
+  // Manta: cae por los costados, se estrecha hacia abajo y lleva ribete
+  for (const [x, l] of [[9, -1], [23, 1]]) {
+    for (let j = 0; j < 5; j++) {
+      const w = j < 3 ? 3 : 2;
+      const x0 = l < 0 ? x - j * 0.4 : x - w + 1 + j * 0.4;
+      g.rect(x0, cy - 3 + j + b, w, 1, j === 0 ? c.manta.l : c.manta.b);
+    }
+    g.rect(l < 0 ? x - 2 : x - 1, cy + 2 + b, 2, 1, c.oro);
+  }
+  // Estribos colgando bajo la manta
+  for (const x of [8, 24]) { g.rect(x, cy + 3 + b, 1, 2, c.silla.d); g.rect(x - 0.5, cy + 5 + b, 2, 1, c.metal); }
+}
+
+// Las monturas se pintan a 2x (64 px): con el mismo diseño de 32 que las
+// bestias salían del tamaño de un perro junto al jinete. El píxel del lienzo
+// mide lo mismo que en todo el juego; solo hay más.
+const ESC_MONTURA = 2;
+
+function paintMontura(m, c, dir, anim, f, capa) {
+  const g = new Grid(32, 32, ESC_MONTURA);
+  const p = paso(anim, f);
+  const b = bote(anim, f);
+  const suelo = 29;
+  const casco = m.especie === 'caballo' ? c.casco : c.piel.d;
+  const delante = capa === 'delante';
+  const lejana = { ...c.piel, b: c.piel.d, l: c.piel.d };
+
+  if (dir === 'E') {
+    // De perfil la montura entera va detrás: el jinete la monta por encima
+    if (!delante) paintBestiaPerfil(g, m.B, c, p, b, -1, c.ojo);
+    return g;
+  }
+
+  if (dir === 'S') {
+    if (!delante) {
+      // Patas traseras asomando y el lomo con su equipo
+      pataFrontal(g, 10, 20, suelo, 2, p < 0 ? 1 : 0, lejana, casco);
+      pataFrontal(g, 20, 20, suelo, 2, p > 0 ? 1 : 0, lejana, casco);
+      lomoFrontal(g, c, b, 15);
+    } else {
+      // Pecho y manos
+      pataFrontal(g, 12, 21, suelo, 3, p > 0 ? 1 : 0, c.piel, casco);
+      pataFrontal(g, 17, 21, suelo, 3, p < 0 ? 1 : 0, c.piel, casco);
+      g.blob(16, 21 + b, 5, 2.4, c.piel);
+      if (m.especie === 'caballo') {
+        // Cabeza larga de frente: orejas, tupé, lucero, ollares y cabezada
+        const y = 16 + b;
+        for (const x of [13, 19]) { g.set(x, y - 4, c.piel.b); g.set(x, y - 5, c.piel.l); g.set(x + (x < 16 ? 1 : -1), y - 4, c.piel.d); }
+        g.blob(16, y, 2.8, 4.4, c.piel, true);
+        g.blob(16, y + 4.5, 2.4, 1.8, c.vientre, true);
+        g.set(15, y + 5, '#1a1014'); g.set(17, y + 5, '#1a1014');             // ollares
+        g.set(13, y - 1, c.ojo); g.set(19, y - 1, c.ojo);
+        for (let i = 0; i < 3; i++) g.set(15 + (i % 2), y - 4 + i, c.crin.b);  // tupé
+        if (m.lucero) { g.set(16, y - 1, c.vientre.h); g.set(16, y, c.vientre.h); g.set(16, y + 1, c.vientre.l); }
+        g.rect(14, y + 2, 5, 1, c.silla.d);                                    // muserola
+        g.set(13, y + 1, c.silla.d); g.set(19, y + 1, c.silla.d);
+        g.set(13, y + 3, c.metal); g.set(19, y + 3, c.metal);                  // filete
+      } else {
+        // Cabeza de lobo: ancha, orejas en punta y hocico claro
+        const y = 17 + b;
+        for (const l of [-1, 1]) { g.set(16 + l * 3, y - 4, c.piel.b); g.set(16 + l * 3, y - 5, c.piel.l); g.set(16 + l * 4, y - 3, c.piel.b); }
+        g.blob(16, y, 4.2, 3.4, c.piel, true);
+        g.blob(16, y + 2.4, 2.2, 1.6, c.vientre, true);
+        g.set(16, y + 2, '#1a1014');
+        g.set(14, y - 1, c.ojo); g.set(18, y - 1, c.ojo);
+        g.rect(12, y + 4, 9, 1, c.silla.d); g.set(16, y + 4, c.metal);         // collar del arnés
+      }
+    }
+  } else {
+    // ---- de espaldas (N)
+    if (!delante) {
+      // Lo que queda al otro lado del jinete: cuello, orejas, manos y equipo
+      pataFrontal(g, 11, 20, suelo, 2, p > 0 ? 1 : 0, lejana, casco);
+      pataFrontal(g, 19, 20, suelo, 2, p < 0 ? 1 : 0, lejana, casco);
+      if (m.especie === 'caballo') {
+        g.blob(16, 8 + b, 2.6, 3, c.piel);
+        for (const x of [14, 18]) { g.set(x, 4 + b, c.piel.b); g.set(x, 3 + b, c.piel.l); }
+        g.rect(15, 6 + b, 2, 6, c.crin.b);
+      } else {
+        for (const l of [-1, 1]) { g.set(16 + l * 3, 9 + b, c.piel.b); g.set(16 + l * 3, 8 + b, c.piel.l); }
+        g.blob(16, 12 + b, 4, 3, c.piel);
+      }
+      lomoFrontal(g, c, b, 14);
+    } else {
+      // Grupa, cola y patas traseras: lo más cercano a la cámara
+      pataFrontal(g, 11, 21, suelo, 3, p < 0 ? 1 : 0, c.piel, casco);
+      pataFrontal(g, 18, 21, suelo, 3, p > 0 ? 1 : 0, c.piel, casco);
+      g.blob(16, 18 + b, 6.5, 4.2, c.piel);
+      for (let y = 16; y < 22; y++) g.set(16, y + b, c.piel.d);                // raya de la grupa
+      const ond = anim === 'walk' ? [0, 1, 0, -1][f] : 0;
+      if (m.especie === 'caballo') {
+        for (let j = 0; j < 11; j++) g.rect(15 + (j > 5 ? ond : 0), 15 + j + b, 2, 1, j % 3 ? c.crin.b : c.crin.l);
+      } else {
+        g.blob(16 + ond, 21 + b, 1.6, 3.2, c.piel);
+        g.set(16 + ond, 24 + b, c.vientre.l);
+      }
+    }
+  }
+  g.outline(darkOf);
+  // Corcel espectral: destellos sueltos sobre el cuerpo (repartidos con un
+  // hash, no en rejilla: en rejilla salían franjas diagonales)
+  if (m.aura) for (let i = 0; i < g.c.length; i++) {
+    if (g.c[i] && ((Math.imul(i + f * 977, 2654435761) >>> 0) % 41) === 0) g.c[i] = c.vientre.h;
+  }
+  return g;
+}
+
+export function mountSheet(id, capa = 'detras') {
   const m = MONTURAS[id] || MONTURAS.corcel;
   const c = {
     piel: ramp(m.piel), vientre: ramp(m.vientre), crin: ramp(m.crin), ojo: m.ojo,
-    silla: ramp(0x5a3a22), manta: ramp(m.manta), metal: '#c8c8d0',
+    silla: ramp(0x5a3a22), manta: ramp(m.manta), metal: '#9a9aa8', casco: '#2a2024', oro: '#d9a441',
   };
-  return buildSheet(`montura:${id}`, 32 * ESC, 32 * ESC, (dir, anim, f) => paintBestia(m.B, c, dir, anim, f));
+  return buildSheet(`montura:${id}:${capa}`, 32 * ESC_MONTURA, 32 * ESC_MONTURA, (dir, anim, f) => paintMontura(m, c, dir, anim, f, capa));
 }
 
 // Hoja de fotogramas de una criatura. `info` es su entrada de MOB_INFO.
