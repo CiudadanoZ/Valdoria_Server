@@ -35,6 +35,11 @@ export async function startServer({ env = {}, seed } = {}) {
       BACKUPS: 'off',          // las pruebas no necesitan copias rotativas
       ADMIN_KEY: 'test-key',
       ADMIN_ACCOUNTS: 'jefazo', // cuenta admin determinista para las pruebas
+      // Sin crítico de serie: muchos tests comparan daños exactos (el x0,7 del
+      // Alma Debilitada, el tope antitrampas, la armadura en JcJ) y un 5% de
+      // críticos aleatorios los haría fallar de vez en cuando sin nada roto.
+      // El crítico se prueba aparte, con la tirada controlada.
+      NO_CRIT: '1',
       ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

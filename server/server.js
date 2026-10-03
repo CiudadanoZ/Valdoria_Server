@@ -326,8 +326,8 @@ function damagePlayer(p, id, rawDmg, mobName, atacante = null, realm = null) {
 function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
   dismount(target, targetId);
   // En JcJ valen los mismos ejes: el atacante multiplica, el objetivo mitiga.
-  const bruto = resolveHit(rawDmg, offenseOf(attacker.character.state)).dmg;
-  const reduced = resolveIncoming(bruto, defenseOf(target.character, currentBuffArmor(target))).dmg;
+  const golpe = resolveHit(rawDmg, offenseOf(attacker.character.state));
+  const reduced = resolveIncoming(golpe.dmg, defenseOf(target.character, currentBuffArmor(target))).dmg;
   target.hp = Math.max(0, target.hp - reduced);
   target.lastCombatMs = Date.now();
   const gain = resourceDef(target.character).onHurt;
@@ -355,7 +355,7 @@ function damagePlayerByPlayer(attacker, target, targetId, rawDmg) {
     broadcast(target.realm, { type: 'player_state', id: targetId, x: target.x, z: target.z, rot: target.rot }, targetId);
     broadcast(target.realm, { type: 'chat', from: 'Ciudadela', system: true, text: `⚔ ${attacker.name} ha derrotado a ${target.name} en combate.` });
   } else {
-    send(target.ws, { type: 'player_hurt', dmg: reduced, mobName: attacker.name, ...vitals(target) });
+    send(target.ws, { type: 'player_hurt', dmg: reduced, mobName: attacker.name, crit: golpe.crit, ...vitals(target) });
   }
 }
 

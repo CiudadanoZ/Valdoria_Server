@@ -49,7 +49,10 @@ export function applyArmor(rawDmg, armor) {
 // ha crecido de verdad, y donde una build bien montada se nota frente a otra.
 
 // Valores de partida de cualquier héroe.
-export const BASE_CRIT = 0.05;      // 5% de probabilidad
+// NO_CRIT=1 lo pone a cero: lo usan los servidores de los tests, que comparan
+// daños exactos. En el navegador no hay `process`, así que no afecta al juego.
+const SIN_CRITICO = typeof process !== 'undefined' && process.env?.NO_CRIT === '1';
+export const BASE_CRIT = SIN_CRITICO ? 0 : 0.05;   // 5% de probabilidad
 export const BASE_CRIT_DMG = 0.5;   // un crítico pega un 50% más
 export const ATTACK_MS = 600;       // enfriamiento del golpe básico sin bonos
 
