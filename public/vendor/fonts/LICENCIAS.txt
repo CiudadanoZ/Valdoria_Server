@@ -1,0 +1,9 @@
+Fuentes autoalojadas (antes se cargaban desde Google Fonts; se sirven desde el
+propio servidor para no enviar la IP de cada jugador a terceros).
+
+- Pixelify Sans — Stefie Justprince. SIL Open Font License 1.1.
+  Subconjunto "latin" (cubre todo el español). Fuente variable 400-700.
+- Press Start 2P — CodeMan38. SIL Open Font License 1.1.
+  Subconjunto "latin".
+
+Texto de la licencia: https://openfontlicense.org/open-font-license-official-text/

@@ -1,4 +1,19 @@
 /* ===== Ciudadela de Valdoria — Interfaz estilo Diablo ===== */
+
+/* Fuentes del estilo píxel, autoalojadas: cargarlas de Google Fonts enviaría la
+   IP de cada jugador a terceros (y en la UE eso ya ha dado sentencias). */
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url('../vendor/fonts/pixelify-sans-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('../vendor/fonts/press-start-2p-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
