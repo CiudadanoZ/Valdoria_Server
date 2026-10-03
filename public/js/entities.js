@@ -2,6 +2,10 @@
 // (movimiento por clic estilo Diablo) y jugadores remotos interpolados.
 import * as THREE from 'three';
 import { asOverlay, drawLabel } from './pixel.js';
+import { heroSheet, dressWithSprite, applyArt, HERO_HEIGHT, artState, placeLabelAbove } from './pixelsprites.js';
+
+// Altura del nombre sobre un héroe: justo por encima del sprite.
+const NAME_ABOVE_HERO = 3.1;
 import { isBlocked } from './world.js';
 import { heightAt } from './terrain.js';
 import { MOUNTS } from './world-data.js';
@@ -41,7 +45,22 @@ export function makeHero(raceId, classId) {
   const race = RACES[raceId] || RACES.humano;
   const clazz = CLASSES[classId] || CLASSES.guerrero;
   const g = makeCharacter({ bodyColor: clazz.body, skinColor: race.skin, race });
+  // Piel de pixel art: el muñeco 3D queda como zona de clic invisible.
+  dressWithSprite(g, g.children[0], heroSheet(race.id || raceId, clazz.id || classId));
   return g;
+}
+
+// Pasa el sprite al fotograma que toca según hacia dónde mira y si anda.
+function animateSkin(mesh, dt, walking) {
+  const skin = mesh.userData.skin;
+  if (!skin) return;
+  applyArt(mesh);
+  skin.update(dt, mesh.rotation.y, walking);
+  const etiqueta = mesh.userData.label;
+  if (etiqueta) {
+    if (artState.sprites) placeLabelAbove(etiqueta, mesh.rotation.y, HERO_HEIGHT + 0.5);
+    else etiqueta.position.set(0, 3.1, 0);   // el muñeco 3D de siempre
+  }
 }
 
 // ---- Malla de personaje ----
@@ -170,7 +189,10 @@ export class LocalPlayer {
   constructor(scene, name, spawn, raceId, classId) {
     this.mesh = makeHero(raceId, classId);
     this.mesh.position.set(spawn.x, 0, spawn.z);
-    this.mesh.add(makeNameSprite(name, '#7fd4ff'));
+    const etiqueta = makeNameSprite(name, '#7fd4ff');
+    etiqueta.position.y = NAME_ABOVE_HERO;
+    this.mesh.add(etiqueta);
+    this.mesh.userData.label = etiqueta;   // animateSkin la coloca sobre el sprite
     scene.add(this.mesh);
 
     this.target = null;          // THREE.Vector3 destino
@@ -233,6 +255,7 @@ export class LocalPlayer {
   }
 
   animate(dt, walking) {
+    animateSkin(this.mesh, dt, walking);
     // El suelo tiene relieve: la base es la altura del terreno bajo los pies,
     // más la elevación de la montura si va montado.
     const base = heightAt(this.mesh.position.x, this.mesh.position.z) + (this.mountLift || 0);
@@ -285,7 +308,10 @@ export class RemotePlayers {
     const mesh = makeHero(race, clazz);
     mesh.position.set(x, 0, z);
     mesh.rotation.y = rot || 0;
-    mesh.add(makeNameSprite(name, '#ffd97a'));
+    const etiqueta = makeNameSprite(name, '#ffd97a');
+    etiqueta.position.y = NAME_ABOVE_HERO;
+    mesh.add(etiqueta);
+    mesh.userData.label = etiqueta;
     mesh.traverse((o) => { o.userData.remoteId = id; });
     this.scene.add(mesh);
     const p = { id, name, mesh, target: { x, z, rot: rot || 0 }, walkTime: 0, pvp: false, mark: null, mountMesh: null, mountLift: 0 };
@@ -379,6 +405,7 @@ export class RemotePlayers {
       while (dr > Math.PI) dr -= Math.PI * 2;
       while (dr < -Math.PI) dr += Math.PI * 2;
       p.mesh.rotation.y += dr * Math.min(1, dt * 12);
+      animateSkin(p.mesh, dt, walking);
     }
   }
 }

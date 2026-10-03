@@ -48,6 +48,7 @@ import { initGuild, toggleGuild, closeGuild, onGuildInfo, onGuildInvite } from '
 import { initLobby, onAuthOk, onAuthFail, onCharList, onCharFail, onEnterFail, hideLobby, clearSession } from './lobby.js';
 import { initSettings, closeSettings, togglePanel as toggleSettings, shadowsEnabled, pixelEnabled, pixelSize, enableAccountSettings, onPasswordResult, onReportResult } from './settings.js';
 import { PixelPipeline } from './pixel.js';
+import { artState } from './pixelsprites.js';
 import { applyBounties, openBountyBoard } from './bountyboard.js';
 import { play } from './audio.js';
 import * as ui from './ui.js';
@@ -155,10 +156,12 @@ document.fonts?.load('16px "Press Start 2P"').catch(() => {});
 let pixelPipe = null;
 let pixelOn = pixelEnabled();
 document.body.classList.toggle('pixel', pixelOn);
+artState.sprites = pixelOn;   // personajes dibujados con el estilo píxel, muñecos 3D sin él
 initSettings({
   onShadows: (on) => { if (renderer) renderer.shadowMap.enabled = on; },
   onPixel: ({ enabled, size }) => {
     pixelOn = enabled;
+    artState.sprites = enabled;
     document.body.classList.toggle('pixel', enabled);
     pixelPipe?.setPixelSize(size);
   },
@@ -964,6 +967,7 @@ function updateCombat(dt) {
       attackCooldown = attackInterval();
       const dmg = rollAttackDamage();
       player.mesh.getObjectByName('armR').rotation.x = -1.7;
+      player.mesh.userData.skin?.playAttack();
       play('attack');
       sendPvpAttack(pvpTarget.id, dmg);
     }
@@ -992,6 +996,7 @@ function updateCombat(dt) {
     attackCooldown = attackInterval();
     const dmg = rollAttackDamage();
     player.mesh.getObjectByName('armR').rotation.x = -1.7;
+      player.mesh.userData.skin?.playAttack();
     play('attack');
     sendAttack(combatTarget.id, dmg);
   }
