@@ -7,3 +7,6 @@ data/
 # Registros y temporales
 *.log
 *.tmp
+
+# Vídeos y capturas del tráiler (pesan mucho: se generan con scripts/trailer-server.mjs)
+marketing/
